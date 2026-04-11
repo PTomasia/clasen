@@ -1,6 +1,8 @@
 import { getAllPlans, getClientsList } from "@/lib/queries/plans";
 import { PlanosClient } from "./planos-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function PlanosPage() {
   const [plans, clients] = await Promise.all([
     getAllPlans(),
