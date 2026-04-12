@@ -39,6 +39,7 @@ import { ClosePlanDialog } from "./close-plan-dialog";
 import { DeletePlanDialog } from "./delete-plan-dialog";
 import { EditClientDialog, type EditDialogData } from "./edit-client-dialog";
 import { ChangePlanDialog, type ChangePlanData } from "./change-plan-dialog";
+import { PaymentHistoryDialog } from "./payment-history-dialog";
 
 interface Plan {
   id: number;
@@ -155,6 +156,7 @@ export function PlanosClient({
   const [deletePlanId, setDeletePlanId] = useState<number | null>(null);
   const [editData, setEditData] = useState<EditDialogData | null>(null);
   const [changeData, setChangeData] = useState<{ data: ChangePlanData; type: "Upgrade" | "Downgrade" } | null>(null);
+  const [historyPlan, setHistoryPlan] = useState<{ planId: number; clientName: string } | null>(null);
 
   // Derive unique plan types from data
   const planTypes = useMemo(
@@ -302,7 +304,14 @@ export function PlanosClient({
             ) : (
               processedPlans.map((plan) => (
                 <TableRow key={plan.id}>
-                  <TableCell className="font-medium">{plan.clientName}</TableCell>
+                  <TableCell className="font-medium">
+                    <button
+                      className="hover:underline hover:text-primary transition-colors text-left"
+                      onClick={() => setHistoryPlan({ planId: plan.id, clientName: plan.clientName })}
+                    >
+                      {plan.clientName}
+                    </button>
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">{plan.planType}</Badge>
                   </TableCell>
@@ -495,6 +504,15 @@ export function PlanosClient({
           onClose={() => setChangeData(null)}
           data={changeData.data}
           movementType={changeData.type}
+        />
+      )}
+
+      {historyPlan && (
+        <PaymentHistoryDialog
+          open={!!historyPlan}
+          onClose={() => setHistoryPlan(null)}
+          planId={historyPlan.planId}
+          clientName={historyPlan.clientName}
         />
       )}
     </>

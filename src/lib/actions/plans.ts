@@ -10,6 +10,7 @@ import {
   updatePlan as updatePlanService,
   deletePlan as deletePlanService,
   changePlan as changePlanService,
+  getPaymentHistory as getPaymentHistoryService,
 } from "../services/plans";
 import type { CreatePlanInput, RecordPaymentInput, UpdateClientInput, UpdatePlanInput, ChangePlanInput } from "../services/plans";
 
@@ -55,6 +56,10 @@ export async function changePlanAction(input: ChangePlanInput) {
   revalidatePath("/clientes");
   revalidatePath("/dashboard");
   return { newPlanId: result.newPlan.id };
+}
+
+export async function getPaymentHistoryAction(planId: number) {
+  return await getPaymentHistoryService(db as any, planId);
 }
 
 export async function deletePlanAction(planId: number) {

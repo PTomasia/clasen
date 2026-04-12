@@ -67,6 +67,7 @@ import {
   getActivePlans,
   getPlanById,
   getPaymentsByPlan,
+  getPaymentHistory,
   updateClient,
   updatePlan,
   deletePlan,
@@ -1171,6 +1172,110 @@ describe("changePlan (upgrade/downgrade)", () => {
     const payments = await getPaymentsByPlan(db, oldPlan.id);
     expect(payments).toHaveLength(1);
     expect(payments[0].amount).toBe(500);
+  });
+});
+
+describe("getPaymentHistory", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("retorna histórico de pagamentos ordenado por data decrescente", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Histórico Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-08", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-09", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-10", amount: 500 });
+
+    const history = await getPaymentHistory(db, plan.id);
+
+    expect(history.payments).toHaveLength(3);
+    // Mais recente primeiro
+    expect(history.payments[0].paymentDate).toBe("2026-04-10");
+    expect(history.payments[1].paymentDate).toBe("2026-03-09");
+    expect(history.payments[2].paymentDate).toBe("2026-02-08");
+  });
+
+  it("inclui dados do plano no resultado", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Plan Info",
+      planType: "Essential",
+      planValue: 790,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 1,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const history = await getPaymentHistory(db, plan.id);
+
+    expect(history.planValue).toBe(790);
+    expect(history.planType).toBe("Essential");
+    expect(history.billingCycleDays).toBe(10);
+  });
+
+  it("retorna lista vazia quando não há pagamentos", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Sem Pgto",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    const history = await getPaymentHistory(db, plan.id);
+
+    expect(history.payments).toHaveLength(0);
+    expect(history.planValue).toBe(500);
+  });
+
+  it("rejeita plano inexistente", async () => {
+    await expect(getPaymentHistory(db, 9999)).rejects.toThrow("plano não encontrado");
+  });
+
+  it("cada pagamento tem amount, status e notes", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Detalhe Pgto",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-03-08",
+      amount: 500,
+      status: "pago",
+      notes: "via pix",
+    });
+
+    const history = await getPaymentHistory(db, plan.id);
+
+    expect(history.payments[0].amount).toBe(500);
+    expect(history.payments[0].status).toBe("pago");
+    expect(history.payments[0].notes).toBe("via pix");
   });
 });
 

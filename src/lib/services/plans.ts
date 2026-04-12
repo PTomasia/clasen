@@ -324,6 +324,34 @@ export async function getPaymentsByPlan(db: any, planId: number) {
     .all();
 }
 
+export async function getPaymentHistory(db: any, planId: number) {
+  const plan = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+
+  if (!plan) throw new Error("plano não encontrado");
+
+  const payments = await db
+    .select()
+    .from(schema.planPayments)
+    .where(eq(schema.planPayments.planId, planId))
+    .all();
+
+  // Ordenar por data decrescente (mais recente primeiro)
+  payments.sort((a: any, b: any) => b.paymentDate.localeCompare(a.paymentDate));
+
+  return {
+    planId: plan.id,
+    planType: plan.planType,
+    planValue: plan.planValue,
+    billingCycleDays: plan.billingCycleDays,
+    startDate: plan.startDate,
+    payments,
+  };
+}
+
 export async function getActivePlans(db: any) {
   const plans = await db
     .select()
