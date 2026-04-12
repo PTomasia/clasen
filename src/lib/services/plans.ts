@@ -1,5 +1,5 @@
 import { eq, isNull } from "drizzle-orm";
-import { addDays, format, parseISO } from "date-fns";
+import { addMonths, format, parseISO, getDaysInMonth } from "date-fns";
 import * as schema from "../db/schema";
 import { calcularCustoPost, calcularPermanencia } from "../utils/calculations";
 
@@ -143,12 +143,19 @@ export async function recordPayment(db: any, input: RecordPaymentInput) {
     .get();
 
   // Atualizar last_payment_date e next_payment_date no plano
-  const nextPaymentDate = plan.billingCycleDays
-    ? format(
-        addDays(parseISO(input.paymentDate), plan.billingCycleDays),
-        "yyyy-MM-dd"
-      )
-    : null;
+  // billingCycleDays = dia de vencimento no mês (ex: 10 = vence dia 10)
+  let nextPaymentDate: string | null = null;
+  if (plan.billingCycleDays) {
+    const paymentDate = parseISO(input.paymentDate);
+    const nextMonth = addMonths(paymentDate, 1);
+    const dueDay = plan.billingCycleDays;
+    const maxDay = getDaysInMonth(nextMonth);
+    const actualDay = Math.min(dueDay, maxDay);
+    nextPaymentDate = format(
+      new Date(nextMonth.getFullYear(), nextMonth.getMonth(), actualDay),
+      "yyyy-MM-dd"
+    );
+  }
 
   await db.update(schema.subscriptionPlans)
     .set({
@@ -240,6 +247,40 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
     .run();
 
   return { ...existing, ...input };
+}
+
+// ─── changePlan (Upgrade / Downgrade) ─────────────────────────────────────────
+
+export interface ChangePlanInput {
+  oldPlanId: number;
+  endDate: string;
+  newPlan: Omit<CreatePlanInput, "clientId" | "clientName" | "contactOrigin">;
+}
+
+export async function changePlan(db: any, input: ChangePlanInput) {
+  // Buscar plano antigo
+  const oldPlan = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, input.oldPlanId))
+    .get();
+
+  if (!oldPlan) throw new Error("plano não encontrado");
+  if (oldPlan.status === "cancelado") throw new Error("plano já está encerrado");
+
+  // Encerrar plano antigo
+  await closePlan(db, input.oldPlanId, input.endDate);
+
+  // Criar novo plano para o mesmo cliente, herdando billingCycleDays se não informado
+  const newPlanInput: CreatePlanInput = {
+    clientId: oldPlan.clientId,
+    ...input.newPlan,
+    billingCycleDays: input.newPlan.billingCycleDays ?? oldPlan.billingCycleDays ?? undefined,
+  };
+
+  const result = await createPlan(db, newPlanInput);
+
+  return { oldPlan, newPlan: result.plan, client: result.client };
 }
 
 // ─── deletePlan ───────────────────────────────────────────────────────────────

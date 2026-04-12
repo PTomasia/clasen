@@ -267,7 +267,7 @@ export function PlanFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Ciclo (dias)</Label>
+              <Label>Vencimento (dia)</Label>
               <Select
                 value={billingCycleDays}
                 onValueChange={(v) => v && setBillingCycleDays(v)}
@@ -278,7 +278,7 @@ export function PlanFormDialog({
                 <SelectContent>
                   {BILLING_CYCLES.map((c) => (
                     <SelectItem key={c} value={c.toString()}>
-                      {c} dias
+                      Dia {c}
                     </SelectItem>
                   ))}
                 </SelectContent>

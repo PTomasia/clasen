@@ -22,6 +22,8 @@ import {
   ArrowDown,
   ArrowUpDown,
   Search,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { formatBRL } from "@/lib/utils/formatting";
 import type { StatusPagamento } from "@/lib/utils/calculations";
@@ -36,6 +38,7 @@ import { PaymentDialog } from "./payment-dialog";
 import { ClosePlanDialog } from "./close-plan-dialog";
 import { DeletePlanDialog } from "./delete-plan-dialog";
 import { EditClientDialog, type EditDialogData } from "./edit-client-dialog";
+import { ChangePlanDialog, type ChangePlanData } from "./change-plan-dialog";
 
 interface Plan {
   id: number;
@@ -151,6 +154,7 @@ export function PlanosClient({
   const [closePlanId, setClosePlanId] = useState<number | null>(null);
   const [deletePlanId, setDeletePlanId] = useState<number | null>(null);
   const [editData, setEditData] = useState<EditDialogData | null>(null);
+  const [changeData, setChangeData] = useState<{ data: ChangePlanData; type: "Upgrade" | "Downgrade" } | null>(null);
 
   // Derive unique plan types from data
   const planTypes = useMemo(
@@ -367,6 +371,52 @@ export function PlanosClient({
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() =>
+                              setChangeData({
+                                data: {
+                                  planId: plan.id,
+                                  clientName: plan.clientName,
+                                  planType: plan.planType,
+                                  planValue: plan.planValue,
+                                  billingCycleDays: plan.billingCycleDays,
+                                  postsCarrossel: plan.postsCarrossel,
+                                  postsReels: plan.postsReels,
+                                  postsEstatico: plan.postsEstatico,
+                                  postsTrafego: plan.postsTrafego,
+                                },
+                                type: "Upgrade",
+                              })
+                            }
+                            title="Upgrade"
+                          >
+                            <TrendingUp size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setChangeData({
+                                data: {
+                                  planId: plan.id,
+                                  clientName: plan.clientName,
+                                  planType: plan.planType,
+                                  planValue: plan.planValue,
+                                  billingCycleDays: plan.billingCycleDays,
+                                  postsCarrossel: plan.postsCarrossel,
+                                  postsReels: plan.postsReels,
+                                  postsEstatico: plan.postsEstatico,
+                                  postsTrafego: plan.postsTrafego,
+                                },
+                                type: "Downgrade",
+                              })
+                            }
+                            title="Downgrade"
+                          >
+                            <TrendingDown size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setPaymentPlanId(plan.id)}
                             title="Registrar pagamento"
                           >
@@ -436,6 +486,15 @@ export function PlanosClient({
           open={!!editData}
           onClose={() => setEditData(null)}
           data={editData}
+        />
+      )}
+
+      {changeData && (
+        <ChangePlanDialog
+          open={!!changeData}
+          onClose={() => setChangeData(null)}
+          data={changeData.data}
+          movementType={changeData.type}
         />
       )}
     </>

@@ -70,6 +70,7 @@ import {
   updateClient,
   updatePlan,
   deletePlan,
+  changePlan,
 } from "../plans";
 import { getClientStatus } from "../clients";
 
@@ -376,12 +377,12 @@ describe("recordPayment", () => {
     expect(payments[0].amount).toBe(500);
   });
 
-  it("calcula next_payment_date baseado no ciclo", async () => {
+  it("calcula next_payment_date como dia de vencimento do próximo mês", async () => {
     const { plan } = await createPlan(db, {
       clientName: "Cycle Test",
       planType: "Personalizado",
       planValue: 500,
-      billingCycleDays: 30,
+      billingCycleDays: 10,
       postsCarrossel: 4,
       postsReels: 0,
       postsEstatico: 0,
@@ -391,13 +392,38 @@ describe("recordPayment", () => {
 
     await recordPayment(db, {
       planId: plan.id,
-      paymentDate: "2026-04-05",
+      paymentDate: "2026-04-08",
       amount: 500,
       status: "pago",
     });
 
+    // Vencimento dia 10: próximo = 10 de maio
     const updated = await getPlanById(db, plan.id);
-    expect(updated!.nextPaymentDate).toBe("2026-05-05");
+    expect(updated!.nextPaymentDate).toBe("2026-05-10");
+  });
+
+  it("next_payment_date ajusta para último dia do mês quando dia não existe", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dia 30 em Fev",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 30,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-01-30",
+      amount: 500,
+    });
+
+    // Dia 30 em fevereiro não existe → usa 28
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.nextPaymentDate).toBe("2026-02-28");
   });
 
   it("next_payment_date fica null quando plano não tem ciclo", async () => {
@@ -439,7 +465,7 @@ describe("recordPayment", () => {
       clientName: "Multi Pgto",
       planType: "Personalizado",
       planValue: 500,
-      billingCycleDays: 30,
+      billingCycleDays: 10,
       postsCarrossel: 4,
       postsReels: 0,
       postsEstatico: 0,
@@ -447,17 +473,17 @@ describe("recordPayment", () => {
       startDate: "2026-01-01",
     });
 
-    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-01", amount: 500 });
-    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-03", amount: 500 });
-    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-02", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-08", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-09", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-10", amount: 500 });
 
     const payments = await getPaymentsByPlan(db, plan.id);
     expect(payments).toHaveLength(3);
 
-    // last e next devem refletir o último pagamento
+    // last reflete último pagamento, next = dia 10 do próximo mês
     const updated = await getPlanById(db, plan.id);
-    expect(updated!.lastPaymentDate).toBe("2026-04-02");
-    expect(updated!.nextPaymentDate).toBe("2026-05-02");
+    expect(updated!.lastPaymentDate).toBe("2026-04-10");
+    expect(updated!.nextPaymentDate).toBe("2026-05-10");
   });
 
   it("valor do pagamento pode diferir do plano (reajuste)", async () => {
@@ -946,6 +972,208 @@ describe("deletePlan", () => {
   });
 });
 
+describe("changePlan (upgrade/downgrade)", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("encerra plano antigo e cria novo com movementType Upgrade", async () => {
+    const { plan: oldPlan, client } = await createPlan(db, {
+      clientName: "Upgrade Test",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const result = await changePlan(db, {
+      oldPlanId: oldPlan.id,
+      endDate: "2026-04-12",
+      newPlan: {
+        planType: "Essential",
+        planValue: 790,
+        billingCycleDays: 10,
+        postsCarrossel: 4,
+        postsReels: 2,
+        postsEstatico: 0,
+        postsTrafego: 0,
+        startDate: "2026-04-12",
+        movementType: "Upgrade",
+      },
+    });
+
+    // Plano antigo foi encerrado
+    const old = await getPlanById(db, oldPlan.id);
+    expect(old!.endDate).toBe("2026-04-12");
+    expect(old!.status).toBe("cancelado");
+
+    // Novo plano foi criado para o mesmo cliente
+    expect(result.newPlan.clientId).toBe(client.id);
+    expect(result.newPlan.planType).toBe("Essential");
+    expect(result.newPlan.planValue).toBe(790);
+    expect(result.newPlan.movementType).toBe("Upgrade");
+    expect(result.newPlan.status).toBe("ativo");
+  });
+
+  it("encerra plano antigo e cria novo com movementType Downgrade", async () => {
+    const { plan: oldPlan } = await createPlan(db, {
+      clientName: "Downgrade Test",
+      planType: "Essential",
+      planValue: 790,
+      postsCarrossel: 4,
+      postsReels: 2,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const result = await changePlan(db, {
+      oldPlanId: oldPlan.id,
+      endDate: "2026-04-12",
+      newPlan: {
+        planType: "Personalizado",
+        planValue: 500,
+        postsCarrossel: 4,
+        postsReels: 0,
+        postsEstatico: 0,
+        postsTrafego: 0,
+        startDate: "2026-04-12",
+        movementType: "Downgrade",
+      },
+    });
+
+    expect(result.newPlan.planValue).toBe(500);
+    expect(result.newPlan.movementType).toBe("Downgrade");
+  });
+
+  it("rejeita upgrade de plano inexistente", async () => {
+    await expect(
+      changePlan(db, {
+        oldPlanId: 9999,
+        endDate: "2026-04-12",
+        newPlan: {
+          planType: "Essential",
+          planValue: 790,
+          postsCarrossel: 4,
+          postsReels: 0,
+          postsEstatico: 0,
+          postsTrafego: 0,
+          startDate: "2026-04-12",
+          movementType: "Upgrade",
+        },
+      })
+    ).rejects.toThrow("plano não encontrado");
+  });
+
+  it("rejeita upgrade de plano já encerrado", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Already Closed",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await closePlan(db, plan.id, "2026-03-01");
+
+    await expect(
+      changePlan(db, {
+        oldPlanId: plan.id,
+        endDate: "2026-04-12",
+        newPlan: {
+          planType: "Essential",
+          planValue: 790,
+          postsCarrossel: 4,
+          postsReels: 0,
+          postsEstatico: 0,
+          postsTrafego: 0,
+          startDate: "2026-04-12",
+          movementType: "Upgrade",
+        },
+      })
+    ).rejects.toThrow("plano já está encerrado");
+  });
+
+  it("novo plano herda o billingCycleDays do antigo se não informado", async () => {
+    const { plan: oldPlan } = await createPlan(db, {
+      clientName: "Herda Ciclo",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const result = await changePlan(db, {
+      oldPlanId: oldPlan.id,
+      endDate: "2026-04-12",
+      newPlan: {
+        planType: "Essential",
+        planValue: 790,
+        postsCarrossel: 4,
+        postsReels: 1,
+        postsEstatico: 0,
+        postsTrafego: 0,
+        startDate: "2026-04-12",
+        movementType: "Upgrade",
+      },
+    });
+
+    expect(result.newPlan.billingCycleDays).toBe(10);
+  });
+
+  it("pagamentos do plano antigo permanecem intactos", async () => {
+    const { plan: oldPlan } = await createPlan(db, {
+      clientName: "Keep Payments",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, {
+      planId: oldPlan.id,
+      paymentDate: "2026-03-08",
+      amount: 500,
+    });
+
+    await changePlan(db, {
+      oldPlanId: oldPlan.id,
+      endDate: "2026-04-12",
+      newPlan: {
+        planType: "Essential",
+        planValue: 790,
+        postsCarrossel: 4,
+        postsReels: 1,
+        postsEstatico: 0,
+        postsTrafego: 0,
+        startDate: "2026-04-12",
+        movementType: "Upgrade",
+      },
+    });
+
+    // Pagamentos do plano antigo continuam lá
+    const payments = await getPaymentsByPlan(db, oldPlan.id);
+    expect(payments).toHaveLength(1);
+    expect(payments[0].amount).toBe(500);
+  });
+});
+
 describe("persistência após criação (bug fix: await)", () => {
   let db: ReturnType<typeof createTestDb>;
 
@@ -990,9 +1218,10 @@ describe("persistência após criação (bug fix: await)", () => {
     });
 
     // Verifica que o plano foi atualizado NA MESMA chamada
+    // Vencimento dia 15 → próximo = 15 de maio
     const updated = await getPlanById(db, plan.id);
     expect(updated!.lastPaymentDate).toBe("2026-04-10");
-    expect(updated!.nextPaymentDate).toBe("2026-04-25"); // +15 dias
+    expect(updated!.nextPaymentDate).toBe("2026-05-15");
   });
 
   it("exclusão remove dados imediatamente", async () => {

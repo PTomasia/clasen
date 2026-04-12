@@ -9,8 +9,9 @@ import {
   updateClient as updateClientService,
   updatePlan as updatePlanService,
   deletePlan as deletePlanService,
+  changePlan as changePlanService,
 } from "../services/plans";
-import type { CreatePlanInput, RecordPaymentInput, UpdateClientInput, UpdatePlanInput } from "../services/plans";
+import type { CreatePlanInput, RecordPaymentInput, UpdateClientInput, UpdatePlanInput, ChangePlanInput } from "../services/plans";
 
 // ─── Server Actions — finos, só validam e chamam service ───────────────────────
 
@@ -46,6 +47,14 @@ export async function updatePlanAction(input: UpdatePlanInput) {
   await updatePlanService(db as any, input);
   revalidatePath("/planos");
   revalidatePath("/dashboard");
+}
+
+export async function changePlanAction(input: ChangePlanInput) {
+  const result = await changePlanService(db as any, input);
+  revalidatePath("/planos");
+  revalidatePath("/clientes");
+  revalidatePath("/dashboard");
+  return { newPlanId: result.newPlan.id };
 }
 
 export async function deletePlanAction(planId: number) {

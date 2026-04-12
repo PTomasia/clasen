@@ -188,14 +188,14 @@ export function EditClientDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Ciclo (dias)</Label>
+                <Label>Vencimento (dia)</Label>
                 <Select value={billingCycleDays} onValueChange={(v) => v && setBillingCycleDays(v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="—" />
                   </SelectTrigger>
                   <SelectContent>
                     {BILLING_CYCLES.map((c) => (
-                      <SelectItem key={c} value={c.toString()}>{c} dias</SelectItem>
+                      <SelectItem key={c} value={c.toString()}>Dia {c}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
