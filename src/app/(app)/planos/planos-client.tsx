@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -11,9 +11,26 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus, CreditCard, XCircle, Pencil, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Plus,
+  CreditCard,
+  XCircle,
+  Pencil,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
+  Search,
+} from "lucide-react";
 import { formatBRL } from "@/lib/utils/formatting";
 import type { StatusPagamento } from "@/lib/utils/calculations";
+import {
+  sortPlans,
+  filterPlans,
+  type SortKey,
+  type SortDirection,
+} from "@/lib/utils/table-helpers";
 import { PlanFormDialog } from "./plan-form-dialog";
 import { PaymentDialog } from "./payment-dialog";
 import { ClosePlanDialog } from "./close-plan-dialog";
@@ -50,6 +67,8 @@ interface Client {
   name: string;
 }
 
+// ─── Badges ───────────────────────────────────────────────────────────────────
+
 function StatusBadge({ status }: { status: StatusPagamento }) {
   const config = {
     em_dia: { label: "Em dia", className: "bg-success text-success-foreground" },
@@ -68,6 +87,45 @@ function PlanStatusBadge({ status }: { status: string }) {
   );
 }
 
+// ─── Sortable Header ──────────────────────────────────────────────────────────
+
+function SortableHead({
+  label,
+  sortKey,
+  currentSort,
+  currentDirection,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  currentSort: SortKey | null;
+  currentDirection: SortDirection;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const isActive = currentSort === sortKey;
+  const Icon = isActive
+    ? currentDirection === "asc"
+      ? ArrowUp
+      : ArrowDown
+    : ArrowUpDown;
+
+  return (
+    <TableHead className={className}>
+      <button
+        className="inline-flex items-center gap-1 hover:text-foreground transition-colors -ml-2 px-2 py-1 rounded"
+        onClick={() => onSort(sortKey)}
+      >
+        {label}
+        <Icon size={14} className={isActive ? "text-foreground" : "text-muted-foreground/50"} />
+      </button>
+    </TableHead>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 export function PlanosClient({
   plans,
   clients,
@@ -75,7 +133,19 @@ export function PlanosClient({
   plans: Plan[];
   clients: Client[];
 }) {
-  const [filter, setFilter] = useState<"todos" | "ativo" | "cancelado">("todos");
+  // Status filter (existing)
+  const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "cancelado">("todos");
+
+  // New: search, type filter, payment filter
+  const [search, setSearch] = useState("");
+  const [planTypeFilter, setPlanTypeFilter] = useState("todos");
+  const [pgtoFilter, setPgtoFilter] = useState("todos");
+
+  // Sorting
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  // Dialogs
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [paymentPlanId, setPaymentPlanId] = useState<number | null>(null);
   const [closePlanId, setClosePlanId] = useState<number | null>(null);
@@ -87,35 +157,124 @@ export function PlanosClient({
     notes: string | null;
   } | null>(null);
 
-  const filteredPlans = plans.filter((p) => {
-    if (filter === "todos") return true;
-    return p.status === filter;
-  });
+  // Derive unique plan types from data
+  const planTypes = useMemo(
+    () => [...new Set(plans.map((p) => p.planType))].sort(),
+    [plans]
+  );
+
+  // Pipeline: status filter → custom filters → sort
+  const processedPlans = useMemo(() => {
+    // 1. Status filter (existing behavior)
+    let result = plans.filter((p) => {
+      if (statusFilter === "todos") return true;
+      return p.status === statusFilter;
+    });
+
+    // 2. Additional filters
+    result = filterPlans(result, {
+      search,
+      planType: planTypeFilter,
+      statusPagamento: pgtoFilter,
+    });
+
+    // 3. Sort
+    if (sortKey) {
+      result = sortPlans(result, sortKey, sortDirection);
+    }
+
+    return result;
+  }, [plans, statusFilter, search, planTypeFilter, pgtoFilter, sortKey, sortDirection]);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      // Toggle direction, or reset on third click
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortKey(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  }
 
   const paymentPlan = plans.find((p) => p.id === paymentPlanId);
   const closePlan = plans.find((p) => p.id === closePlanId);
   const deletePlan = plans.find((p) => p.id === deletePlanId);
 
+  const hasActiveFilters = search || planTypeFilter !== "todos" || pgtoFilter !== "todos";
+
   return (
     <>
       {/* Filtros e ação */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex gap-2">
-          {(["todos", "ativo", "cancelado"] as const).map((f) => (
-            <Button
-              key={f}
-              variant={filter === f ? "default" : "outline"}
-              size="sm"
-              onClick={() => setFilter(f)}
-            >
-              {f === "todos" ? "Todos" : f === "ativo" ? "Ativos" : "Inativos"}
-            </Button>
-          ))}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex gap-2">
+            {(["todos", "ativo", "cancelado"] as const).map((f) => (
+              <Button
+                key={f}
+                variant={statusFilter === f ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStatusFilter(f)}
+              >
+                {f === "todos" ? "Todos" : f === "ativo" ? "Ativos" : "Inativos"}
+              </Button>
+            ))}
+          </div>
+          <Button onClick={() => setShowCreateDialog(true)}>
+            <Plus size={16} className="mr-2" />
+            Novo plano
+          </Button>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
-          <Plus size={16} className="mr-2" />
-          Novo plano
-        </Button>
+
+        {/* Search + filters row */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar cliente..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <select
+            value={planTypeFilter}
+            onChange={(e) => setPlanTypeFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="todos">Tipo: Todos</option>
+            {planTypes.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <select
+            value={pgtoFilter}
+            onChange={(e) => setPgtoFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="todos">Pgto: Todos</option>
+            <option value="em_dia">Em dia</option>
+            <option value="atrasado">Atrasado</option>
+            <option value="sem_pagamento">Sem pagamento</option>
+          </select>
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch("");
+                setPlanTypeFilter("todos");
+                setPgtoFilter("todos");
+              }}
+            >
+              Limpar filtros
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabela */}
@@ -123,26 +282,26 @@ export function PlanosClient({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Cliente</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead className="text-right">Valor</TableHead>
-              <TableHead className="text-right">$/post</TableHead>
+              <SortableHead label="Cliente" sortKey="clientName" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
+              <SortableHead label="Tipo" sortKey="planType" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
+              <SortableHead label="Valor" sortKey="planValue" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
+              <SortableHead label="$/post" sortKey="custoPost" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
               <TableHead className="text-center">Posts</TableHead>
-              <TableHead className="text-center">Perm.</TableHead>
-              <TableHead>Pgto</TableHead>
+              <SortableHead label="Perm." sortKey="permanencia" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
+              <SortableHead label="Pgto" sortKey="statusPagamento" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredPlans.length === 0 ? (
+            {processedPlans.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                   Nenhum plano encontrado
                 </TableCell>
               </TableRow>
             ) : (
-              filteredPlans.map((plan) => (
+              processedPlans.map((plan) => (
                 <TableRow key={plan.id}>
                   <TableCell className="font-medium">{plan.clientName}</TableCell>
                   <TableCell>
