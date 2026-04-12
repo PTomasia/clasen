@@ -67,6 +67,8 @@ import {
   getActivePlans,
   getPlanById,
   getPaymentsByPlan,
+  updateClient,
+  deletePlan,
 } from "../plans";
 import { getClientStatus } from "../clients";
 
@@ -391,5 +393,236 @@ describe("getActivePlans", () => {
     // Ativo 2: 790/(4+1+0) = 790/5 = 158
     const custos = plans.map((p) => p.custoPost).filter(Boolean) as number[];
     expect(custos).toEqual([...custos].sort((a, b) => a - b));
+  });
+});
+
+describe("updateClient", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("atualiza nome do cliente e persiste no banco", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Nome Antigo",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Nome Novo",
+    });
+
+    // Verifica que persistiu
+    const updated = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(updated!.name).toBe("Nome Novo");
+  });
+
+  it("atualiza origem do contato", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Cliente Origem",
+      planType: "Essential",
+      planValue: 790,
+      postsCarrossel: 4,
+      postsReels: 1,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Cliente Origem",
+      contactOrigin: "Instagram",
+    });
+
+    const updated = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(updated!.contactOrigin).toBe("Instagram");
+  });
+
+  it("rejeita nome vazio", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Teste",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await expect(
+      updateClient(db, { clientId: client.id, name: "   " })
+    ).rejects.toThrow("nome do cliente é obrigatório");
+  });
+
+  it("rejeita cliente inexistente", async () => {
+    await expect(
+      updateClient(db, { clientId: 9999, name: "Fantasma" })
+    ).rejects.toThrow("cliente não encontrado");
+  });
+});
+
+describe("deletePlan", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("remove plano e seus pagamentos do banco", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Delete Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 30,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-01",
+    });
+
+    // Registra pagamento vinculado
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-05",
+      amount: 500,
+    });
+
+    // Confirma que existem antes de deletar
+    const paymentsBefore = await getPaymentsByPlan(db, plan.id);
+    expect(paymentsBefore).toHaveLength(1);
+
+    await deletePlan(db, plan.id);
+
+    // Plano sumiu
+    const deleted = await getPlanById(db, plan.id);
+    expect(deleted).toBeNull();
+
+    // Pagamentos vinculados sumiram
+    const paymentsAfter = await getPaymentsByPlan(db, plan.id);
+    expect(paymentsAfter).toHaveLength(0);
+  });
+
+  it("não afeta outros planos do mesmo cliente", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Multi Delete",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const { plan: plan2 } = await createPlan(db, {
+      clientId: client.id,
+      planType: "Tráfego",
+      planValue: 300,
+      postsCarrossel: 0,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 1,
+      startDate: "2026-03-01",
+    });
+
+    await deletePlan(db, plan2.id);
+
+    // Primeiro plano continua existindo
+    const allPlans = db.select().from(schema.subscriptionPlans).all();
+    expect(allPlans).toHaveLength(1);
+    expect(allPlans[0].planType).toBe("Personalizado");
+  });
+
+  it("rejeita plano inexistente", async () => {
+    await expect(deletePlan(db, 9999)).rejects.toThrow("plano não encontrado");
+  });
+});
+
+describe("persistência após criação (bug fix: await)", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("plano criado aparece imediatamente em getActivePlans", async () => {
+    await createPlan(db, {
+      clientName: "Novo Imediato",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    const ativos = await getActivePlans(db);
+    expect(ativos).toHaveLength(1);
+    expect(ativos[0].planValue).toBe(500);
+  });
+
+  it("pagamento registrado persiste e atualiza plano na mesma chamada", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Pgto Imediato",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-01",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-10",
+      amount: 500,
+    });
+
+    // Verifica que o plano foi atualizado NA MESMA chamada
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.lastPaymentDate).toBe("2026-04-10");
+    expect(updated!.nextPaymentDate).toBe("2026-04-25"); // +15 dias
+  });
+
+  it("exclusão remove dados imediatamente", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Excluir Imediato",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await deletePlan(db, plan.id);
+
+    const ativos = await getActivePlans(db);
+    expect(ativos).toHaveLength(0);
   });
 });

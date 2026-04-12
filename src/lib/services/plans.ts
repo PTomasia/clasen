@@ -56,7 +56,7 @@ export async function createPlan(db: any, input: CreatePlanInput) {
   let client: typeof schema.clients.$inferSelect;
 
   if (clientId) {
-    const existing = db
+    const existing = await db
       .select()
       .from(schema.clients)
       .where(eq(schema.clients.id, clientId))
@@ -65,7 +65,7 @@ export async function createPlan(db: any, input: CreatePlanInput) {
     if (!existing) throw new Error("cliente não encontrado");
     client = existing;
   } else if (input.clientName) {
-    const inserted = db
+    const inserted = await db
       .insert(schema.clients)
       .values({
         name: input.clientName,
@@ -81,7 +81,7 @@ export async function createPlan(db: any, input: CreatePlanInput) {
   }
 
   // Criar plano
-  const plan = db
+  const plan = await db
     .insert(schema.subscriptionPlans)
     .values({
       clientId: clientId!,
@@ -106,7 +106,7 @@ export async function createPlan(db: any, input: CreatePlanInput) {
 // ─── closePlan ─────────────────────────────────────────────────────────────────
 
 export async function closePlan(db: any, planId: number, endDate: string) {
-  db.update(schema.subscriptionPlans)
+  await db.update(schema.subscriptionPlans)
     .set({
       endDate,
       status: "cancelado",
@@ -120,7 +120,7 @@ export async function closePlan(db: any, planId: number, endDate: string) {
 
 export async function recordPayment(db: any, input: RecordPaymentInput) {
   // Buscar plano para obter clientId e ciclo
-  const plan = db
+  const plan = await db
     .select()
     .from(schema.subscriptionPlans)
     .where(eq(schema.subscriptionPlans.id, input.planId))
@@ -129,7 +129,7 @@ export async function recordPayment(db: any, input: RecordPaymentInput) {
   if (!plan) throw new Error("plano não encontrado");
 
   // Criar pagamento
-  const payment = db
+  const payment = await db
     .insert(schema.planPayments)
     .values({
       planId: input.planId,
@@ -150,7 +150,7 @@ export async function recordPayment(db: any, input: RecordPaymentInput) {
       )
     : null;
 
-  db.update(schema.subscriptionPlans)
+  await db.update(schema.subscriptionPlans)
     .set({
       lastPaymentDate: input.paymentDate,
       nextPaymentDate,
@@ -176,7 +176,7 @@ export async function updateClient(db: any, input: UpdateClientInput) {
     throw new Error("nome do cliente é obrigatório");
   }
 
-  const existing = db
+  const existing = await db
     .select()
     .from(schema.clients)
     .where(eq(schema.clients.id, input.clientId))
@@ -184,7 +184,7 @@ export async function updateClient(db: any, input: UpdateClientInput) {
 
   if (!existing) throw new Error("cliente não encontrado");
 
-  db.update(schema.clients)
+  await db.update(schema.clients)
     .set({
       name: input.name.trim(),
       contactOrigin: input.contactOrigin?.trim() || null,
@@ -200,7 +200,7 @@ export async function updateClient(db: any, input: UpdateClientInput) {
 // ─── deletePlan ───────────────────────────────────────────────────────────────
 
 export async function deletePlan(db: any, planId: number) {
-  const plan = db
+  const plan = await db
     .select()
     .from(schema.subscriptionPlans)
     .where(eq(schema.subscriptionPlans.id, planId))
@@ -208,12 +208,12 @@ export async function deletePlan(db: any, planId: number) {
 
   if (!plan) throw new Error("plano não encontrado");
 
-  // Remove pagamentos vinculados primeiro (cascade no schema, mas explícito aqui)
-  db.delete(schema.planPayments)
+  // Remove pagamentos vinculados primeiro
+  await db.delete(schema.planPayments)
     .where(eq(schema.planPayments.planId, planId))
     .run();
 
-  db.delete(schema.subscriptionPlans)
+  await db.delete(schema.subscriptionPlans)
     .where(eq(schema.subscriptionPlans.id, planId))
     .run();
 
@@ -223,7 +223,7 @@ export async function deletePlan(db: any, planId: number) {
 // ─── Queries ───────────────────────────────────────────────────────────────────
 
 export async function getPlanById(db: any, planId: number) {
-  return db
+  return await db
     .select()
     .from(schema.subscriptionPlans)
     .where(eq(schema.subscriptionPlans.id, planId))
@@ -231,7 +231,7 @@ export async function getPlanById(db: any, planId: number) {
 }
 
 export async function getPaymentsByPlan(db: any, planId: number) {
-  return db
+  return await db
     .select()
     .from(schema.planPayments)
     .where(eq(schema.planPayments.planId, planId))
@@ -239,7 +239,7 @@ export async function getPaymentsByPlan(db: any, planId: number) {
 }
 
 export async function getActivePlans(db: any) {
-  const plans = db
+  const plans = await db
     .select()
     .from(schema.subscriptionPlans)
     .where(isNull(schema.subscriptionPlans.endDate))
