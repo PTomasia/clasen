@@ -11,17 +11,21 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Plus, CreditCard, XCircle } from "lucide-react";
-import { formatBRL, formatDate } from "@/lib/utils/formatting";
+import { Plus, CreditCard, XCircle, Pencil, Trash2 } from "lucide-react";
+import { formatBRL } from "@/lib/utils/formatting";
 import type { StatusPagamento } from "@/lib/utils/calculations";
 import { PlanFormDialog } from "./plan-form-dialog";
 import { PaymentDialog } from "./payment-dialog";
 import { ClosePlanDialog } from "./close-plan-dialog";
+import { DeletePlanDialog } from "./delete-plan-dialog";
+import { EditClientDialog } from "./edit-client-dialog";
 
 interface Plan {
   id: number;
   clientId: number;
   clientName: string;
+  clientContactOrigin: string | null;
+  clientNotes: string | null;
   planType: string;
   planValue: number;
   billingCycleDays: number | null;
@@ -75,6 +79,13 @@ export function PlanosClient({
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [paymentPlanId, setPaymentPlanId] = useState<number | null>(null);
   const [closePlanId, setClosePlanId] = useState<number | null>(null);
+  const [deletePlanId, setDeletePlanId] = useState<number | null>(null);
+  const [editClient, setEditClient] = useState<{
+    id: number;
+    name: string;
+    contactOrigin: string | null;
+    notes: string | null;
+  } | null>(null);
 
   const filteredPlans = plans.filter((p) => {
     if (filter === "todos") return true;
@@ -83,6 +94,7 @@ export function PlanosClient({
 
   const paymentPlan = plans.find((p) => p.id === paymentPlanId);
   const closePlan = plans.find((p) => p.id === closePlanId);
+  const deletePlan = plans.find((p) => p.id === deletePlanId);
 
   return (
     <>
@@ -163,26 +175,52 @@ export function PlanosClient({
                     <PlanStatusBadge status={plan.status} />
                   </TableCell>
                   <TableCell className="text-right">
-                    {plan.status === "ativo" && (
-                      <div className="flex gap-1 justify-end">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setPaymentPlanId(plan.id)}
-                          title="Registrar pagamento"
-                        >
-                          <CreditCard size={14} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setClosePlanId(plan.id)}
-                          title="Encerrar plano"
-                        >
-                          <XCircle size={14} />
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex gap-1 justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setEditClient({
+                            id: plan.clientId,
+                            name: plan.clientName,
+                            contactOrigin: plan.clientContactOrigin,
+                            notes: plan.clientNotes,
+                          })
+                        }
+                        title="Editar cliente"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      {plan.status === "ativo" && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPaymentPlanId(plan.id)}
+                            title="Registrar pagamento"
+                          >
+                            <CreditCard size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setClosePlanId(plan.id)}
+                            title="Encerrar plano"
+                          >
+                            <XCircle size={14} />
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeletePlanId(plan.id)}
+                        title="Excluir registro"
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -211,6 +249,22 @@ export function PlanosClient({
           open={!!closePlanId}
           onClose={() => setClosePlanId(null)}
           plan={closePlan}
+        />
+      )}
+
+      {deletePlan && (
+        <DeletePlanDialog
+          open={!!deletePlanId}
+          onClose={() => setDeletePlanId(null)}
+          plan={deletePlan}
+        />
+      )}
+
+      {editClient && (
+        <EditClientDialog
+          open={!!editClient}
+          onClose={() => setEditClient(null)}
+          client={editClient}
         />
       )}
     </>

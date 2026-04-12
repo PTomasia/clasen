@@ -14,6 +14,8 @@ export async function getAllPlans() {
     .select({
       plan: schema.subscriptionPlans,
       clientName: schema.clients.name,
+      clientContactOrigin: schema.clients.contactOrigin,
+      clientNotes: schema.clients.notes,
     })
     .from(schema.subscriptionPlans)
     .innerJoin(
@@ -22,9 +24,11 @@ export async function getAllPlans() {
     )
     .orderBy(desc(schema.subscriptionPlans.createdAt));
 
-  return plans.map(({ plan, clientName }) => ({
+  return plans.map(({ plan, clientName, clientContactOrigin, clientNotes }) => ({
     ...plan,
     clientName,
+    clientContactOrigin,
+    clientNotes,
     custoPost: calcularCustoPost({
       valor: plan.planValue,
       carrossel: plan.postsCarrossel,

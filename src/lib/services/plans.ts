@@ -162,6 +162,64 @@ export async function recordPayment(db: any, input: RecordPaymentInput) {
   return payment;
 }
 
+// ─── updateClient ─────────────────────────────────────────────────────────────
+
+export interface UpdateClientInput {
+  clientId: number;
+  name: string;
+  contactOrigin?: string;
+  notes?: string;
+}
+
+export async function updateClient(db: any, input: UpdateClientInput) {
+  if (!input.name.trim()) {
+    throw new Error("nome do cliente é obrigatório");
+  }
+
+  const existing = db
+    .select()
+    .from(schema.clients)
+    .where(eq(schema.clients.id, input.clientId))
+    .get();
+
+  if (!existing) throw new Error("cliente não encontrado");
+
+  db.update(schema.clients)
+    .set({
+      name: input.name.trim(),
+      contactOrigin: input.contactOrigin?.trim() || null,
+      notes: input.notes?.trim() || null,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.clients.id, input.clientId))
+    .run();
+
+  return { ...existing, name: input.name.trim() };
+}
+
+// ─── deletePlan ───────────────────────────────────────────────────────────────
+
+export async function deletePlan(db: any, planId: number) {
+  const plan = db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+
+  if (!plan) throw new Error("plano não encontrado");
+
+  // Remove pagamentos vinculados primeiro (cascade no schema, mas explícito aqui)
+  db.delete(schema.planPayments)
+    .where(eq(schema.planPayments.planId, planId))
+    .run();
+
+  db.delete(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .run();
+
+  return plan;
+}
+
 // ─── Queries ───────────────────────────────────────────────────────────────────
 
 export async function getPlanById(db: any, planId: number) {
