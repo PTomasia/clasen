@@ -1,7 +1,7 @@
 import { getAllPlans, getClientsList } from "@/lib/queries/plans";
 import { PlanosClient } from "./planos-client";
 
-export const revalidate = 60; // revalida cache a cada 60s
+export const dynamic = "force-dynamic";
 
 export default async function PlanosPage() {
   const [plans, clients] = await Promise.all([
