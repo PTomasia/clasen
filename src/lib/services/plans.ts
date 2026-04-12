@@ -197,6 +197,51 @@ export async function updateClient(db: any, input: UpdateClientInput) {
   return { ...existing, name: input.name.trim() };
 }
 
+// ─── updatePlan ───────────────────────────────────────────────────────────────
+
+export interface UpdatePlanInput {
+  planId: number;
+  planType: string;
+  planValue: number;
+  billingCycleDays?: number;
+  postsCarrossel: number;
+  postsReels: number;
+  postsEstatico: number;
+  postsTrafego: number;
+  notes?: string;
+}
+
+export async function updatePlan(db: any, input: UpdatePlanInput) {
+  if (!input.planValue || input.planValue <= 0) {
+    throw new Error("valor deve ser maior que zero");
+  }
+
+  const existing = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, input.planId))
+    .get();
+
+  if (!existing) throw new Error("plano não encontrado");
+
+  await db.update(schema.subscriptionPlans)
+    .set({
+      planType: input.planType,
+      planValue: input.planValue,
+      billingCycleDays: input.billingCycleDays ?? null,
+      postsCarrossel: input.postsCarrossel,
+      postsReels: input.postsReels,
+      postsEstatico: input.postsEstatico,
+      postsTrafego: input.postsTrafego,
+      notes: input.notes?.trim() || null,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.subscriptionPlans.id, input.planId))
+    .run();
+
+  return { ...existing, ...input };
+}
+
 // ─── deletePlan ───────────────────────────────────────────────────────────────
 
 export async function deletePlan(db: any, planId: number) {

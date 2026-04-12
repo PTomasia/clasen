@@ -35,7 +35,7 @@ import { PlanFormDialog } from "./plan-form-dialog";
 import { PaymentDialog } from "./payment-dialog";
 import { ClosePlanDialog } from "./close-plan-dialog";
 import { DeletePlanDialog } from "./delete-plan-dialog";
-import { EditClientDialog } from "./edit-client-dialog";
+import { EditClientDialog, type EditDialogData } from "./edit-client-dialog";
 
 interface Plan {
   id: number;
@@ -150,12 +150,7 @@ export function PlanosClient({
   const [paymentPlanId, setPaymentPlanId] = useState<number | null>(null);
   const [closePlanId, setClosePlanId] = useState<number | null>(null);
   const [deletePlanId, setDeletePlanId] = useState<number | null>(null);
-  const [editClient, setEditClient] = useState<{
-    id: number;
-    name: string;
-    contactOrigin: string | null;
-    notes: string | null;
-  } | null>(null);
+  const [editData, setEditData] = useState<EditDialogData | null>(null);
 
   // Derive unique plan types from data
   const planTypes = useMemo(
@@ -313,7 +308,15 @@ export function PlanosClient({
                   <TableCell className="text-right font-mono">
                     {plan.custoPost ? formatBRL(plan.custoPost) : "—"}
                   </TableCell>
-                  <TableCell className="text-center text-sm text-muted-foreground">
+                  <TableCell
+                    className="text-center text-sm text-muted-foreground cursor-help"
+                    title={[
+                      plan.postsCarrossel > 0 && `${plan.postsCarrossel} Carrossel`,
+                      plan.postsReels > 0 && `${plan.postsReels} Reels`,
+                      plan.postsEstatico > 0 && `${plan.postsEstatico} Estático`,
+                      plan.postsTrafego > 0 && `${plan.postsTrafego} Tráfego`,
+                    ].filter(Boolean).join(", ") || "Sem posts"}
+                  >
                     {plan.postsCarrossel > 0 && `${plan.postsCarrossel}C `}
                     {plan.postsReels > 0 && `${plan.postsReels}R `}
                     {plan.postsEstatico > 0 && `${plan.postsEstatico}E `}
@@ -339,11 +342,20 @@ export function PlanosClient({
                         variant="ghost"
                         size="sm"
                         onClick={() =>
-                          setEditClient({
-                            id: plan.clientId,
-                            name: plan.clientName,
+                          setEditData({
+                            clientId: plan.clientId,
+                            clientName: plan.clientName,
                             contactOrigin: plan.clientContactOrigin,
-                            notes: plan.clientNotes,
+                            clientNotes: plan.clientNotes,
+                            planId: plan.id,
+                            planType: plan.planType,
+                            planValue: plan.planValue,
+                            billingCycleDays: plan.billingCycleDays,
+                            postsCarrossel: plan.postsCarrossel,
+                            postsReels: plan.postsReels,
+                            postsEstatico: plan.postsEstatico,
+                            postsTrafego: plan.postsTrafego,
+                            planNotes: plan.notes,
                           })
                         }
                         title="Editar cliente"
@@ -419,11 +431,11 @@ export function PlanosClient({
         />
       )}
 
-      {editClient && (
+      {editData && (
         <EditClientDialog
-          open={!!editClient}
-          onClose={() => setEditClient(null)}
-          client={editClient}
+          open={!!editData}
+          onClose={() => setEditData(null)}
+          data={editData}
         />
       )}
     </>

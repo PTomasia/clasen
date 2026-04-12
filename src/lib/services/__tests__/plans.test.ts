@@ -68,6 +68,7 @@ import {
   getPlanById,
   getPaymentsByPlan,
   updateClient,
+  updatePlan,
   deletePlan,
 } from "../plans";
 import { getClientStatus } from "../clients";
@@ -689,6 +690,139 @@ describe("updateClient", () => {
 
     const saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
     expect(saved!.name).toBe("Nome com Espaços");
+  });
+});
+
+describe("updatePlan", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("atualiza valor e tipo do plano", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Update Plan Test",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Essential",
+      planValue: 790,
+      postsCarrossel: 4,
+      postsReels: 1,
+      postsEstatico: 0,
+      postsTrafego: 0,
+    });
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.planType).toBe("Essential");
+    expect(updated!.planValue).toBe(790);
+    expect(updated!.postsReels).toBe(1);
+  });
+
+  it("atualiza composição de posts", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Posts Update",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 2,
+      postsReels: 2,
+      postsEstatico: 4,
+      postsTrafego: 1,
+    });
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.postsCarrossel).toBe(2);
+    expect(updated!.postsReels).toBe(2);
+    expect(updated!.postsEstatico).toBe(4);
+    expect(updated!.postsTrafego).toBe(1);
+  });
+
+  it("rejeita valor zero", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Zero Value",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await expect(
+      updatePlan(db, {
+        planId: plan.id,
+        planType: "Personalizado",
+        planValue: 0,
+        postsCarrossel: 4,
+        postsReels: 0,
+        postsEstatico: 0,
+        postsTrafego: 0,
+      })
+    ).rejects.toThrow("valor deve ser maior que zero");
+  });
+
+  it("rejeita plano inexistente", async () => {
+    await expect(
+      updatePlan(db, {
+        planId: 9999,
+        planType: "Personalizado",
+        planValue: 500,
+        postsCarrossel: 4,
+        postsReels: 0,
+        postsEstatico: 0,
+        postsTrafego: 0,
+      })
+    ).rejects.toThrow("plano não encontrado");
+  });
+
+  it("não altera outros campos do plano (startDate, status)", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Preserve Fields",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-15",
+      movementType: "New",
+    });
+
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Essential",
+      planValue: 790,
+      postsCarrossel: 4,
+      postsReels: 1,
+      postsEstatico: 0,
+      postsTrafego: 0,
+    });
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.startDate).toBe("2026-01-15");
+    expect(updated!.status).toBe("ativo");
+    expect(updated!.movementType).toBe("New");
   });
 });
 
