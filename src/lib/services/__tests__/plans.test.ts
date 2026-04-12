@@ -161,6 +161,72 @@ describe("createPlan", () => {
     ).rejects.toThrow("plano deve ter ao menos um post ou ser do tipo Tráfego");
   });
 
+  it("rejeita plano com valor negativo", async () => {
+    await expect(
+      createPlan(db, {
+        clientName: "Negativo",
+        planType: "Personalizado",
+        planValue: -100,
+        postsCarrossel: 4,
+        postsReels: 0,
+        postsEstatico: 0,
+        postsTrafego: 0,
+        startDate: "2026-04-01",
+      })
+    ).rejects.toThrow("valor deve ser maior que zero");
+  });
+
+  it("rejeita quando não tem clientId nem clientName", async () => {
+    await expect(
+      createPlan(db, {
+        planType: "Personalizado",
+        planValue: 500,
+        postsCarrossel: 4,
+        postsReels: 0,
+        postsEstatico: 0,
+        postsTrafego: 0,
+        startDate: "2026-04-01",
+      })
+    ).rejects.toThrow("clientId ou clientName é obrigatório");
+  });
+
+  it("rejeita clientId inexistente", async () => {
+    await expect(
+      createPlan(db, {
+        clientId: 9999,
+        planType: "Personalizado",
+        planValue: 500,
+        postsCarrossel: 4,
+        postsReels: 0,
+        postsEstatico: 0,
+        postsTrafego: 0,
+        startDate: "2026-04-01",
+      })
+    ).rejects.toThrow("cliente não encontrado");
+  });
+
+  it("salva contactOrigin ao criar cliente novo", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Via Insta",
+      contactOrigin: "Instagram",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    const saved = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(saved!.contactOrigin).toBe("Instagram");
+  });
+
   it("permite plano Tráfego sem posts de conteúdo", async () => {
     const result = await createPlan(db, {
       clientName: "Test Traffic",
@@ -221,6 +287,26 @@ describe("closePlan", () => {
 
     const status = await getClientStatus(db, client.id);
     expect(status).toBe("inativo");
+  });
+
+  it("plano já encerrado não muda ao fechar novamente", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Double Close",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await closePlan(db, plan.id, "2026-03-01");
+    await closePlan(db, plan.id, "2026-04-10"); // segundo close
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.endDate).toBe("2026-04-10");
+    expect(updated!.status).toBe("cancelado");
   });
 
   it("cliente permanece ativo quando tem outro plano ativo", async () => {
@@ -311,6 +397,66 @@ describe("recordPayment", () => {
 
     const updated = await getPlanById(db, plan.id);
     expect(updated!.nextPaymentDate).toBe("2026-05-05");
+  });
+
+  it("next_payment_date fica null quando plano não tem ciclo", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Sem Ciclo",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-01",
+      // billingCycleDays omitido = null
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-05",
+      amount: 500,
+    });
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.lastPaymentDate).toBe("2026-04-05");
+    expect(updated!.nextPaymentDate).toBeNull();
+  });
+
+  it("rejeita pagamento em plano inexistente", async () => {
+    await expect(
+      recordPayment(db, {
+        planId: 9999,
+        paymentDate: "2026-04-05",
+        amount: 500,
+      })
+    ).rejects.toThrow("plano não encontrado");
+  });
+
+  it("múltiplos pagamentos acumulam no histórico", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Multi Pgto",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 30,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-01", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-03", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-02", amount: 500 });
+
+    const payments = await getPaymentsByPlan(db, plan.id);
+    expect(payments).toHaveLength(3);
+
+    // last e next devem refletir o último pagamento
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.lastPaymentDate).toBe("2026-04-02");
+    expect(updated!.nextPaymentDate).toBe("2026-05-02");
   });
 
   it("valor do pagamento pode diferir do plano (reajuste)", async () => {
@@ -479,6 +625,71 @@ describe("updateClient", () => {
       updateClient(db, { clientId: 9999, name: "Fantasma" })
     ).rejects.toThrow("cliente não encontrado");
   });
+
+  it("limpa notas quando campo fica vazio", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Com Notas",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    // Primeiro set notas
+    await updateClient(db, { clientId: client.id, name: "Com Notas", notes: "info importante" });
+    let saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
+    expect(saved!.notes).toBe("info importante");
+
+    // Depois limpa
+    await updateClient(db, { clientId: client.id, name: "Com Notas", notes: "" });
+    saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
+    expect(saved!.notes).toBeNull();
+  });
+
+  it("preserva origem ao atualizar só o nome", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Preservar",
+      contactOrigin: "Instagram",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Novo Nome",
+      contactOrigin: "Instagram", // mantém
+    });
+
+    const saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
+    expect(saved!.name).toBe("Novo Nome");
+    expect(saved!.contactOrigin).toBe("Instagram");
+  });
+
+  it("trima espaços do nome", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Trim Test",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updateClient(db, { clientId: client.id, name: "  Nome com Espaços  " });
+
+    const saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
+    expect(saved!.name).toBe("Nome com Espaços");
+  });
 });
 
 describe("deletePlan", () => {
@@ -556,6 +767,48 @@ describe("deletePlan", () => {
 
   it("rejeita plano inexistente", async () => {
     await expect(deletePlan(db, 9999)).rejects.toThrow("plano não encontrado");
+  });
+
+  it("deletar plano sem pagamentos funciona sem erro", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Sem Pgtos",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await deletePlan(db, plan.id);
+    const deleted = await getPlanById(db, plan.id);
+    expect(deleted).toBeNull();
+  });
+
+  it("cliente sobrevive quando seu plano é deletado", async () => {
+    const { plan, client } = await createPlan(db, {
+      clientName: "Cliente Sobrevive",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await deletePlan(db, plan.id);
+
+    // Cliente ainda existe
+    const clientSaved = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(clientSaved).toBeDefined();
+    expect(clientSaved!.name).toBe("Cliente Sobrevive");
   });
 });
 

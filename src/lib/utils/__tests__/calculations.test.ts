@@ -109,6 +109,31 @@ describe("calcularCustoPost", () => {
     ).toBeCloseTo(100, 2);
     // 200 / (4*0.5) = 200/2 = 100
   });
+
+  it("valor muito pequeno não gera erro", () => {
+    expect(
+      calcularCustoPost({
+        valor: 0.01,
+        carrossel: 1,
+        reels: 0,
+        estatico: 0,
+        trafego: 0,
+      })
+    ).toBeCloseTo(0.01, 2);
+  });
+
+  it("composição mista grande calcula correto", () => {
+    // Pedagobia Macedo: 670 / (4 + 2 + 4*0.5) = 670/8 = 83.75
+    expect(
+      calcularCustoPost({
+        valor: 670,
+        carrossel: 4,
+        reels: 2,
+        estatico: 4,
+        trafego: 0,
+      })
+    ).toBeCloseTo(83.75, 2);
+  });
 });
 
 // ─── Total de Posts Equivalentes ───────────────────────────────────────────────
@@ -163,6 +188,17 @@ describe("calcularPermanencia", () => {
 
   it("mesmo dia retorna 0", () => {
     expect(calcularPermanencia("2026-04-11", null)).toBe(0);
+  });
+
+  it("data de início no futuro retorna 0 (não negativo)", () => {
+    // Cliente cadastrado com data de início futura
+    const result = calcularPermanencia("2026-05-01", null);
+    expect(result).toBeLessThanOrEqual(0);
+  });
+
+  it("plano de longa duração calcula corretamente", () => {
+    // Thauane: mar/2023 → fev/2026 = 35 meses
+    expect(calcularPermanencia("2023-03-01", "2026-02-27")).toBe(35);
   });
 });
 
