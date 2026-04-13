@@ -200,6 +200,7 @@ export interface UpdateClientInput {
   clientId: number;
   name: string;
   contactOrigin?: string;
+  clientSince?: string;
   notes?: string;
 }
 
@@ -220,6 +221,7 @@ export async function updateClient(db: any, input: UpdateClientInput) {
     .set({
       name: input.name.trim(),
       contactOrigin: input.contactOrigin?.trim() || null,
+      clientSince: input.clientSince?.trim() || null,
       notes: input.notes?.trim() || null,
       updatedAt: new Date().toISOString(),
     })

@@ -24,14 +24,17 @@ import {
   ArrowDown,
   ArrowUpDown,
   Search,
+  Pencil,
 } from "lucide-react";
 import { formatBRL } from "@/lib/utils/formatting";
 import { ClientDetailDialog } from "./client-detail-dialog";
+import { EditClientQuickDialog, type EditClientQuickData } from "./edit-client-quick-dialog";
 
 interface ClientRow {
   id: number;
   name: string;
   contactOrigin: string | null;
+  clientSince: string | null;
   notes: string | null;
   status: "ativo" | "inativo";
   permanencia: number;
@@ -52,6 +55,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>(null);
   const [detailClientId, setDetailClientId] = useState<{ id: number; name: string } | null>(null);
+  const [editData, setEditData] = useState<EditClientQuickData | null>(null);
 
   function handleSort(key: SortKey) {
     if (sortKey !== key) {
@@ -249,12 +253,13 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                   $/post <SortIcon column="custoPostMedio" />
                 </button>
               </TableHead>
+              <TableHead className="w-[50px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   Nenhum cliente encontrado
                 </TableCell>
               </TableRow>
@@ -289,6 +294,22 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                   <TableCell className="text-right font-mono text-sm">
                     {client.custoPostMedio !== null ? formatBRL(client.custoPostMedio) : "—"}
                   </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setEditData({
+                        clientId: client.id,
+                        name: client.name,
+                        contactOrigin: client.contactOrigin,
+                        clientSince: client.clientSince,
+                        notes: client.notes,
+                      })}
+                      title="Editar cliente"
+                    >
+                      <Pencil size={14} />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -302,6 +323,14 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
           onClose={() => setDetailClientId(null)}
           clientId={detailClientId.id}
           clientName={detailClientId.name}
+        />
+      )}
+
+      {editData && (
+        <EditClientQuickDialog
+          open={!!editData}
+          onClose={() => setEditData(null)}
+          data={editData}
         />
       )}
     </>

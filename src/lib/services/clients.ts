@@ -29,6 +29,7 @@ export interface ClientRow {
   id: number;
   name: string;
   contactOrigin: string | null;
+  clientSince: string | null;
   notes: string | null;
   status: "ativo" | "inativo";
   permanencia: number;
@@ -53,18 +54,15 @@ export async function getClientsList(
     const activePlans = plans.filter((p: any) => !p.endDate);
     const status: "ativo" | "inativo" = activePlans.length > 0 ? "ativo" : "inativo";
 
-    // Permanência: desde o primeiro plano
-    const firstStart = plans
-      .map((p: any) => p.startDate as string)
-      .sort()
-      [0];
+    // Permanência: usa client_since se preenchido, senão primeiro plano
+    const firstStart = client.clientSince
+      ?? plans.map((p: any) => p.startDate as string).sort()[0];
 
     let permanencia = 0;
     if (firstStart) {
       if (status === "ativo") {
         permanencia = differenceInMonths(referenceDate, parseISO(firstStart));
       } else {
-        // Inativo: até o end_date mais recente
         const lastEnd = plans
           .filter((p: any) => p.endDate)
           .map((p: any) => p.endDate as string)
@@ -102,6 +100,7 @@ export async function getClientsList(
       id: client.id,
       name: client.name,
       contactOrigin: client.contactOrigin,
+      clientSince: client.clientSince,
       notes: client.notes,
       status,
       permanencia,
@@ -138,10 +137,8 @@ export async function getClientDetail(
   const activePlans = plans.filter((p: any) => !p.endDate);
   const status: "ativo" | "inativo" = activePlans.length > 0 ? "ativo" : "inativo";
 
-  const firstStart = plans
-    .map((p: any) => p.startDate as string)
-    .sort()
-    [0];
+  const firstStart = client.clientSince
+    ?? plans.map((p: any) => p.startDate as string).sort()[0];
 
   let permanencia = 0;
   if (firstStart) {

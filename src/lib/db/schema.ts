@@ -8,6 +8,7 @@ export const clients = sqliteTable("clients", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   contactOrigin: text("contact_origin"), // Instagram, Indicação, Google, etc.
+  clientSince: text("client_since"), // ISO date override: se preenchido, usa para permanência
   notes: text("notes"),
   createdAt: text("created_at")
     .notNull()

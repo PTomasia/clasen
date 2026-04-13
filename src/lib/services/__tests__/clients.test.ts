@@ -6,12 +6,14 @@ import * as schema from "../../db/schema";
 import {
   createPlan,
   closePlan,
+  updateClient,
 } from "../plans";
 import {
   getClientStatus,
   getClientsList,
   getClientDetail,
 } from "../clients";
+import { eq } from "drizzle-orm";
 
 function createTestDb() {
   const sqlite = new Database(":memory:");
@@ -22,6 +24,7 @@ function createTestDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       contact_origin TEXT,
+      client_since TEXT,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -302,6 +305,77 @@ describe("getClientsList", () => {
 
     expect(clients[0].planosAtivos).toBe(1);
     expect(clients[0].valorMensal).toBe(790); // só o ativo
+  });
+
+  it("usa client_since para permanência quando preenchido", async () => {
+    // Plano começou em jan/2026, mas cliente é de 2023
+    const { client } = await createPlan(db, {
+      clientName: "Veterana",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // Setar client_since manualmente
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Veterana",
+      clientSince: "2023-06-01",
+    });
+
+    const clients = await getClientsList(db, MOCK_TODAY);
+
+    // Jun/2023 → Abr/2026 = 34 meses (não 3 que seria pelo plano)
+    expect(clients[0].permanencia).toBe(34);
+  });
+
+  it("ignora client_since quando é null (usa primeiro plano)", async () => {
+    await createPlan(db, {
+      clientName: "Normal",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-01-01",
+    });
+
+    const clients = await getClientsList(db, MOCK_TODAY);
+
+    // Sem client_since → usa start_date do plano: Jan/2025 → Abr/2026 = 15
+    expect(clients[0].permanencia).toBe(15);
+  });
+
+  it("client_since funciona também para clientes inativos", async () => {
+    const { client, plan } = await createPlan(db, {
+      clientName: "Ex Veterana",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-06-01",
+    });
+
+    await closePlan(db, plan.id, "2026-02-01");
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Ex Veterana",
+      clientSince: "2023-01-01",
+    });
+
+    const clients = await getClientsList(db, MOCK_TODAY);
+
+    // Inativa: client_since (Jan/2023) → end_date último plano (Fev/2026) = 37 meses
+    expect(clients[0].status).toBe("inativo");
+    expect(clients[0].permanencia).toBe(37);
   });
 });
 
