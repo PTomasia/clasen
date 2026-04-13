@@ -31,6 +31,7 @@ export interface ChangePlanData {
   planType: string;
   planValue: number;
   billingCycleDays: number | null;
+  billingCycleDays2: number | null;
   postsCarrossel: number;
   postsReels: number;
   postsEstatico: number;
@@ -58,6 +59,9 @@ export function ChangePlanDialog({
   const [planValue, setPlanValue] = useState(data.planValue.toString());
   const [billingCycleDays, setBillingCycleDays] = useState(
     data.billingCycleDays?.toString() ?? ""
+  );
+  const [billingCycleDays2, setBillingCycleDays2] = useState(
+    data.billingCycleDays2?.toString() ?? ""
   );
   const [postsCarrossel, setPostsCarrossel] = useState(data.postsCarrossel.toString());
   const [postsReels, setPostsReels] = useState(data.postsReels.toString());
@@ -87,6 +91,7 @@ export function ChangePlanDialog({
             planType,
             planValue: parseFloat(planValue),
             billingCycleDays: billingCycleDays ? parseInt(billingCycleDays) : undefined,
+            billingCycleDays2: billingCycleDays2 ? parseInt(billingCycleDays2) : undefined,
             postsCarrossel: parseInt(postsCarrossel) || 0,
             postsReels: parseInt(postsReels) || 0,
             postsEstatico: parseInt(postsEstatico) || 0,
@@ -124,7 +129,7 @@ export function ChangePlanDialog({
           )}
 
           {/* Tipo e Valor */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div className="space-y-1">
               <Label>Tipo</Label>
               <Select value={planType} onValueChange={(v) => v && setPlanType(v)}>
@@ -150,8 +155,21 @@ export function ChangePlanDialog({
               />
             </div>
             <div className="space-y-1">
-              <Label>Vencimento (dia)</Label>
+              <Label>Vencimento</Label>
               <Select value={billingCycleDays} onValueChange={(v) => v && setBillingCycleDays(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BILLING_CYCLES.map((c) => (
+                    <SelectItem key={c} value={c.toString()}>Dia {c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>2º venc.</Label>
+              <Select value={billingCycleDays2} onValueChange={(v) => v && setBillingCycleDays2(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="—" />
                 </SelectTrigger>

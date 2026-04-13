@@ -14,6 +14,7 @@ export interface CreatePlanInput {
   planType: string;
   planValue: number;
   billingCycleDays?: number;
+  billingCycleDays2?: number;
   postsCarrossel: number;
   postsReels: number;
   postsEstatico: number;
@@ -88,6 +89,7 @@ export async function createPlan(db: any, input: CreatePlanInput) {
       planType: input.planType,
       planValue: input.planValue,
       billingCycleDays: input.billingCycleDays ?? null,
+      billingCycleDays2: input.billingCycleDays2 ?? null,
       postsCarrossel: input.postsCarrossel,
       postsReels: input.postsReels,
       postsEstatico: input.postsEstatico,
@@ -147,14 +149,37 @@ export async function recordPayment(db: any, input: RecordPaymentInput) {
   let nextPaymentDate: string | null = null;
   if (plan.billingCycleDays) {
     const paymentDate = parseISO(input.paymentDate);
-    const nextMonth = addMonths(paymentDate, 1);
-    const dueDay = plan.billingCycleDays;
-    const maxDay = getDaysInMonth(nextMonth);
-    const actualDay = Math.min(dueDay, maxDay);
-    nextPaymentDate = format(
-      new Date(nextMonth.getFullYear(), nextMonth.getMonth(), actualDay),
-      "yyyy-MM-dd"
-    );
+    const payDay = paymentDate.getDate();
+    const due1 = plan.billingCycleDays;
+    const due2 = plan.billingCycleDays2;
+
+    let nextDate: Date;
+
+    if (due2) {
+      // Dois vencimentos: encontrar o próximo após a data de pagamento
+      const [earlier, later] = due1 < due2 ? [due1, due2] : [due2, due1];
+
+      if (payDay < later) {
+        // Próximo é o "later" do mesmo mês
+        const maxDay = getDaysInMonth(paymentDate);
+        const actualDay = Math.min(later, maxDay);
+        nextDate = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), actualDay);
+      } else {
+        // Próximo é o "earlier" do próximo mês
+        const nextMonth = addMonths(paymentDate, 1);
+        const maxDay = getDaysInMonth(nextMonth);
+        const actualDay = Math.min(earlier, maxDay);
+        nextDate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), actualDay);
+      }
+    } else {
+      // Um vencimento: dia X do próximo mês
+      const nextMonth = addMonths(paymentDate, 1);
+      const maxDay = getDaysInMonth(nextMonth);
+      const actualDay = Math.min(due1, maxDay);
+      nextDate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), actualDay);
+    }
+
+    nextPaymentDate = format(nextDate, "yyyy-MM-dd");
   }
 
   await db.update(schema.subscriptionPlans)
@@ -211,6 +236,7 @@ export interface UpdatePlanInput {
   planType: string;
   planValue: number;
   billingCycleDays?: number;
+  billingCycleDays2?: number;
   postsCarrossel: number;
   postsReels: number;
   postsEstatico: number;
@@ -236,6 +262,7 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
       planType: input.planType,
       planValue: input.planValue,
       billingCycleDays: input.billingCycleDays ?? null,
+      billingCycleDays2: input.billingCycleDays2 ?? null,
       postsCarrossel: input.postsCarrossel,
       postsReels: input.postsReels,
       postsEstatico: input.postsEstatico,
@@ -276,6 +303,7 @@ export async function changePlan(db: any, input: ChangePlanInput) {
     clientId: oldPlan.clientId,
     ...input.newPlan,
     billingCycleDays: input.newPlan.billingCycleDays ?? oldPlan.billingCycleDays ?? undefined,
+    billingCycleDays2: input.newPlan.billingCycleDays2 ?? oldPlan.billingCycleDays2 ?? undefined,
   };
 
   const result = await createPlan(db, newPlanInput);

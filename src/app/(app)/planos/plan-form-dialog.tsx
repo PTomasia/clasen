@@ -50,6 +50,7 @@ export function PlanFormDialog({
   const [planType, setPlanType] = useState("Personalizado");
   const [planValue, setPlanValue] = useState("");
   const [billingCycleDays, setBillingCycleDays] = useState("");
+  const [billingCycleDays2, setBillingCycleDays2] = useState("");
   const [postsCarrossel, setPostsCarrossel] = useState("0");
   const [postsReels, setPostsReels] = useState("0");
   const [postsEstatico, setPostsEstatico] = useState("0");
@@ -74,6 +75,7 @@ export function PlanFormDialog({
     setPlanType("Personalizado");
     setPlanValue("");
     setBillingCycleDays("");
+    setBillingCycleDays2("");
     setPostsCarrossel("0");
     setPostsReels("0");
     setPostsEstatico("0");
@@ -98,6 +100,9 @@ export function PlanFormDialog({
           planValue: parseFloat(planValue),
           billingCycleDays: billingCycleDays
             ? parseInt(billingCycleDays)
+            : undefined,
+          billingCycleDays2: billingCycleDays2
+            ? parseInt(billingCycleDays2)
             : undefined,
           postsCarrossel: parseInt(postsCarrossel) || 0,
           postsReels: parseInt(postsReels) || 0,
@@ -256,7 +261,7 @@ export function PlanFormDialog({
           </div>
 
           {/* Datas e ciclo */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Data início</Label>
               <Input
@@ -267,10 +272,28 @@ export function PlanFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Vencimento (dia)</Label>
+              <Label>Vencimento</Label>
               <Select
                 value={billingCycleDays}
                 onValueChange={(v) => v && setBillingCycleDays(v)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  {BILLING_CYCLES.map((c) => (
+                    <SelectItem key={c} value={c.toString()}>
+                      Dia {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>2º venc.</Label>
+              <Select
+                value={billingCycleDays2}
+                onValueChange={(v) => v && setBillingCycleDays2(v)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="—" />

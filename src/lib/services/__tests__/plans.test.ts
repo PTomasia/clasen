@@ -27,6 +27,7 @@ function createTestDb() {
       plan_type TEXT NOT NULL,
       plan_value REAL NOT NULL,
       billing_cycle_days INTEGER,
+      billing_cycle_days_2 INTEGER,
       posts_carrossel INTEGER NOT NULL DEFAULT 0,
       posts_reels INTEGER NOT NULL DEFAULT 0,
       posts_estatico INTEGER NOT NULL DEFAULT 0,
@@ -511,6 +512,111 @@ describe("recordPayment", () => {
 
     const planData = await getPlanById(db, plan.id);
     expect(planData!.planValue).toBe(500); // plano não mudou
+  });
+
+  it("com 2 vencimentos: após pagar antes do 1º, próximo é o 2º do mesmo mês", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dual Cycle A",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-09",
+      amount: 250,
+    });
+
+    // Pagou antes do dia 10 → próximo vencimento = dia 25 do mesmo mês
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.nextPaymentDate).toBe("2026-04-25");
+  });
+
+  it("com 2 vencimentos: após pagar entre os dois, próximo é o 2º do mesmo mês", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dual Cycle B",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-12",
+      amount: 250,
+    });
+
+    // Pagou após dia 10, antes do dia 25 → próximo = dia 25 do mesmo mês
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.nextPaymentDate).toBe("2026-04-25");
+  });
+
+  it("com 2 vencimentos: após pagar no/após o 2º, próximo é o 1º do próximo mês", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dual Cycle C",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-26",
+      amount: 250,
+    });
+
+    // Pagou após dia 25 → próximo = dia 10 do próximo mês
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.nextPaymentDate).toBe("2026-05-10");
+  });
+
+  it("com 2 vencimentos: sequência completa de pagamentos", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dual Full",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // 1ª parcela abril
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-10", amount: 250 });
+    let updated = await getPlanById(db, plan.id);
+    expect(updated!.nextPaymentDate).toBe("2026-04-25");
+
+    // 2ª parcela abril
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-25", amount: 250 });
+    updated = await getPlanById(db, plan.id);
+    expect(updated!.nextPaymentDate).toBe("2026-05-10");
+
+    // 1ª parcela maio
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-05-10", amount: 250 });
+    updated = await getPlanById(db, plan.id);
+    expect(updated!.nextPaymentDate).toBe("2026-05-25");
   });
 });
 

@@ -28,7 +28,8 @@ export const subscriptionPlans = sqliteTable("subscription_plans", {
   // Tipo e valor
   planType: text("plan_type").notNull(), // Essential, Personalizado, Tráfego, Site
   planValue: real("plan_value").notNull(),
-  billingCycleDays: integer("billing_cycle_days"), // 5, 10, 15, 20, 30
+  billingCycleDays: integer("billing_cycle_days"), // dia de vencimento: 5, 10, 15, 20, 30
+  billingCycleDays2: integer("billing_cycle_days_2"), // segundo vencimento (clientes que pagam 2x/mês)
 
   // Composição de posts
   postsCarrossel: integer("posts_carrossel").notNull().default(0),

@@ -50,6 +50,7 @@ interface Plan {
   planType: string;
   planValue: number;
   billingCycleDays: number | null;
+  billingCycleDays2: number | null;
   postsCarrossel: number;
   postsReels: number;
   postsEstatico: number;
@@ -364,6 +365,7 @@ export function PlanosClient({
                             planType: plan.planType,
                             planValue: plan.planValue,
                             billingCycleDays: plan.billingCycleDays,
+                            billingCycleDays2: plan.billingCycleDays2,
                             postsCarrossel: plan.postsCarrossel,
                             postsReels: plan.postsReels,
                             postsEstatico: plan.postsEstatico,
@@ -388,6 +390,7 @@ export function PlanosClient({
                                   planType: plan.planType,
                                   planValue: plan.planValue,
                                   billingCycleDays: plan.billingCycleDays,
+                            billingCycleDays2: plan.billingCycleDays2,
                                   postsCarrossel: plan.postsCarrossel,
                                   postsReels: plan.postsReels,
                                   postsEstatico: plan.postsEstatico,
@@ -411,6 +414,7 @@ export function PlanosClient({
                                   planType: plan.planType,
                                   planValue: plan.planValue,
                                   billingCycleDays: plan.billingCycleDays,
+                            billingCycleDays2: plan.billingCycleDays2,
                                   postsCarrossel: plan.postsCarrossel,
                                   postsReels: plan.postsReels,
                                   postsEstatico: plan.postsEstatico,
