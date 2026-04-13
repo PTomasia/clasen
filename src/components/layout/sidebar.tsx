@@ -24,7 +24,7 @@ const navigation = [
   { name: "Despesas", href: "/despesas", icon: Receipt, sprint: 5 },
 ];
 
-const CURRENT_SPRINT = 1;
+const CURRENT_SPRINT = 2;
 
 export function Sidebar() {
   const pathname = usePathname();
