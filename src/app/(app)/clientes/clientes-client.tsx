@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
+import { updateClientAction } from "@/lib/actions/plans";
 import {
   Table,
   TableBody,
@@ -29,19 +30,7 @@ import {
 import { formatBRL } from "@/lib/utils/formatting";
 import { ClientDetailDialog } from "./client-detail-dialog";
 import { EditClientQuickDialog, type EditClientQuickData } from "./edit-client-quick-dialog";
-
-interface ClientRow {
-  id: number;
-  name: string;
-  contactOrigin: string | null;
-  clientSince: string | null;
-  notes: string | null;
-  status: "ativo" | "inativo";
-  permanencia: number;
-  planosAtivos: number;
-  valorMensal: number;
-  custoPostMedio: number | null;
-}
+import type { ClientRow } from "@/lib/services/clients";
 
 type SortKey = "name" | "permanencia" | "planosAtivos" | "valorMensal" | "custoPostMedio" | "status" | "contactOrigin";
 type SortDirection = "asc" | "desc" | null;
@@ -56,6 +45,29 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
   const [sortDir, setSortDir] = useState<SortDirection>(null);
   const [detailClientId, setDetailClientId] = useState<{ id: number; name: string } | null>(null);
   const [editData, setEditData] = useState<EditClientQuickData | null>(null);
+  const [updatingOriginId, setUpdatingOriginId] = useState<number | null>(null);
+  const [, startOriginTransition] = useTransition();
+
+  function handleOriginChange(client: ClientRow, newOriginRaw: string | null) {
+    const newOrigin = newOriginRaw ?? "";
+    if (newOrigin === (client.contactOrigin ?? "")) return;
+    setUpdatingOriginId(client.id);
+    startOriginTransition(async () => {
+      try {
+        await updateClientAction({
+          clientId: client.id,
+          name: client.name,
+          contactOrigin: newOrigin || undefined,
+          clientSince: client.clientSince ?? undefined,
+          birthday: client.birthday ?? undefined,
+          whatsapp: client.whatsapp ?? undefined,
+          notes: client.notes ?? undefined,
+        });
+      } finally {
+        setUpdatingOriginId(null);
+      }
+    });
+  }
 
   function handleSort(key: SortKey) {
     if (sortKey !== key) {
@@ -274,8 +286,23 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                       {client.name}
                     </button>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {client.contactOrigin || "—"}
+                  <TableCell className="text-sm">
+                    <Select
+                      value={client.contactOrigin ?? ""}
+                      onValueChange={(v) => handleOriginChange(client, v)}
+                      disabled={updatingOriginId === client.id}
+                    >
+                      <SelectTrigger
+                        className="h-7 w-[130px] border-transparent bg-transparent text-sm text-muted-foreground hover:border-input hover:bg-background focus:border-input data-[state=open]:border-input"
+                      >
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ORIGINS.map((o) => (
+                          <SelectItem key={o} value={o}>{o}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   <TableCell>
                     <Badge variant={client.status === "ativo" ? "default" : "secondary"}>
@@ -303,6 +330,8 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                         name: client.name,
                         contactOrigin: client.contactOrigin,
                         clientSince: client.clientSince,
+                        birthday: client.birthday,
+                        whatsapp: client.whatsapp,
                         notes: client.notes,
                       })}
                       title="Editar cliente"

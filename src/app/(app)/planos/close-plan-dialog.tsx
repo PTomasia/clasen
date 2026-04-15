@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { closePlanAction } from "@/lib/actions/plans";
+import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 
 interface Plan {
   id: number;
@@ -26,18 +27,21 @@ export function ClosePlanDialog({
   onClose: () => void;
   plan: Plan;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const { isPending, error, run } = useDialogAction(onClose);
   const [endDate, setEndDate] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [prorataAmount, setProrataAmount] = useState<string>("");
+  const [notes, setNotes] = useState<string>("");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
-    startTransition(async () => {
-      await closePlanAction(plan.id, endDate);
-      onClose();
-    });
+    const parsed = prorataAmount.trim() === "" ? undefined : Number(prorataAmount);
+    const options =
+      parsed !== undefined && !Number.isNaN(parsed) && parsed > 0
+        ? { prorataAmount: parsed, notes: notes.trim() || undefined }
+        : {};
+    run(() => closePlanAction(plan.id, endDate, options));
   }
 
   return (
@@ -51,6 +55,12 @@ export function ClosePlanDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">
+              {error}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Data de encerramento</Label>
             <Input
@@ -60,6 +70,39 @@ export function ClosePlanDialog({
               required
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>
+              Valor proporcional a cobrar (R$){" "}
+              <span className="text-muted-foreground font-normal">
+                — opcional
+              </span>
+            </Label>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="0,00"
+              value={prorataAmount}
+              onChange={(e) => setProrataAmount(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Se houver posts já produzidos neste ciclo, informe o valor proporcional.
+              Será gerado um pagamento pendente.
+            </p>
+          </div>
+
+          {prorataAmount.trim() !== "" && (
+            <div className="space-y-2">
+              <Label>Observação</Label>
+              <Input
+                type="text"
+                placeholder="Ex: 3 posts entregues"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>

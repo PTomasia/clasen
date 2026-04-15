@@ -1,4 +1,4 @@
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { addMonths, format, parseISO, getDaysInMonth } from "date-fns";
 import * as schema from "../db/schema";
 import { calcularCustoPost, calcularPermanencia } from "../utils/calculations";
@@ -66,19 +66,49 @@ export async function createPlan(db: any, input: CreatePlanInput) {
     if (!existing) throw new Error("cliente não encontrado");
     client = existing;
   } else if (input.clientName) {
-    const inserted = await db
-      .insert(schema.clients)
-      .values({
-        name: input.clientName,
-        contactOrigin: input.contactOrigin ?? null,
-      })
-      .returning()
+    // Match case-insensitive + trim para evitar duplicatas
+    const normalized = input.clientName.trim();
+    if (!normalized) throw new Error("nome do cliente é obrigatório");
+
+    const existing = await db
+      .select()
+      .from(schema.clients)
+      .where(sql`lower(trim(${schema.clients.name})) = ${normalized.toLowerCase()}`)
       .get();
 
-    client = inserted;
-    clientId = inserted.id;
+    if (existing) {
+      client = existing;
+      clientId = existing.id;
+    } else {
+      const inserted = await db
+        .insert(schema.clients)
+        .values({
+          name: normalized,
+          contactOrigin: input.contactOrigin ?? null,
+        })
+        .returning()
+        .get();
+
+      client = inserted;
+      clientId = inserted.id;
+    }
   } else {
     throw new Error("clientId ou clientName é obrigatório");
+  }
+
+  // Calcular próximo vencimento (primeiro pagamento sempre no próximo mês)
+  let nextPaymentDate: string | null = null;
+  if (input.billingCycleDays) {
+    const startDate = parseISO(input.startDate);
+    const nextMonth = addMonths(startDate, 1);
+    const maxDay = getDaysInMonth(nextMonth);
+    const actualDay = Math.min(input.billingCycleDays, maxDay);
+    const dueDate = new Date(
+      nextMonth.getFullYear(),
+      nextMonth.getMonth(),
+      actualDay
+    );
+    nextPaymentDate = format(dueDate, "yyyy-MM-dd");
   }
 
   // Criar plano
@@ -96,6 +126,7 @@ export async function createPlan(db: any, input: CreatePlanInput) {
       postsTrafego: input.postsTrafego,
       startDate: input.startDate,
       movementType: input.movementType ?? null,
+      nextPaymentDate,
       status: "ativo",
       notes: input.notes ?? null,
     })
@@ -107,7 +138,29 @@ export async function createPlan(db: any, input: CreatePlanInput) {
 
 // ─── closePlan ─────────────────────────────────────────────────────────────────
 
-export async function closePlan(db: any, planId: number, endDate: string) {
+export interface ClosePlanOptions {
+  prorataAmount?: number;
+  notes?: string;
+}
+
+export async function closePlan(
+  db: any,
+  planId: number,
+  endDate: string,
+  options: ClosePlanOptions = {}
+) {
+  if (options.prorataAmount !== undefined && options.prorataAmount <= 0) {
+    throw new Error("valor proporcional deve ser maior que zero");
+  }
+
+  const plan = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+
+  if (!plan) throw new Error("plano não encontrado");
+
   await db.update(schema.subscriptionPlans)
     .set({
       endDate,
@@ -116,6 +169,17 @@ export async function closePlan(db: any, planId: number, endDate: string) {
     })
     .where(eq(schema.subscriptionPlans.id, planId))
     .run();
+
+  if (options.prorataAmount !== undefined) {
+    await db.insert(schema.planPayments).values({
+      planId,
+      clientId: plan.clientId,
+      paymentDate: endDate,
+      amount: options.prorataAmount,
+      status: "pendente",
+      notes: options.notes ?? "Cobrança proporcional ao cancelamento",
+    }).run();
+  }
 }
 
 // ─── recordPayment ─────────────────────────────────────────────────────────────
@@ -201,6 +265,8 @@ export interface UpdateClientInput {
   name: string;
   contactOrigin?: string;
   clientSince?: string;
+  birthday?: string;
+  whatsapp?: string;
   notes?: string;
 }
 
@@ -222,6 +288,8 @@ export async function updateClient(db: any, input: UpdateClientInput) {
       name: input.name.trim(),
       contactOrigin: input.contactOrigin?.trim() || null,
       clientSince: input.clientSince?.trim() || null,
+      birthday: input.birthday?.trim() || null,
+      whatsapp: input.whatsapp?.trim() || null,
       notes: input.notes?.trim() || null,
       updatedAt: new Date().toISOString(),
     })
@@ -333,6 +401,19 @@ export async function deletePlan(db: any, planId: number) {
     .where(eq(schema.subscriptionPlans.id, planId))
     .run();
 
+  // Se esse era o último plano do cliente, excluir o cliente também
+  const remaining = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.clientId, plan.clientId))
+    .all();
+
+  if (remaining.length === 0) {
+    await db.delete(schema.clients)
+      .where(eq(schema.clients.id, plan.clientId))
+      .run();
+  }
+
   return plan;
 }
 
@@ -372,14 +453,75 @@ export async function getPaymentHistory(db: any, planId: number) {
   // Ordenar por data decrescente (mais recente primeiro)
   payments.sort((a: any, b: any) => b.paymentDate.localeCompare(a.paymentDate));
 
+  const gaps = await getPaymentGaps(db, planId);
+
   return {
     planId: plan.id,
     planType: plan.planType,
     planValue: plan.planValue,
     billingCycleDays: plan.billingCycleDays,
     startDate: plan.startDate,
+    nextPaymentDate: plan.nextPaymentDate as string | null,
     payments,
+    gaps,
   };
+}
+
+// ─── getPaymentGaps ───────────────────────────────────────────────────────────
+// Retorna as datas de vencimento (YYYY-MM-DD) esperadas que NÃO foram pagas,
+// do startDate até o referenceDate (ou endDate, o que for menor).
+// Um mês "espera pagamento" se o vencimento desse mês já passou em referenceDate.
+
+export async function getPaymentGaps(
+  db: any,
+  planId: number,
+  referenceDate: string = format(new Date(), "yyyy-MM-dd")
+): Promise<string[]> {
+  const plan = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+
+  if (!plan) throw new Error("plano não encontrado");
+  if (!plan.billingCycleDays) return [];
+
+  const payments = await db
+    .select()
+    .from(schema.planPayments)
+    .where(eq(schema.planPayments.planId, planId))
+    .all();
+
+  const paidMonthKeys = new Set(
+    payments.map((p: { paymentDate: string }) => p.paymentDate.slice(0, 7))
+  );
+
+  const start = parseISO(plan.startDate);
+  const ref = parseISO(referenceDate);
+  const effectiveEnd = plan.endDate && plan.endDate < referenceDate
+    ? parseISO(plan.endDate)
+    : ref;
+
+  const gaps: string[] = [];
+  // Primeiro vencimento: próximo mês após startDate
+  let cursor = addMonths(start, 1);
+
+  while (cursor <= effectiveEnd) {
+    const maxDay = getDaysInMonth(cursor);
+    const dueDay = Math.min(plan.billingCycleDays, maxDay);
+    const dueDate = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay);
+
+    // Só considera gap se o vencimento já passou em relação ao referenceDate
+    if (dueDate <= effectiveEnd) {
+      const monthKey = format(cursor, "yyyy-MM");
+      if (!paidMonthKeys.has(monthKey)) {
+        gaps.push(format(dueDate, "yyyy-MM-dd"));
+      }
+    }
+    cursor = addMonths(cursor, 1);
+  }
+
+  return gaps;
 }
 
 export async function getActivePlans(db: any) {

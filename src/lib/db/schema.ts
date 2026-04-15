@@ -9,6 +9,8 @@ export const clients = sqliteTable("clients", {
   name: text("name").notNull(),
   contactOrigin: text("contact_origin"), // Instagram, Indicação, Google, etc.
   clientSince: text("client_since"), // ISO date override: se preenchido, usa para permanência
+  birthday: text("birthday"), // ISO date (MM-DD ou YYYY-MM-DD) - aniversário
+  whatsapp: text("whatsapp"), // número de WhatsApp
   notes: text("notes"),
   createdAt: text("created_at")
     .notNull()

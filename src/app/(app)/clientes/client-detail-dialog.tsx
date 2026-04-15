@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,8 @@ interface ClientDetail {
   id: number;
   name: string;
   contactOrigin: string | null;
+  birthday: string | null;
+  whatsapp: string | null;
   notes: string | null;
   status: "ativo" | "inativo";
   permanencia: number;
@@ -54,23 +57,18 @@ export function ClientDetailDialog({
   clientId: number;
   clientName: string;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const { isPending, error, run } = useDialogAction();
   const [data, setData] = useState<ClientDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && clientId) {
       setData(null);
-      setError(null);
-      startTransition(async () => {
-        try {
-          const result = await getClientDetailAction(clientId);
-          setData(result);
-        } catch (err: any) {
-          setError(err.message);
-        }
+      run(async () => {
+        const result = await getClientDetailAction(clientId);
+        setData(result);
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, clientId]);
 
   return (
@@ -105,6 +103,17 @@ export function ClientDetailDialog({
                 </span>
               )}
             </div>
+
+            {(data.whatsapp || data.birthday) && (
+              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                {data.whatsapp && (
+                  <span>WhatsApp: <span className="text-foreground font-mono">{data.whatsapp}</span></span>
+                )}
+                {data.birthday && (
+                  <span>Aniversário: <span className="text-foreground">{formatDate(data.birthday)}</span></span>
+                )}
+              </div>
+            )}
 
             {data.notes && (
               <p className="text-sm text-muted-foreground bg-muted p-2 rounded">

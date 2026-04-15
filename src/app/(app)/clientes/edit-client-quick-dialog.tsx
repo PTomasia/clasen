@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,8 @@ export interface EditClientQuickData {
   name: string;
   contactOrigin: string | null;
   clientSince: string | null;
+  birthday: string | null;
+  whatsapp: string | null;
   notes: string | null;
 }
 
@@ -39,32 +42,28 @@ export function EditClientQuickDialog({
   onClose: () => void;
   data: EditClientQuickData;
 }) {
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { isPending, error, run } = useDialogAction(onClose);
 
   const [name, setName] = useState(data.name);
   const [contactOrigin, setContactOrigin] = useState(data.contactOrigin ?? "");
   const [clientSince, setClientSince] = useState(data.clientSince ?? "");
+  const [birthday, setBirthday] = useState(data.birthday ?? "");
+  const [whatsapp, setWhatsapp] = useState(data.whatsapp ?? "");
   const [notes, setNotes] = useState(data.notes ?? "");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-
-    startTransition(async () => {
-      try {
-        await updateClientAction({
-          clientId: data.clientId,
-          name,
-          contactOrigin: contactOrigin || undefined,
-          clientSince: clientSince || undefined,
-          notes: notes || undefined,
-        });
-        onClose();
-      } catch (err: any) {
-        setError(err.message);
-      }
-    });
+    run(() =>
+      updateClientAction({
+        clientId: data.clientId,
+        name,
+        contactOrigin: contactOrigin || undefined,
+        clientSince: clientSince || undefined,
+        birthday: birthday || undefined,
+        whatsapp: whatsapp || undefined,
+        notes: notes || undefined,
+      })
+    );
   }
 
   return (
@@ -111,6 +110,27 @@ export function EditClientQuickDialog({
             <p className="text-xs text-muted-foreground">
               Preencha se a cliente é mais antiga que o primeiro plano registrado
             </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Aniversário</Label>
+              <Input
+                type="date"
+                value={birthday}
+                onChange={(e) => setBirthday(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>WhatsApp</Label>
+              <Input
+                type="tel"
+                value={whatsapp}
+                onChange={(e) => setWhatsapp(e.target.value)}
+                placeholder="(11) 98888-7777"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">

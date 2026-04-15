@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { sortPlans, filterPlans, type SortKey, type SortDirection } from "../table-helpers";
 import type { StatusPagamento } from "../calculations";
 

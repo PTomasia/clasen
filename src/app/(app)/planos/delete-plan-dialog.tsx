@@ -1,6 +1,5 @@
 "use client";
 
-import { useTransition } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { deletePlanAction } from "@/lib/actions/plans";
+import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 
 interface DeletePlanDialogProps {
   open: boolean;
@@ -17,13 +17,10 @@ interface DeletePlanDialogProps {
 }
 
 export function DeletePlanDialog({ open, onClose, plan }: DeletePlanDialogProps) {
-  const [isPending, startTransition] = useTransition();
+  const { isPending, error, run } = useDialogAction(onClose);
 
   function handleDelete() {
-    startTransition(async () => {
-      await deletePlanAction(plan.id);
-      onClose();
-    });
+    run(() => deletePlanAction(plan.id));
   }
 
   return (
@@ -32,6 +29,12 @@ export function DeletePlanDialog({ open, onClose, plan }: DeletePlanDialogProps)
         <DialogHeader>
           <DialogTitle>Excluir registro</DialogTitle>
         </DialogHeader>
+
+        {error && (
+          <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg">
+            {error}
+          </div>
+        )}
 
         <p className="text-sm text-muted-foreground">
           Tem certeza que deseja excluir o plano{" "}

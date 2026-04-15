@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +30,6 @@ interface Client {
 
 const PLAN_TYPES = ["Personalizado", "Essential", "Tráfego", "Site"];
 const MOVEMENT_TYPES = ["New", "Upgrade", "Downgrade"];
-const BILLING_CYCLES = [5, 10, 15, 20, 30];
 
 export function PlanFormDialog({
   open,
@@ -40,8 +40,10 @@ export function PlanFormDialog({
   onClose: () => void;
   clients: Client[];
 }) {
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { isPending, error, run, resetError } = useDialogAction(() => {
+    resetForm();
+    onClose();
+  });
 
   // Form state
   const [clientMode, setClientMode] = useState<"existing" | "new">("new");
@@ -83,41 +85,29 @@ export function PlanFormDialog({
     setStartDate("");
     setMovementType("New");
     setNotes("");
-    setError(null);
+    resetError();
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-
-    startTransition(async () => {
-      try {
-        await createPlanAction({
-          ...(clientMode === "existing"
-            ? { clientId: parseInt(clientId) }
-            : { clientName }),
-          planType,
-          planValue: parseFloat(planValue),
-          billingCycleDays: billingCycleDays
-            ? parseInt(billingCycleDays)
-            : undefined,
-          billingCycleDays2: billingCycleDays2
-            ? parseInt(billingCycleDays2)
-            : undefined,
-          postsCarrossel: parseInt(postsCarrossel) || 0,
-          postsReels: parseInt(postsReels) || 0,
-          postsEstatico: parseInt(postsEstatico) || 0,
-          postsTrafego: parseInt(postsTrafego) || 0,
-          startDate,
-          movementType,
-          notes: notes || undefined,
-        });
-        resetForm();
-        onClose();
-      } catch (err: any) {
-        setError(err.message);
-      }
-    });
+    run(() =>
+      createPlanAction({
+        ...(clientMode === "existing"
+          ? { clientId: parseInt(clientId) }
+          : { clientName }),
+        planType,
+        planValue: parseFloat(planValue),
+        billingCycleDays: billingCycleDays ? parseInt(billingCycleDays) : undefined,
+        billingCycleDays2: billingCycleDays2 ? parseInt(billingCycleDays2) : undefined,
+        postsCarrossel: parseInt(postsCarrossel) || 0,
+        postsReels: parseInt(postsReels) || 0,
+        postsEstatico: parseInt(postsEstatico) || 0,
+        postsTrafego: parseInt(postsTrafego) || 0,
+        startDate,
+        movementType,
+        notes: notes || undefined,
+      })
+    );
   }
 
   return (
@@ -272,40 +262,26 @@ export function PlanFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Vencimento</Label>
-              <Select
+              <Label>Vencimento (dia)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="31"
+                placeholder="—"
                 value={billingCycleDays}
-                onValueChange={(v) => v && setBillingCycleDays(v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  {BILLING_CYCLES.map((c) => (
-                    <SelectItem key={c} value={c.toString()}>
-                      Dia {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(e) => setBillingCycleDays(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
-              <Label>2º venc.</Label>
-              <Select
+              <Label>2º venc. (dia)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="31"
+                placeholder="—"
                 value={billingCycleDays2}
-                onValueChange={(v) => v && setBillingCycleDays2(v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="—" />
-                </SelectTrigger>
-                <SelectContent>
-                  {BILLING_CYCLES.map((c) => (
-                    <SelectItem key={c} value={c.toString()}>
-                      Dia {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(e) => setBillingCycleDays2(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Movimentação</Label>

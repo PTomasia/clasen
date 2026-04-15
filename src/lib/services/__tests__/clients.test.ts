@@ -25,6 +25,8 @@ function createTestDb() {
       name TEXT NOT NULL,
       contact_origin TEXT,
       client_since TEXT,
+      birthday TEXT,
+      whatsapp TEXT,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))

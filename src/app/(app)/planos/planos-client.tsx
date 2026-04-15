@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -65,6 +65,7 @@ interface Plan {
   custoPost: number | null;
   permanencia: number;
   statusPagamento: StatusPagamento;
+  gapsCount: number;
 }
 
 interface Client {
@@ -158,12 +159,35 @@ export function PlanosClient({
   const [editData, setEditData] = useState<EditDialogData | null>(null);
   const [changeData, setChangeData] = useState<{ data: ChangePlanData; type: "Upgrade" | "Downgrade" } | null>(null);
   const [historyPlan, setHistoryPlan] = useState<{ planId: number; clientName: string } | null>(null);
+  const [focusedPlanId, setFocusedPlanId] = useState<number | null>(null);
 
   // Derive unique plan types from data
   const planTypes = useMemo(
     () => [...new Set(plans.map((p) => p.planType))].sort(),
     [plans]
   );
+
+  // Atalho "P": registrar pagamento do plano focado (se ativo)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Ignorar se digitando em input/textarea/contenteditable
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) return;
+      }
+      if ((e.key === "p" || e.key === "P") && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (focusedPlanId == null) return;
+        const plan = plans.find((p) => p.id === focusedPlanId);
+        if (plan && plan.status === "ativo") {
+          e.preventDefault();
+          setPaymentPlanId(focusedPlanId);
+        }
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusedPlanId, plans]);
 
   // Pipeline: status filter → custom filters → sort
   const processedPlans = useMemo(() => {
@@ -226,10 +250,15 @@ export function PlanosClient({
               </Button>
             ))}
           </div>
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <Plus size={16} className="mr-2" />
-            Novo plano
-          </Button>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground hidden lg:inline">
+              Dica: selecione uma linha e pressione <kbd className="px-1.5 py-0.5 border rounded text-[10px] font-mono">P</kbd> para registrar pagamento
+            </span>
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus size={16} className="mr-2" />
+              Novo plano
+            </Button>
+          </div>
         </div>
 
         {/* Search + filters row */}
@@ -304,7 +333,14 @@ export function PlanosClient({
               </TableRow>
             ) : (
               processedPlans.map((plan) => (
-                <TableRow key={plan.id}>
+                <TableRow
+                  key={plan.id}
+                  tabIndex={0}
+                  onFocus={() => setFocusedPlanId(plan.id)}
+                  onClick={() => setFocusedPlanId(plan.id)}
+                  data-focused={focusedPlanId === plan.id || undefined}
+                  className="outline-none data-[focused]:bg-primary/5 data-[focused]:ring-1 data-[focused]:ring-primary/30"
+                >
                   <TableCell className="font-medium">
                     <button
                       className="hover:underline hover:text-primary transition-colors text-left"
@@ -345,7 +381,18 @@ export function PlanosClient({
                     {plan.permanencia}m
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={plan.statusPagamento} />
+                    <div className="flex items-center gap-1">
+                      <StatusBadge status={plan.statusPagamento} />
+                      {plan.gapsCount > 0 && (
+                        <Badge
+                          variant="outline"
+                          className="border-destructive/40 bg-destructive/10 text-destructive text-xs"
+                          title={`${plan.gapsCount} ${plan.gapsCount === 1 ? "mês" : "meses"} em aberto`}
+                        >
+                          +{plan.gapsCount}
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <PlanStatusBadge status={plan.status} />
@@ -428,12 +475,14 @@ export function PlanosClient({
                             <TrendingDown size={14} />
                           </Button>
                           <Button
-                            variant="ghost"
+                            variant="default"
                             size="sm"
                             onClick={() => setPaymentPlanId(plan.id)}
-                            title="Registrar pagamento"
+                            title="Registrar pagamento (atalho: P)"
+                            className="h-8 gap-1"
                           >
                             <CreditCard size={14} />
+                            <span className="text-xs font-medium">Pagar</span>
                           </Button>
                           <Button
                             variant="ghost"

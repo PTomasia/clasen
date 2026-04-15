@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 import {
   Dialog,
   DialogContent,
@@ -35,8 +36,7 @@ export function PaymentDialog({
   onClose: () => void;
   plan: Plan;
 }) {
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { isPending, error, run } = useDialogAction(onClose);
   const [paymentDate, setPaymentDate] = useState(
     new Date().toISOString().split("T")[0]
   );
@@ -45,21 +45,14 @@ export function PaymentDialog({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-
-    startTransition(async () => {
-      try {
-        await recordPaymentAction({
-          planId: plan.id,
-          paymentDate,
-          amount: parseFloat(amount),
-          status,
-        });
-        onClose();
-      } catch (err: any) {
-        setError(err.message);
-      }
-    });
+    run(() =>
+      recordPaymentAction({
+        planId: plan.id,
+        paymentDate,
+        amount: parseFloat(amount),
+        status,
+      })
+    );
   }
 
   return (

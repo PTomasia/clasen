@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,7 @@ interface PaymentHistoryData {
   planValue: number;
   billingCycleDays: number | null;
   startDate: string;
+  nextPaymentDate: string | null;
   payments: {
     id: number;
     paymentDate: string;
@@ -32,6 +34,7 @@ interface PaymentHistoryData {
     status: string;
     notes: string | null;
   }[];
+  gaps: string[];
 }
 
 function formatDate(iso: string) {
@@ -60,23 +63,18 @@ export function PaymentHistoryDialog({
   planId: number;
   clientName: string;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const { isPending, error, run } = useDialogAction();
   const [data, setData] = useState<PaymentHistoryData | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && planId) {
       setData(null);
-      setError(null);
-      startTransition(async () => {
-        try {
-          const result = await getPaymentHistoryAction(planId);
-          setData(result);
-        } catch (err: any) {
-          setError(err.message);
-        }
+      run(async () => {
+        const result = await getPaymentHistoryAction(planId);
+        setData(result);
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, planId]);
 
   return (
@@ -107,6 +105,33 @@ export function PaymentHistoryDialog({
                 <span>Vence dia {data.billingCycleDays}</span>
               )}
             </div>
+
+            {data.nextPaymentDate && (
+              <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg p-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Próximo pagamento</p>
+                  <p className="text-sm font-semibold">
+                    {formatDate(data.nextPaymentDate)}
+                  </p>
+                </div>
+                <p className="text-base font-mono font-semibold text-primary">
+                  {formatBRL(data.planValue)}
+                </p>
+              </div>
+            )}
+
+            {data.gaps.length > 0 && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 space-y-1">
+                <p className="text-sm font-semibold text-destructive">
+                  {data.gaps.length === 1
+                    ? "1 mês em aberto"
+                    : `${data.gaps.length} meses em aberto`}
+                </p>
+                <p className="text-xs text-destructive/80">
+                  {data.gaps.map((d) => formatDate(d)).join(", ")}
+                </p>
+              </div>
+            )}
 
             {data.payments.length === 0 ? (
               <p className="text-sm text-muted-foreground py-6 text-center">

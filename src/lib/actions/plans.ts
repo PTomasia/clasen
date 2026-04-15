@@ -12,7 +12,7 @@ import {
   changePlan as changePlanService,
   getPaymentHistory as getPaymentHistoryService,
 } from "../services/plans";
-import type { CreatePlanInput, RecordPaymentInput, UpdateClientInput, UpdatePlanInput, ChangePlanInput } from "../services/plans";
+import type { CreatePlanInput, RecordPaymentInput, UpdateClientInput, UpdatePlanInput, ChangePlanInput, ClosePlanOptions } from "../services/plans";
 
 // ─── Server Actions — finos, só validam e chamam service ───────────────────────
 
@@ -23,8 +23,12 @@ export async function createPlanAction(input: CreatePlanInput) {
   return { planId: result.plan.id, clientId: result.client.id };
 }
 
-export async function closePlanAction(planId: number, endDate: string) {
-  await closePlanService(db as any, planId, endDate);
+export async function closePlanAction(
+  planId: number,
+  endDate: string,
+  options: ClosePlanOptions = {}
+) {
+  await closePlanService(db as any, planId, endDate, options);
   revalidatePath("/planos");
   revalidatePath("/clientes");
   revalidatePath("/dashboard");

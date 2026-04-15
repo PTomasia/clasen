@@ -17,6 +17,8 @@ function createTestDb() {
       name TEXT NOT NULL,
       contact_origin TEXT,
       client_since TEXT,
+      birthday TEXT,
+      whatsapp TEXT,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -70,6 +72,7 @@ import {
   getPlanById,
   getPaymentsByPlan,
   getPaymentHistory,
+  getPaymentGaps,
   updateClient,
   updatePlan,
   deletePlan,
@@ -232,6 +235,58 @@ describe("createPlan", () => {
     expect(saved!.contactOrigin).toBe("Instagram");
   });
 
+  it("define next_payment_date no próximo mês quando billingCycleDays é informado", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ana Nova",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-15",
+      movementType: "New",
+    });
+
+    // startDate 15/04, venc dia 10 → primeiro pagamento 10/05 (próximo mês)
+    expect(plan.nextPaymentDate).toBe("2026-05-10");
+    expect(plan.lastPaymentDate).toBeNull();
+  });
+
+  it("define next_payment_date ajustando para último dia em mês curto", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ana Fim",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 31,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-15", // próximo mês: fev tem 28 dias em 2026
+      movementType: "New",
+    });
+
+    expect(plan.nextPaymentDate).toBe("2026-02-28");
+  });
+
+  it("não define next_payment_date quando billingCycleDays é null", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Sem Ciclo",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-15",
+      movementType: "New",
+    });
+
+    expect(plan.nextPaymentDate).toBeNull();
+  });
+
   it("permite plano Tráfego sem posts de conteúdo", async () => {
     const result = await createPlan(db, {
       clientName: "Test Traffic",
@@ -248,6 +303,73 @@ describe("createPlan", () => {
     expect(result.plan.id).toBeDefined();
     expect(result.plan.planType).toBe("Tráfego");
   });
+
+  it("reutiliza cliente existente quando clientName bate (case-insensitive + trim)", async () => {
+    const first = await createPlan(db, {
+      clientName: "Fernanda Muniz",
+      planType: "Personalizado",
+      planValue: 1005,
+      postsCarrossel: 4,
+      postsReels: 2,
+      postsEstatico: 4,
+      postsTrafego: 0,
+      startDate: "2026-02-01",
+    });
+
+    // Mesmo nome com caixa diferente e espaços extras
+    const second = await createPlan(db, {
+      clientName: "  fernanda MUNIZ ",
+      planType: "Tráfego",
+      planValue: 400,
+      postsCarrossel: 0,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 1,
+      startDate: "2026-04-01",
+      movementType: "New",
+    });
+
+    // NÃO criou novo cliente
+    const allClients = db.select().from(schema.clients).all();
+    expect(allClients).toHaveLength(1);
+    expect(second.client.id).toBe(first.client.id);
+
+    // Cliente tem 2 planos agora
+    const plans = db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.clientId, first.client.id))
+      .all();
+    expect(plans).toHaveLength(2);
+  });
+
+  it("não confunde nomes diferentes com substring em comum", async () => {
+    await createPlan(db, {
+      clientName: "Ana",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const result = await createPlan(db, {
+      clientName: "Ana Silva",
+      planType: "Personalizado",
+      planValue: 600,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const allClients = db.select().from(schema.clients).all();
+    expect(allClients).toHaveLength(2);
+    expect(result.client.name).toBe("Ana Silva");
+  });
 });
 
 describe("closePlan", () => {
@@ -255,6 +377,75 @@ describe("closePlan", () => {
 
   beforeEach(() => {
     db = createTestDb();
+  });
+
+  it("aceita prorataAmount e gera plan_payment pendente", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Prop Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-02-10",
+    });
+
+    await closePlan(db, plan.id, "2026-04-20", {
+      prorataAmount: 180,
+      notes: "3 de 4 posts entregues",
+    });
+
+    const payments = await getPaymentsByPlan(db, plan.id);
+    const prorata = payments.find((p: any) => p.status === "pendente");
+    expect(prorata).toBeDefined();
+    expect(prorata!.amount).toBe(180);
+    expect(prorata!.paymentDate).toBe("2026-04-20");
+    expect(prorata!.notes).toBe("3 de 4 posts entregues");
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.endDate).toBe("2026-04-20");
+    expect(updated!.status).toBe("cancelado");
+  });
+
+  it("não gera plan_payment quando prorataAmount não é informado", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Sem Prop",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await closePlan(db, plan.id, "2026-04-20");
+
+    const payments = await getPaymentsByPlan(db, plan.id);
+    expect(payments).toEqual([]);
+  });
+
+  it("rejeita prorataAmount negativo ou zero", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Invalido",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await expect(
+      closePlan(db, plan.id, "2026-04-20", { prorataAmount: 0 })
+    ).rejects.toThrow("valor proporcional deve ser maior que zero");
+
+    await expect(
+      closePlan(db, plan.id, "2026-04-20", { prorataAmount: -50 })
+    ).rejects.toThrow("valor proporcional deve ser maior que zero");
   });
 
   it("define end_date no plano", async () => {
@@ -292,6 +483,30 @@ describe("closePlan", () => {
 
     const status = await getClientStatus(db, client.id);
     expect(status).toBe("inativo");
+  });
+
+  it("cliente NÃO é excluído ao encerrar todos os planos (apenas vira inativo)", async () => {
+    const { plan, client } = await createPlan(db, {
+      clientName: "Encerrado Não Some",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await closePlan(db, plan.id, "2026-04-10");
+
+    const clientSaved = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(clientSaved).toBeDefined();
+    expect(clientSaved!.name).toBe("Encerrado Não Some");
   });
 
   it("plano já encerrado não muda ao fechar novamente", async () => {
@@ -672,7 +887,7 @@ describe("getActivePlans", () => {
     const plans = await getActivePlans(db);
     // Ativo 1: 500/(4+0+2*0.5) = 500/5 = 100
     // Ativo 2: 790/(4+1+0) = 790/5 = 158
-    const custos = plans.map((p) => p.custoPost).filter(Boolean) as number[];
+    const custos = plans.map((p: any) => p.custoPost).filter(Boolean) as number[];
     expect(custos).toEqual([...custos].sort((a, b) => a - b));
   });
 });
@@ -782,6 +997,81 @@ describe("updateClient", () => {
     await updateClient(db, { clientId: client.id, name: "Com Notas", notes: "" });
     saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
     expect(saved!.notes).toBeNull();
+  });
+
+  it("atualiza data de aniversário", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Niver",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Niver",
+      birthday: "1990-07-15",
+    });
+
+    const saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
+    expect(saved!.birthday).toBe("1990-07-15");
+  });
+
+  it("atualiza número de WhatsApp", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Zap",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Zap",
+      whatsapp: "+5511988887777",
+    });
+
+    const saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
+    expect(saved!.whatsapp).toBe("+5511988887777");
+  });
+
+  it("limpa aniversário e whatsapp quando campos ficam vazios", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Limpar",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Limpar",
+      birthday: "1990-07-15",
+      whatsapp: "+5511988887777",
+    });
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Limpar",
+      birthday: "",
+      whatsapp: "",
+    });
+
+    const saved = db.select().from(schema.clients).where(eq(schema.clients.id, client.id)).get();
+    expect(saved!.birthday).toBeNull();
+    expect(saved!.whatsapp).toBeNull();
   });
 
   it("preserva origem ao atualizar só o nome", async () => {
@@ -1054,9 +1344,9 @@ describe("deletePlan", () => {
     expect(deleted).toBeNull();
   });
 
-  it("cliente sobrevive quando seu plano é deletado", async () => {
+  it("exclui cliente quando era o último plano", async () => {
     const { plan, client } = await createPlan(db, {
-      clientName: "Cliente Sobrevive",
+      clientName: "Último Plano",
       planType: "Personalizado",
       planValue: 500,
       postsCarrossel: 4,
@@ -1068,7 +1358,41 @@ describe("deletePlan", () => {
 
     await deletePlan(db, plan.id);
 
-    // Cliente ainda existe
+    // Cliente também foi excluído
+    const clientSaved = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(clientSaved).toBeUndefined();
+  });
+
+  it("mantém cliente quando ainda há outros planos", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Tem Outros",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const { plan: plan2 } = await createPlan(db, {
+      clientId: client.id,
+      planType: "Tráfego",
+      planValue: 300,
+      postsCarrossel: 0,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 1,
+      startDate: "2026-03-01",
+    });
+
+    await deletePlan(db, plan2.id);
+
     const clientSaved = db
       .select()
       .from(schema.clients)
@@ -1076,7 +1400,45 @@ describe("deletePlan", () => {
       .get();
 
     expect(clientSaved).toBeDefined();
-    expect(clientSaved!.name).toBe("Cliente Sobrevive");
+    expect(clientSaved!.name).toBe("Tem Outros");
+  });
+
+  it("mantém cliente mesmo quando planos restantes estão encerrados", async () => {
+    const { client, plan: plan1 } = await createPlan(db, {
+      clientName: "Só Encerrados",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const { plan: plan2 } = await createPlan(db, {
+      clientId: client.id,
+      planType: "Tráfego",
+      planValue: 300,
+      postsCarrossel: 0,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 1,
+      startDate: "2026-02-01",
+    });
+
+    // Encerrar o primeiro (ainda existe no DB)
+    await closePlan(db, plan1.id, "2026-02-28");
+
+    // Deletar o segundo — cliente ainda tem plano 1 encerrado
+    await deletePlan(db, plan2.id);
+
+    const clientSaved = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(clientSaved).toBeDefined();
   });
 });
 
@@ -1452,5 +1814,154 @@ describe("persistência após criação (bug fix: await)", () => {
 
     const ativos = await getActivePlans(db);
     expect(ativos).toHaveLength(0);
+  });
+});
+
+describe("getPaymentGaps", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("retorna vazio quando plano foi pago em todos os meses até hoje", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Em Dia",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // Pagou fev, mar, abr (3 meses já passados a partir de 15/04/2026)
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-10", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-10", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-10", amount: 500 });
+
+    const gaps = await getPaymentGaps(db, plan.id, "2026-04-15");
+    expect(gaps).toEqual([]);
+  });
+
+  it("detecta mês faltante entre dois pagamentos", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Gap Middle",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // Pagou fev e abr, pulou mar
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-10", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-10", amount: 500 });
+
+    const gaps = await getPaymentGaps(db, plan.id, "2026-04-15");
+    expect(gaps).toEqual(["2026-03-10"]);
+  });
+
+  it("detecta múltiplos meses faltantes", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Many Gaps",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // Pagou só fev
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-15", amount: 500 });
+
+    // Hoje é 20/05/2026, venc. de maio é dia 15 (já passou) → mar, abr, mai
+    const gaps = await getPaymentGaps(db, plan.id, "2026-05-20");
+    expect(gaps).toEqual(["2026-03-15", "2026-04-15", "2026-05-15"]);
+  });
+
+  it("não acusa gap para o mês corrente se vencimento ainda não chegou", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ainda Em Dia",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 20,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-20", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-20", amount: 500 });
+
+    // Hoje é 15/04 — venc. de abril é dia 20, ainda não chegou
+    const gaps = await getPaymentGaps(db, plan.id, "2026-04-15");
+    expect(gaps).toEqual([]);
+  });
+
+  it("retorna vazio quando plano não tem billingCycleDays", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Sem Ciclo",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const gaps = await getPaymentGaps(db, plan.id, "2026-04-15");
+    expect(gaps).toEqual([]);
+  });
+
+  it("para em end_date quando plano foi encerrado", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Encerrada",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // Pagou só fev; encerrou antes de março
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-10", amount: 500 });
+    await closePlan(db, plan.id, "2026-02-20");
+
+    // Hoje é 15/05, mas o plano acabou em 20/02 → não há gap
+    const gaps = await getPaymentGaps(db, plan.id, "2026-05-15");
+    expect(gaps).toEqual([]);
+  });
+
+  it("ignora plano sem nenhum pagamento ainda (primeiro mês antes do vencimento)", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Nova",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-10",
+    });
+
+    // Hoje 15/04, primeiro vencimento é 25/05 — sem gap ainda
+    const gaps = await getPaymentGaps(db, plan.id, "2026-04-15");
+    expect(gaps).toEqual([]);
   });
 });

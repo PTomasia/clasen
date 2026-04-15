@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
+import { sql } from "drizzle-orm";
 import * as schema from "../src/lib/db/schema";
 
 const client = createClient({
@@ -59,21 +60,34 @@ const activePlans: ActivePlan[] = [
   { clientName: "Kelly", planType: "Personalizado", planValue: 700, billingCycleDays: null, postsCarrossel: 2, postsReels: 2, postsEstatico: 0, postsTrafego: 0, startDate: "2026-03-18", movementType: "New", lastPaymentDate: null, nextPaymentDate: null, notes: null },
   { clientName: "Kelly Martins", planType: "Personalizado", planValue: 700, billingCycleDays: null, postsCarrossel: 2, postsReels: 2, postsEstatico: 0, postsTrafego: 0, startDate: "2026-04-01", movementType: "New", lastPaymentDate: null, nextPaymentDate: null, notes: null },
   { clientName: "Myllena Barbosa", planType: "Essential", planValue: 890, billingCycleDays: null, postsCarrossel: 4, postsReels: 1, postsEstatico: 0, postsTrafego: 0, startDate: "2026-04-01", movementType: "New", lastPaymentDate: null, nextPaymentDate: null, notes: null },
-  { clientName: "Trfg - Feh Muniz", planType: "Tráfego", planValue: 400, billingCycleDays: null, postsCarrossel: 0, postsReels: 0, postsEstatico: 0, postsTrafego: 1, startDate: "2026-04-01", movementType: "New", lastPaymentDate: null, nextPaymentDate: null, notes: null },
-  { clientName: "Trfg - Jessica", planType: "Tráfego", planValue: 300, billingCycleDays: null, postsCarrossel: 0, postsReels: 0, postsEstatico: 0, postsTrafego: 0, startDate: "2026-03-20", movementType: "New", lastPaymentDate: null, nextPaymentDate: null, notes: null },
+  { clientName: "Fernanda Muniz", planType: "Tráfego", planValue: 400, billingCycleDays: null, postsCarrossel: 0, postsReels: 0, postsEstatico: 0, postsTrafego: 1, startDate: "2026-04-01", movementType: "New", lastPaymentDate: null, nextPaymentDate: null, notes: null },
+  { clientName: "Jessica Ortega", planType: "Tráfego", planValue: 300, billingCycleDays: null, postsCarrossel: 0, postsReels: 0, postsEstatico: 0, postsTrafego: 1, startDate: "2026-03-20", movementType: "New", lastPaymentDate: null, nextPaymentDate: null, notes: null },
 ];
 
 async function seed() {
   console.log("Seeding active clients and plans to Turso...\n");
 
   for (const plan of activePlans) {
-    // Insert client
-    const [insertedClient] = await db
-      .insert(schema.clients)
-      .values({ name: plan.clientName })
-      .returning({ id: schema.clients.id });
+    // Reutilizar cliente existente se nome bate (case-insensitive + trim)
+    const normalized = plan.clientName.trim().toLowerCase();
+    const existing = await db
+      .select({ id: schema.clients.id })
+      .from(schema.clients)
+      .where(sql`lower(trim(${schema.clients.name})) = ${normalized}`)
+      .get();
 
-    console.log(`  Client #${insertedClient.id}: ${plan.clientName}`);
+    let insertedClient: { id: number };
+    if (existing) {
+      insertedClient = existing;
+      console.log(`  Client #${existing.id}: ${plan.clientName} (reutilizado)`);
+    } else {
+      const [inserted] = await db
+        .insert(schema.clients)
+        .values({ name: plan.clientName })
+        .returning({ id: schema.clients.id });
+      insertedClient = inserted;
+      console.log(`  Client #${inserted.id}: ${plan.clientName}`);
+    }
 
     // Insert plan (end_date = NULL → active)
     await db.insert(schema.subscriptionPlans).values({
