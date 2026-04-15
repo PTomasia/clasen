@@ -80,6 +80,16 @@ export const planPayments = sqliteTable("plan_payments", {
     .default(sql`(datetime('now'))`),
 });
 
+// ─── Agency Settings ──────────────────────────────────────────────────────
+// Chave-valor para configurações globais da agência (ex: preço-alvo $/post).
+export const agencySettings = sqliteTable("agency_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
 // ─── One-Time Revenues (Sprint 4) ─────────────────────────────────────────────
 export const oneTimeRevenues = sqliteTable("one_time_revenues", {
   id: integer("id").primaryKey({ autoIncrement: true }),

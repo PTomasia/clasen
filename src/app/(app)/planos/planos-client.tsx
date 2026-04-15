@@ -24,8 +24,9 @@ import {
   Search,
   TrendingUp,
   TrendingDown,
+  Settings,
 } from "lucide-react";
-import { formatBRL } from "@/lib/utils/formatting";
+import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import type { StatusPagamento } from "@/lib/utils/calculations";
 import {
   sortPlans,
@@ -40,6 +41,7 @@ import { DeletePlanDialog } from "./delete-plan-dialog";
 import { EditClientDialog, type EditDialogData } from "./edit-client-dialog";
 import { ChangePlanDialog, type ChangePlanData } from "./change-plan-dialog";
 import { PaymentHistoryDialog } from "./payment-history-dialog";
+import { TargetPriceDialog } from "./target-price-dialog";
 
 interface Plan {
   id: number;
@@ -66,6 +68,12 @@ interface Plan {
   permanencia: number;
   statusPagamento: StatusPagamento;
   gapsCount: number;
+  nextAdjustmentDate: string | null;
+  adjustmentSuggestion: {
+    suggestedValue: number | null;
+    percentChange: number;
+    capped: boolean;
+  } | null;
 }
 
 interface Client {
@@ -90,6 +98,47 @@ function PlanStatusBadge({ status }: { status: string }) {
     <Badge className="bg-success text-success-foreground">Ativo</Badge>
   ) : (
     <Badge variant="secondary">Inativo</Badge>
+  );
+}
+
+// ─── Adjustment Cell ─────────────────────────────────────────────────────────
+
+function AdjustmentCell({
+  nextDate,
+  suggestion,
+}: {
+  nextDate: string;
+  suggestion: { suggestedValue: number | null; percentChange: number; capped: boolean };
+}) {
+  const today = new Date().toISOString().split("T")[0];
+  const isOverdue = nextDate <= today;
+
+  if (!suggestion.suggestedValue) {
+    // Já acima do alvo ou sem posts
+    return (
+      <div className="text-xs">
+        <span className={isOverdue ? "text-muted-foreground" : "text-success"}>
+          {formatDate(nextDate)}
+        </span>
+        <br />
+        <span className="text-success">Acima do alvo</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-xs">
+      <span className={isOverdue ? "text-accent font-medium" : "text-muted-foreground"}>
+        {formatDate(nextDate)} {isOverdue && "⚠"}
+      </span>
+      <br />
+      <span className="font-mono font-medium">
+        {formatBRL(suggestion.suggestedValue)}
+      </span>
+      <span className="text-muted-foreground ml-1">
+        (+{suggestion.percentChange.toFixed(0)}%{suggestion.capped ? " max" : ""})
+      </span>
+    </div>
   );
 }
 
@@ -135,9 +184,11 @@ function SortableHead({
 export function PlanosClient({
   plans,
   clients,
+  targetCostPerPost,
 }: {
   plans: Plan[];
   clients: Client[];
+  targetCostPerPost: number | null;
 }) {
   // Status filter (existing)
   const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "cancelado">("todos");
@@ -160,6 +211,7 @@ export function PlanosClient({
   const [changeData, setChangeData] = useState<{ data: ChangePlanData; type: "Upgrade" | "Downgrade" } | null>(null);
   const [historyPlan, setHistoryPlan] = useState<{ planId: number; clientName: string } | null>(null);
   const [focusedPlanId, setFocusedPlanId] = useState<number | null>(null);
+  const [showTargetPriceDialog, setShowTargetPriceDialog] = useState(false);
 
   // Derive unique plan types from data
   const planTypes = useMemo(
@@ -233,8 +285,38 @@ export function PlanosClient({
 
   const hasActiveFilters = search || planTypeFilter !== "todos" || pgtoFilter !== "todos";
 
+  // Cards de resumo — planos ativos
+  const activePlans = useMemo(() => plans.filter((p) => p.status === "ativo"), [plans]);
+  const activeTotal = useMemo(
+    () => activePlans.reduce((sum, p) => sum + p.planValue, 0),
+    [activePlans]
+  );
+
   return (
     <>
+      {/* Resumo */}
+      <div className="flex gap-4 flex-wrap">
+        <div className="bg-card border rounded-lg px-4 py-3 min-w-[140px]">
+          <p className="text-xs text-muted-foreground">Planos ativos</p>
+          <p className="text-lg font-semibold">{activePlans.length}</p>
+        </div>
+        <div className="bg-card border rounded-lg px-4 py-3 min-w-[160px]">
+          <p className="text-xs text-muted-foreground">Receita mensal</p>
+          <p className="text-lg font-semibold font-mono">{formatBRL(activeTotal)}</p>
+        </div>
+        <button
+          onClick={() => setShowTargetPriceDialog(true)}
+          className="bg-card border rounded-lg px-4 py-3 min-w-[160px] text-left hover:border-primary/50 transition-colors"
+        >
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            $/post alvo <Settings size={10} />
+          </p>
+          <p className="text-lg font-semibold font-mono">
+            {targetCostPerPost ? formatBRL(targetCostPerPost) : "Configurar"}
+          </p>
+        </button>
+      </div>
+
       {/* Filtros e ação */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4">
@@ -321,13 +403,14 @@ export function PlanosClient({
               <SortableHead label="Perm." sortKey="permanencia" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
               <SortableHead label="Pgto" sortKey="statusPagamento" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
               <TableHead>Status</TableHead>
+              {targetCostPerPost && <TableHead>Reajuste</TableHead>}
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {processedPlans.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={targetCostPerPost ? 10 : 9} className="text-center text-muted-foreground py-8">
                   Nenhum plano encontrado
                 </TableCell>
               </TableRow>
@@ -397,6 +480,18 @@ export function PlanosClient({
                   <TableCell>
                     <PlanStatusBadge status={plan.status} />
                   </TableCell>
+                  {targetCostPerPost && (
+                    <TableCell>
+                      {plan.nextAdjustmentDate && plan.adjustmentSuggestion ? (
+                        <AdjustmentCell
+                          nextDate={plan.nextAdjustmentDate}
+                          suggestion={plan.adjustmentSuggestion}
+                        />
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
                       <Button
@@ -568,6 +663,12 @@ export function PlanosClient({
           clientName={historyPlan.clientName}
         />
       )}
+
+      <TargetPriceDialog
+        open={showTargetPriceDialog}
+        onClose={() => setShowTargetPriceDialog(false)}
+        currentValue={targetCostPerPost}
+      />
     </>
   );
 }

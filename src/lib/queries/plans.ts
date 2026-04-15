@@ -6,7 +6,9 @@ import {
   calcularPermanencia,
   calcularStatusPagamento,
 } from "../utils/calculations";
+import { calcularProximoReajuste, calcularSugestaoReajuste } from "../utils/adjustments";
 import { getPaymentGaps } from "../services/plans";
+import { getSetting, TARGET_COST_PER_POST_KEY } from "../services/settings";
 
 // ─── Queries — leitura pura, usáveis em Server Components ──────────────────────
 
@@ -25,9 +27,31 @@ export async function getAllPlans() {
     )
     .orderBy(desc(schema.subscriptionPlans.createdAt));
 
+  // Buscar preço-alvo para cálculo de sugestão de reajuste
+  const targetRaw = await getSetting(db as any, TARGET_COST_PER_POST_KEY);
+  const targetCostPerPost = targetRaw ? Number(targetRaw) : null;
+
   const enriched = await Promise.all(
     plans.map(async ({ plan, clientName, clientContactOrigin, clientNotes }) => {
       const gaps = await getPaymentGaps(db as any, plan.id);
+
+      // Reajuste: só para planos ativos
+      const nextAdjustmentDate =
+        plan.status === "ativo"
+          ? calcularProximoReajuste(plan.startDate, plan.lastAdjustmentDate)
+          : null;
+
+      const adjustmentSuggestion =
+        plan.status === "ativo" && targetCostPerPost
+          ? calcularSugestaoReajuste({
+              planValue: plan.planValue,
+              postsCarrossel: plan.postsCarrossel,
+              postsReels: plan.postsReels,
+              postsEstatico: plan.postsEstatico,
+              targetCostPerPost,
+            })
+          : null;
+
       return {
         ...plan,
         clientName,
@@ -43,6 +67,8 @@ export async function getAllPlans() {
         permanencia: calcularPermanencia(plan.startDate, plan.endDate),
         statusPagamento: calcularStatusPagamento(plan.nextPaymentDate),
         gapsCount: gaps.length,
+        nextAdjustmentDate,
+        adjustmentSuggestion,
       };
     })
   );
