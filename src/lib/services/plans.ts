@@ -267,6 +267,15 @@ export interface UpdateClientInput {
   clientSince?: string;
   birthday?: string;
   whatsapp?: string;
+  // ICP / Demográficos
+  city?: string;
+  state?: string;
+  niche?: string;
+  yearsInPractice?: number;
+  consultaTicket?: number;
+  hasPhysicalOffice?: boolean;
+  birthYear?: number;
+  targetAudience?: string;
   notes?: string;
 }
 
@@ -290,6 +299,14 @@ export async function updateClient(db: any, input: UpdateClientInput) {
       clientSince: input.clientSince?.trim() || null,
       birthday: input.birthday?.trim() || null,
       whatsapp: input.whatsapp?.trim() || null,
+      city: input.city?.trim() || null,
+      state: input.state?.trim() || null,
+      niche: input.niche?.trim() || null,
+      yearsInPractice: input.yearsInPractice ?? null,
+      consultaTicket: input.consultaTicket ?? null,
+      hasPhysicalOffice: input.hasPhysicalOffice ?? null,
+      birthYear: input.birthYear ?? null,
+      targetAudience: input.targetAudience?.trim() || null,
       notes: input.notes?.trim() || null,
       updatedAt: new Date().toISOString(),
     })

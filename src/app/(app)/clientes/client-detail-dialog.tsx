@@ -40,6 +40,14 @@ interface ClientDetail {
   contactOrigin: string | null;
   birthday: string | null;
   whatsapp: string | null;
+  city: string | null;
+  state: string | null;
+  niche: string | null;
+  yearsInPractice: number | null;
+  consultaTicket: number | null;
+  hasPhysicalOffice: boolean | null;
+  birthYear: number | null;
+  targetAudience: string | null;
   notes: string | null;
   status: "ativo" | "inativo";
   permanencia: number;
@@ -111,6 +119,59 @@ export function ClientDetailDialog({
                 )}
                 {data.birthday && (
                   <span>Aniversário: <span className="text-foreground">{formatDate(data.birthday)}</span></span>
+                )}
+              </div>
+            )}
+
+            {/* Perfil profissional (ICP) */}
+            {(data.city || data.niche || data.yearsInPractice != null || data.consultaTicket != null || data.birthYear || data.targetAudience || data.hasPhysicalOffice != null) && (
+              <div className="border rounded-lg p-3 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Perfil profissional
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  {data.niche && (
+                    <div>
+                      <span className="text-muted-foreground">Nicho: </span>
+                      <span>{data.niche}</span>
+                    </div>
+                  )}
+                  {(data.city || data.state) && (
+                    <div>
+                      <span className="text-muted-foreground">Local: </span>
+                      <span>{[data.city, data.state].filter(Boolean).join(", ")}</span>
+                    </div>
+                  )}
+                  {data.yearsInPractice != null && (
+                    <div>
+                      <span className="text-muted-foreground">Tempo de prática: </span>
+                      <span>{data.yearsInPractice} anos</span>
+                    </div>
+                  )}
+                  {data.consultaTicket != null && (
+                    <div>
+                      <span className="text-muted-foreground">Valor consulta: </span>
+                      <span className="font-mono">{formatBRL(data.consultaTicket)}</span>
+                    </div>
+                  )}
+                  {data.birthYear != null && (
+                    <div>
+                      <span className="text-muted-foreground">Nascimento: </span>
+                      <span>{data.birthYear} ({new Date().getFullYear() - data.birthYear} anos)</span>
+                    </div>
+                  )}
+                  {data.hasPhysicalOffice != null && (
+                    <div>
+                      <span className="text-muted-foreground">Consultório: </span>
+                      <span>{data.hasPhysicalOffice ? "Sim" : "Não"}</span>
+                    </div>
+                  )}
+                </div>
+                {data.targetAudience && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Público-alvo: </span>
+                    <span>{data.targetAudience}</span>
+                  </div>
                 )}
               </div>
             )}

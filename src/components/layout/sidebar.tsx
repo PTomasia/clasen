@@ -11,6 +11,7 @@ import {
   Receipt,
   Menu,
   X,
+  UserCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, sprint: 3 },
   { name: "Planos", href: "/planos", icon: FileText, sprint: 1 },
   { name: "Clientes", href: "/clientes", icon: Users, sprint: 2 },
+  { name: "Perfil Ideal", href: "/icp", icon: UserCheck, sprint: 3 },
   { name: "Receitas Avulsas", href: "/receitas-avulsas", icon: DollarSign, sprint: 4 },
   { name: "Aquisição", href: "/aquisicao", icon: TrendingUp, sprint: 4 },
   { name: "Despesas", href: "/despesas", icon: Receipt, sprint: 5 },

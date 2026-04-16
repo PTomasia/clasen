@@ -11,6 +11,15 @@ export const clients = sqliteTable("clients", {
   clientSince: text("client_since"), // ISO date override: se preenchido, usa para permanência
   birthday: text("birthday"), // ISO date (MM-DD ou YYYY-MM-DD) - aniversário
   whatsapp: text("whatsapp"), // número de WhatsApp
+  // Demográficos (ICP)
+  city: text("city"),
+  state: text("state"),
+  niche: text("niche"), // infantil, casal, TCC, clínica, etc.
+  yearsInPractice: integer("years_in_practice"),
+  consultaTicket: real("consulta_ticket"), // valor da consulta em R$
+  hasPhysicalOffice: integer("has_physical_office", { mode: "boolean" }),
+  birthYear: integer("birth_year"),
+  targetAudience: text("target_audience"), // público-alvo (texto livre)
   notes: text("notes"),
   createdAt: text("created_at")
     .notNull()

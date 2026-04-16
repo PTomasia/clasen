@@ -61,6 +61,14 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
           clientSince: client.clientSince ?? undefined,
           birthday: client.birthday ?? undefined,
           whatsapp: client.whatsapp ?? undefined,
+          city: client.city ?? undefined,
+          state: client.state ?? undefined,
+          niche: client.niche ?? undefined,
+          yearsInPractice: client.yearsInPractice ?? undefined,
+          consultaTicket: client.consultaTicket ?? undefined,
+          hasPhysicalOffice: client.hasPhysicalOffice ?? undefined,
+          birthYear: client.birthYear ?? undefined,
+          targetAudience: client.targetAudience ?? undefined,
           notes: client.notes ?? undefined,
         });
       } finally {
@@ -332,6 +340,14 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                         clientSince: client.clientSince,
                         birthday: client.birthday,
                         whatsapp: client.whatsapp,
+                        city: client.city,
+                        state: client.state,
+                        niche: client.niche,
+                        yearsInPractice: client.yearsInPractice,
+                        consultaTicket: client.consultaTicket,
+                        hasPhysicalOffice: client.hasPhysicalOffice,
+                        birthYear: client.birthYear,
+                        targetAudience: client.targetAudience,
                         notes: client.notes,
                       })}
                       title="Editar cliente"

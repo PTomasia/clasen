@@ -71,6 +71,15 @@ export interface ClientRow {
   clientSince: string | null;
   birthday: string | null;
   whatsapp: string | null;
+  // ICP / Demográficos
+  city: string | null;
+  state: string | null;
+  niche: string | null;
+  yearsInPractice: number | null;
+  consultaTicket: number | null;
+  hasPhysicalOffice: boolean | null;
+  birthYear: number | null;
+  targetAudience: string | null;
   notes: string | null;
   status: "ativo" | "inativo";
   permanencia: number;
@@ -123,6 +132,14 @@ export async function getClientsList(
       clientSince: client.clientSince,
       birthday: client.birthday,
       whatsapp: client.whatsapp,
+      city: client.city,
+      state: client.state,
+      niche: client.niche,
+      yearsInPractice: client.yearsInPractice,
+      consultaTicket: client.consultaTicket,
+      hasPhysicalOffice: client.hasPhysicalOffice,
+      birthYear: client.birthYear,
+      targetAudience: client.targetAudience,
       notes: client.notes,
       status,
       permanencia,
