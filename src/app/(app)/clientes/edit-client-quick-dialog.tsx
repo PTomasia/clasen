@@ -20,19 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { updateClientAction } from "@/lib/actions/plans";
-
-const ORIGINS = ["Instagram", "Indicação", "Google", "WhatsApp", "Outro"];
-const NICHES = [
-  "Clínica geral",
-  "Infantil",
-  "Casal e família",
-  "TCC",
-  "Psicanálise",
-  "Neuropsicologia",
-  "Organizacional",
-  "Social",
-  "Outro",
-];
+import { ORIGINS, NICHES } from "@/lib/constants";
 
 export interface EditClientQuickData {
   clientId: number;

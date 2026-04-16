@@ -7,6 +7,7 @@ import {
   setSetting as setSettingService,
   TARGET_COST_PER_POST_KEY,
 } from "../services/settings";
+import { REVALIDATE_PATHS } from "../constants";
 
 export async function getTargetCostPerPost(): Promise<number | null> {
   const val = await getSettingService(db as any, TARGET_COST_PER_POST_KEY);
@@ -16,5 +17,7 @@ export async function getTargetCostPerPost(): Promise<number | null> {
 export async function setTargetCostPerPost(value: number) {
   if (value <= 0) throw new Error("Preço-alvo deve ser maior que zero");
   await setSettingService(db as any, TARGET_COST_PER_POST_KEY, String(value));
-  revalidatePath("/planos");
+  for (const path of REVALIDATE_PATHS) {
+    revalidatePath(path);
+  }
 }

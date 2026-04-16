@@ -1448,6 +1448,31 @@ describe("deletePlan", () => {
 
     expect(clientSaved).toBeDefined();
   });
+
+  it("exclui cliente quando último plano (já encerrado) é deletado", async () => {
+    const { client, plan } = await createPlan(db, {
+      clientName: "Só Um Encerrado",
+      planType: "Personalizado",
+      planValue: 600,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // Encerrar e depois deletar — é o único plano
+    await closePlan(db, plan.id, "2026-03-01");
+    await deletePlan(db, plan.id);
+
+    const clientSaved = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(clientSaved).toBeUndefined();
+  });
 });
 
 describe("changePlan (upgrade/downgrade)", () => {
@@ -1649,6 +1674,50 @@ describe("changePlan (upgrade/downgrade)", () => {
     const payments = await getPaymentsByPlan(db, oldPlan.id);
     expect(payments).toHaveLength(1);
     expect(payments[0].amount).toBe(500);
+  });
+
+  it("plano antigo fica encerrado se createPlan falha (sem rollback — bug conhecido)", async () => {
+    // Documenta: changePlan NÃO tem transação atômica.
+    // Se createPlan falha, o plano antigo já está cancelado.
+    const { plan: oldPlan } = await createPlan(db, {
+      clientName: "Rollback Test",
+      planType: "Essential",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // newPlan com valor 0 → createPlan vai rejeitar
+    await expect(
+      changePlan(db, {
+        oldPlanId: oldPlan.id,
+        endDate: "2026-04-15",
+        newPlan: {
+          planType: "Personalizado",
+          planValue: 0, // inválido
+          postsCarrossel: 4,
+          postsReels: 0,
+          postsEstatico: 0,
+          postsTrafego: 0,
+          startDate: "2026-04-15",
+          movementType: "Upgrade",
+        },
+      })
+    ).rejects.toThrow("valor deve ser maior que zero");
+
+    // Bug conhecido: plano antigo fica cancelado sem novo plano criado
+    const oldPlanAfter = db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, oldPlan.id))
+      .get();
+
+    // Documentando o comportamento atual (sem rollback):
+    expect(oldPlanAfter!.status).toBe("cancelado");
+    expect(oldPlanAfter!.endDate).toBe("2026-04-15");
   });
 });
 

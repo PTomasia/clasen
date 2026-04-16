@@ -22,8 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { changePlanAction } from "@/lib/actions/plans";
 import { calcularCustoPost } from "@/lib/utils/calculations";
 import { formatBRL } from "@/lib/utils/formatting";
-
-const PLAN_TYPES = ["Personalizado", "Essential", "Tráfego", "Site"];
+import { PLAN_TYPES } from "@/lib/constants";
 
 export interface ChangePlanData {
   planId: number;

@@ -387,6 +387,74 @@ describe("getClientsList", () => {
     expect(clients[0].status).toBe("inativo");
     expect(clients[0].permanencia).toBe(37);
   });
+
+  it("clientSince posterior ao startDate ainda prevalece (não usa min)", async () => {
+    // Plano criado em Jan/2025, mas clientSince = Set/2025 (posterior)
+    // Deve usar clientSince, não o startDate mais antigo
+    const { client } = await createPlan(db, {
+      clientName: "Posterior",
+      planType: "Essential",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-01-01",
+    });
+
+    await db.update(schema.clients)
+      .set({ clientSince: "2025-09-01" })
+      .where(eq(schema.clients.id, client.id))
+      .run();
+
+    // referenceDate = Abr/2026
+    const clients = await getClientsList(db, "2026-04-15");
+    const c = clients.find((x) => x.id === client.id)!;
+
+    // clientSince (Set/2025) → hoje (Abr/2026) = 7 meses
+    // se usasse min(startDate, clientSince) seria Jan/2025 → 15 meses
+    expect(c.permanencia).toBe(7);
+  });
+
+  it("clientSince + multi-plan (1 closed + 1 active) usa clientSince", async () => {
+    const { client, plan: plan1 } = await createPlan(db, {
+      clientName: "Multi CS",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-01-01",
+    });
+
+    await closePlan(db, plan1.id, "2025-12-01");
+
+    await createPlan(db, {
+      clientId: client.id,
+      planType: "Essential",
+      planValue: 790,
+      postsCarrossel: 4,
+      postsReels: 2,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-12-01",
+      movementType: "Upgrade",
+    });
+
+    await db.update(schema.clients)
+      .set({ clientSince: "2024-06-01" })
+      .where(eq(schema.clients.id, client.id))
+      .run();
+
+    // referenceDate = Abr/2026
+    const clients = await getClientsList(db, "2026-04-15");
+    const c = clients.find((x) => x.id === client.id)!;
+
+    // clientSince (Jun/2024) → hoje (Abr/2026) = 22 meses (ativo, pq plan2 está ativo)
+    expect(c.status).toBe("ativo");
+    expect(c.permanencia).toBe(22);
+  });
 });
 
 describe("getClientDetail", () => {

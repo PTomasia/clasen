@@ -28,7 +28,7 @@ interface Client {
   name: string;
 }
 
-const PLAN_TYPES = ["Personalizado", "Essential", "Tráfego", "Site"];
+import { PLAN_TYPES } from "@/lib/constants";
 const MOVEMENT_TYPES = ["New", "Upgrade", "Downgrade"];
 
 export function PlanFormDialog({

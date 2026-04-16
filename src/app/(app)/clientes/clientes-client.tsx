@@ -31,11 +31,10 @@ import { formatBRL } from "@/lib/utils/formatting";
 import { ClientDetailDialog } from "./client-detail-dialog";
 import { EditClientQuickDialog, type EditClientQuickData } from "./edit-client-quick-dialog";
 import type { ClientRow } from "@/lib/services/clients";
+import { ORIGINS } from "@/lib/constants";
 
 type SortKey = "name" | "permanencia" | "planosAtivos" | "valorMensal" | "custoPostMedio" | "status" | "contactOrigin";
 type SortDirection = "asc" | "desc" | null;
-
-const ORIGINS = ["Instagram", "Indicação", "Google", "WhatsApp", "Outro"];
 
 export function ClientesClient({ clients }: { clients: ClientRow[] }) {
   const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "inativo">("todos");

@@ -23,8 +23,7 @@ import { updateClientAction, updatePlanAction } from "@/lib/actions/plans";
 import { calcularCustoPost } from "@/lib/utils/calculations";
 import { formatBRL } from "@/lib/utils/formatting";
 
-const CONTACT_ORIGINS = ["Instagram", "Indicação", "Google", "WhatsApp", "Outro"];
-const PLAN_TYPES = ["Personalizado", "Essential", "Tráfego", "Site"];
+import { ORIGINS as CONTACT_ORIGINS, PLAN_TYPES } from "@/lib/constants";
 
 export interface EditDialogData {
   clientId: number;
