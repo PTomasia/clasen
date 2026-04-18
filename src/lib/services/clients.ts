@@ -183,10 +183,39 @@ export async function getClientDetail(
     b.startDate.localeCompare(a.startDate)
   );
 
+  // LTV — soma de plan_payments (pagos) + one_time_revenues (pagos)
+  const payments = await db
+    .select()
+    .from(schema.planPayments)
+    .where(eq(schema.planPayments.clientId, clientId))
+    .all();
+  const revenues = await db
+    .select()
+    .from(schema.oneTimeRevenues)
+    .where(eq(schema.oneTimeRevenues.clientId, clientId))
+    .all();
+
+  const ltvRecorrente = payments
+    .filter((p: any) => p.status === "pago")
+    .reduce((s: number, p: any) => s + p.amount, 0);
+  const ltvAvulsas = revenues
+    .filter((r: any) => !!r.isPaid)
+    .reduce((s: number, r: any) => s + r.amount, 0);
+
   return {
     ...client,
     status,
     permanencia,
     plans: sortedPlans,
+    ltvRecorrente,
+    ltvAvulsas,
+    ltv: ltvRecorrente + ltvAvulsas,
+    avulsas: revenues.map((r: any) => ({
+      id: r.id,
+      date: r.date,
+      amount: r.amount,
+      product: r.product,
+      isPaid: !!r.isPaid,
+    })),
   };
 }

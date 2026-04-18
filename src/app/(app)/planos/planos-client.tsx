@@ -49,6 +49,7 @@ interface Plan {
   clientName: string;
   clientContactOrigin: string | null;
   clientNotes: string | null;
+  clientSince: string | null;
   planType: string;
   planValue: number;
   billingCycleDays: number | null;
@@ -291,6 +292,13 @@ export function PlanosClient({
     () => activePlans.reduce((sum, p) => sum + p.planValue, 0),
     [activePlans]
   );
+  const custoPostMedio = useMemo(() => {
+    const values = activePlans
+      .map((p) => p.custoPost)
+      .filter((v): v is number => v !== null && isFinite(v));
+    if (values.length === 0) return null;
+    return values.reduce((s, v) => s + v, 0) / values.length;
+  }, [activePlans]);
 
   return (
     <>
@@ -303,6 +311,22 @@ export function PlanosClient({
         <div className="bg-card border rounded-lg px-4 py-3 min-w-[160px]">
           <p className="text-xs text-muted-foreground">Receita mensal</p>
           <p className="text-lg font-semibold font-mono">{formatBRL(activeTotal)}</p>
+        </div>
+        <div className="bg-card border rounded-lg px-4 py-3 min-w-[160px]">
+          <p className="text-xs text-muted-foreground">$/post médio</p>
+          <p className="text-lg font-semibold font-mono">
+            {custoPostMedio !== null ? formatBRL(custoPostMedio) : "—"}
+          </p>
+          {custoPostMedio !== null && targetCostPerPost && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Alvo: {formatBRL(targetCostPerPost)}
+              {" "}
+              <span className={custoPostMedio < targetCostPerPost ? "text-accent-foreground" : "text-success"}>
+                ({custoPostMedio < targetCostPerPost ? "−" : "+"}
+                {Math.abs(((custoPostMedio - targetCostPerPost) / targetCostPerPost) * 100).toFixed(0)}%)
+              </span>
+            </p>
+          )}
         </div>
         <button
           onClick={() => setShowTargetPriceDialog(true)}
@@ -503,6 +527,7 @@ export function PlanosClient({
                             clientName: plan.clientName,
                             contactOrigin: plan.clientContactOrigin,
                             clientNotes: plan.clientNotes,
+                            clientSince: plan.clientSince,
                             planId: plan.id,
                             planType: plan.planType,
                             planValue: plan.planValue,
@@ -512,6 +537,7 @@ export function PlanosClient({
                             postsReels: plan.postsReels,
                             postsEstatico: plan.postsEstatico,
                             postsTrafego: plan.postsTrafego,
+                            startDate: plan.startDate,
                             planNotes: plan.notes,
                           })
                         }

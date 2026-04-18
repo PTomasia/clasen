@@ -19,6 +19,7 @@ export async function getAllPlans() {
       clientName: schema.clients.name,
       clientContactOrigin: schema.clients.contactOrigin,
       clientNotes: schema.clients.notes,
+      clientSince: schema.clients.clientSince,
     })
     .from(schema.subscriptionPlans)
     .innerJoin(
@@ -32,7 +33,7 @@ export async function getAllPlans() {
   const targetCostPerPost = targetRaw ? Number(targetRaw) : null;
 
   const enriched = await Promise.all(
-    plans.map(async ({ plan, clientName, clientContactOrigin, clientNotes }) => {
+    plans.map(async ({ plan, clientName, clientContactOrigin, clientNotes, clientSince }) => {
       const gaps = await getPaymentGaps(db as any, plan.id);
 
       // Reajuste: só para planos ativos
@@ -57,6 +58,7 @@ export async function getAllPlans() {
         clientName,
         clientContactOrigin,
         clientNotes,
+        clientSince,
         custoPost: calcularCustoPost({
           valor: plan.planValue,
           carrossel: plan.postsCarrossel,

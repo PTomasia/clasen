@@ -34,6 +34,14 @@ interface PlanRow {
   postsTrafego: number;
 }
 
+interface Avulsa {
+  id: number;
+  date: string;
+  amount: number;
+  product: string;
+  isPaid: boolean;
+}
+
 interface ClientDetail {
   id: number;
   name: string;
@@ -52,6 +60,10 @@ interface ClientDetail {
   status: "ativo" | "inativo";
   permanencia: number;
   plans: PlanRow[];
+  ltv: number;
+  ltvRecorrente: number;
+  ltvAvulsas: number;
+  avulsas: Avulsa[];
 }
 
 export function ClientDetailDialog({
@@ -182,6 +194,28 @@ export function ClientDetailDialog({
               </p>
             )}
 
+            {/* LTV card */}
+            <div className="border rounded-lg p-3 bg-muted/40">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                LTV — Lifetime Value
+              </p>
+              <p className="text-2xl font-bold font-mono">{formatBRL(data.ltv)}</p>
+              <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+                <span>
+                  Recorrente:{" "}
+                  <span className="text-foreground font-mono">
+                    {formatBRL(data.ltvRecorrente)}
+                  </span>
+                </span>
+                <span>
+                  Avulsas:{" "}
+                  <span className="text-foreground font-mono">
+                    {formatBRL(data.ltvAvulsas)}
+                  </span>
+                </span>
+              </div>
+            </div>
+
             <h3 className="text-sm font-semibold mt-2">
               Histórico de planos ({data.plans.length})
             </h3>
@@ -216,6 +250,45 @@ export function ClientDetailDialog({
                 ))}
               </TableBody>
             </Table>
+
+            {data.avulsas.length > 0 && (
+              <>
+                <h3 className="text-sm font-semibold mt-2">
+                  Receitas avulsas ({data.avulsas.length})
+                </h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.avulsas
+                      .slice()
+                      .sort((a, b) => b.date.localeCompare(a.date))
+                      .map((a) => (
+                        <TableRow key={a.id}>
+                          <TableCell className="text-sm">{formatDate(a.date)}</TableCell>
+                          <TableCell className="text-sm">{a.product}</TableCell>
+                          <TableCell className="text-right font-mono text-sm">
+                            {formatBRL(a.amount)}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {a.isPaid ? (
+                              <Badge className="bg-success/10 text-success border-success/20">Pago</Badge>
+                            ) : (
+                              <Badge variant="outline">Pendente</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </>
+            )}
           </>
         )}
       </DialogContent>

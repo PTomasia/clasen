@@ -328,12 +328,17 @@ export interface UpdatePlanInput {
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
+  startDate?: string;
   notes?: string;
 }
 
 export async function updatePlan(db: any, input: UpdatePlanInput) {
   if (!input.planValue || input.planValue <= 0) {
     throw new Error("valor deve ser maior que zero");
+  }
+
+  if (input.startDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) {
+    throw new Error("data de início inválida (YYYY-MM-DD)");
   }
 
   const existing = await db
@@ -354,6 +359,7 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
       postsReels: input.postsReels,
       postsEstatico: input.postsEstatico,
       postsTrafego: input.postsTrafego,
+      ...(input.startDate ? { startDate: input.startDate } : {}),
       notes: input.notes?.trim() || null,
       updatedAt: new Date().toISOString(),
     })

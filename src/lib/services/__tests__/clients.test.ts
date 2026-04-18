@@ -73,6 +73,19 @@ function createTestDb() {
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE one_time_revenues (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+      date TEXT NOT NULL,
+      amount REAL NOT NULL,
+      product TEXT NOT NULL,
+      channel TEXT,
+      campaign TEXT,
+      is_paid INTEGER NOT NULL DEFAULT 1,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   return db;

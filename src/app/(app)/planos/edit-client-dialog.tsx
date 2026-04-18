@@ -30,6 +30,7 @@ export interface EditDialogData {
   clientName: string;
   contactOrigin: string | null;
   clientNotes: string | null;
+  clientSince: string | null;
   planId: number;
   planType: string;
   planValue: number;
@@ -39,6 +40,7 @@ export interface EditDialogData {
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
+  startDate: string;
   planNotes: string | null;
 }
 
@@ -57,6 +59,7 @@ export function EditClientDialog({
   const [name, setName] = useState(data.clientName);
   const [contactOrigin, setContactOrigin] = useState(data.contactOrigin ?? "");
   const [clientNotes, setClientNotes] = useState(data.clientNotes ?? "");
+  const [clientSince, setClientSince] = useState(data.clientSince ?? "");
 
   // Plan fields
   const [planType, setPlanType] = useState(data.planType);
@@ -71,6 +74,7 @@ export function EditClientDialog({
   const [postsReels, setPostsReels] = useState(data.postsReels.toString());
   const [postsEstatico, setPostsEstatico] = useState(data.postsEstatico.toString());
   const [postsTrafego, setPostsTrafego] = useState(data.postsTrafego.toString());
+  const [startDate, setStartDate] = useState(data.startDate);
   const [planNotes, setPlanNotes] = useState(data.planNotes ?? "");
 
   // $/post preview
@@ -90,6 +94,7 @@ export function EditClientDialog({
           clientId: data.clientId,
           name,
           contactOrigin: contactOrigin || undefined,
+          clientSince: clientSince || undefined,
           notes: clientNotes || undefined,
         }),
         updatePlanAction({
@@ -102,6 +107,7 @@ export function EditClientDialog({
           postsReels: parseInt(postsReels) || 0,
           postsEstatico: parseInt(postsEstatico) || 0,
           postsTrafego: parseInt(postsTrafego) || 0,
+          startDate: startDate || undefined,
           notes: planNotes || undefined,
         }),
       ])
@@ -143,6 +149,18 @@ export function EditClientDialog({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1">
+              <Label>Cliente desde (data real, para ajustar permanência)</Label>
+              <Input
+                type="date"
+                value={clientSince}
+                onChange={(e) => setClientSince(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se preenchido, sobrescreve a data de início do primeiro plano no
+                cálculo de permanência.
+              </p>
             </div>
             <div className="space-y-1">
               <Label>Obs. cliente</Label>
@@ -205,6 +223,16 @@ export function EditClientDialog({
                   onChange={(e) => setBillingCycleDays2(e.target.value)}
                 />
               </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>Início do plano</Label>
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
+              />
             </div>
 
             {/* Posts */}

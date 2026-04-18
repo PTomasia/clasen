@@ -33,4 +33,18 @@ export const REVALIDATE_PATHS = [
   "/clientes",
   "/dashboard",
   "/icp",
+  "/receitas-avulsas",
+  "/aquisicao",
+] as const;
+
+// Produtos comuns de receita avulsa
+export const REVENUE_PRODUCTS = [
+  "Arte para tráfego",
+  "PDF",
+  "Carrossel avulso",
+  "Reels avulso",
+  "Apresentação",
+  "Identidade visual",
+  "Roteiro",
+  "Outro",
 ] as const;
