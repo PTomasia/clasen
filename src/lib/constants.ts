@@ -35,7 +35,11 @@ export const REVALIDATE_PATHS = [
   "/icp",
   "/receitas-avulsas",
   "/aquisicao",
+  "/despesas",
 ] as const;
+
+export const EXPENSE_CATEGORIES = ["fixo", "variavel"] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
 // Produtos comuns de receita avulsa
 export const REVENUE_PRODUCTS = [

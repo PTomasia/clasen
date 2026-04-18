@@ -1,6 +1,6 @@
 import { db } from "../db";
 import * as schema from "../db/schema";
-import { format, subMonths, startOfMonth, parseISO } from "date-fns";
+import { format, subMonths, startOfMonth } from "date-fns";
 import {
   calcularCAC,
   calcularROAS,
@@ -40,6 +40,26 @@ export interface UnitEconomicsData {
   };
 }
 
+// Tipos mínimos esperados pelo aggregator (subset dos schemas)
+interface PlanInput {
+  clientId: number;
+  planValue: number;
+  startDate: string;
+  endDate: string | null;
+}
+interface PaymentInput {
+  clientId: number;
+  paymentDate: string;
+  amount: number;
+  status: string;
+}
+interface RevenueInput {
+  clientId: number | null;
+  date: string;
+  amount: number;
+  isPaid: boolean;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const MONTH_LABELS = [
@@ -56,24 +76,24 @@ function monthKey(dateIso: string): string {
   return dateIso.slice(0, 7);
 }
 
-// ─── Query principal ──────────────────────────────────────────────────────────
+// ─── Agregação pura ───────────────────────────────────────────────────────────
+// Separada do IO para ser testável sem mockar DB.
 
-export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
-  const now = new Date();
-  const currentMonthStart = startOfMonth(now);
+export function aggregateUnitEconomics(input: {
+  plans: PlanInput[];
+  payments: PaymentInput[];
+  revenues: RevenueInput[];
+  adSpendMap: Map<string, number>;
+  today: Date;
+}): UnitEconomicsData {
+  const { plans, payments, revenues, adSpendMap, today } = input;
+  const currentMonthStart = startOfMonth(today);
 
   // Últimos 12 meses (incluindo o atual)
   const months: string[] = [];
   for (let i = 11; i >= 0; i--) {
     months.push(format(subMonths(currentMonthStart, i), "yyyy-MM"));
   }
-
-  const [plans, payments, revenues, adSpendMap] = await Promise.all([
-    db.select().from(schema.subscriptionPlans).all(),
-    db.select().from(schema.planPayments).all(),
-    db.select().from(schema.oneTimeRevenues).all(),
-    getAdSpendMap(db),
-  ]);
 
   // Pré-calcula "primeiro start_date" por cliente (para definir "novo cliente")
   const firstStartByClient = new Map<number, string>();
@@ -82,23 +102,17 @@ export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
     if (!cur || p.startDate < cur) firstStartByClient.set(p.clientId, p.startDate);
   }
 
-  // Pré-calcula "último end_date" por cliente (para churn)
-  // Cliente churna em M se: tem último plano com end_date em M E não tem plano com start_date > end_date_de_churn
-  const plansByClient = new Map<number, typeof plans>();
+  // Data de churn: último end_date se TODOS os planos do cliente têm end_date
+  const plansByClient = new Map<number, PlanInput[]>();
   for (const p of plans) {
-    if (!plansByClient.has(p.clientId)) plansByClient.set(p.clientId, [] as any);
-    (plansByClient.get(p.clientId)! as any).push(p);
+    if (!plansByClient.has(p.clientId)) plansByClient.set(p.clientId, []);
+    plansByClient.get(p.clientId)!.push(p);
   }
-
-  // Data churn do cliente: último end_date se TODOS seus planos têm end_date
   const churnDateByClient = new Map<number, string>();
   for (const [cid, cps] of plansByClient) {
-    const allClosed = cps.every((p: any) => !!p.endDate);
+    const allClosed = cps.every((p) => !!p.endDate);
     if (!allClosed) continue;
-    const lastEnd = cps
-      .map((p: any) => p.endDate as string)
-      .sort()
-      .reverse()[0];
+    const lastEnd = cps.map((p) => p.endDate as string).sort().reverse()[0];
     churnDateByClient.set(cid, lastEnd);
   }
 
@@ -123,7 +137,7 @@ export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
       if (monthKey(r.date) === m) receita += r.amount;
     }
 
-    // Ativos no início do mês: planos com start_date <= 1º do mês E (end_date IS NULL OR end_date >= 1º do mês)
+    // Ativos no início do mês: start_date <= 1º do mês E (end_date IS NULL OR end_date >= 1º do mês)
     const monthStart = m + "-01";
     const activeClientIds = new Set<number>();
     for (const p of plans) {
@@ -133,7 +147,7 @@ export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
     }
     const ativosInicio = activeClientIds.size;
 
-    // Churned no mês: clientes cujo último plano encerrou em M (e estão definitivamente inativos)
+    // Churned no mês
     let churned = 0;
     for (const churnDate of churnDateByClient.values()) {
       if (monthKey(churnDate) === m) churned++;
@@ -193,16 +207,16 @@ export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
     });
     if (ltv > 0) ltvs.push(ltv);
   }
-  const ltvMedio = ltvs.length > 0 ? ltvs.reduce((a, b) => a + b, 0) / ltvs.length : 0;
+  const ltvMedio =
+    ltvs.length > 0 ? ltvs.reduce((a, b) => a + b, 0) / ltvs.length : 0;
 
   const ltvCacRatio = cacMedio && cacMedio > 0 ? ltvMedio / cacMedio : null;
 
   // Ticket médio mensal: média de planValue dos planos atualmente ativos
-  const activePlans = plans.filter((p: any) => !p.endDate);
+  const activePlans = plans.filter((p) => !p.endDate);
   const ticketMedioMensal =
     activePlans.length > 0
-      ? activePlans.reduce((s: number, p: any) => s + p.planValue, 0) /
-        activePlans.length
+      ? activePlans.reduce((s, p) => s + p.planValue, 0) / activePlans.length
       : 0;
 
   const paybackMeses = calcularPayback(cacMedio, ticketMedioMensal);
@@ -221,4 +235,23 @@ export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
       ticketMedioMensal,
     },
   };
+}
+
+// ─── Query principal (IO) ─────────────────────────────────────────────────────
+
+export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
+  const [plans, payments, revenues, adSpendMap] = await Promise.all([
+    db.select().from(schema.subscriptionPlans).all(),
+    db.select().from(schema.planPayments).all(),
+    db.select().from(schema.oneTimeRevenues).all(),
+    getAdSpendMap(db),
+  ]);
+
+  return aggregateUnitEconomics({
+    plans: plans as any,
+    payments: payments as any,
+    revenues: revenues as any,
+    adSpendMap,
+    today: new Date(),
+  });
 }

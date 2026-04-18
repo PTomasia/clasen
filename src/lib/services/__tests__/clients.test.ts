@@ -522,4 +522,57 @@ describe("getClientDetail", () => {
     const detail = await getClientDetail(db, 9999, MOCK_TODAY);
     expect(detail).toBeNull();
   });
+
+  it("calcula LTV = pagamentos pagos + avulsas pagas", async () => {
+    const { client, plan } = await createPlan(db, {
+      clientName: "LTV Test",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // 2 pagamentos pagos + 1 pendente (ignorado)
+    await db.insert(schema.planPayments).values([
+      { planId: plan.id, clientId: client.id, paymentDate: "2026-01-15", amount: 500, status: "pago" },
+      { planId: plan.id, clientId: client.id, paymentDate: "2026-02-15", amount: 500, status: "pago" },
+      { planId: plan.id, clientId: client.id, paymentDate: "2026-03-15", amount: 500, status: "pendente" },
+    ]).run();
+
+    // 1 avulsa paga + 1 pendente (ignorada)
+    await db.insert(schema.oneTimeRevenues).values([
+      { clientId: client.id, date: "2026-02-20", amount: 200, product: "PDF", isPaid: true },
+      { clientId: client.id, date: "2026-03-20", amount: 999, product: "Arte", isPaid: false },
+    ]).run();
+
+    const detail = await getClientDetail(db, client.id, MOCK_TODAY);
+
+    expect(detail!.ltvRecorrente).toBe(1000); // 500 + 500
+    expect(detail!.ltvAvulsas).toBe(200);
+    expect(detail!.ltv).toBe(1200);
+    // Lista retornada inclui todas as avulsas (pagas e pendentes) — UI decide como exibir
+    expect(detail!.avulsas).toHaveLength(2);
+  });
+
+  it("LTV é zero quando não há pagamentos nem avulsas pagas", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "No Payments",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-01",
+    });
+
+    const detail = await getClientDetail(db, client.id, MOCK_TODAY);
+    expect(detail!.ltv).toBe(0);
+    expect(detail!.ltvRecorrente).toBe(0);
+    expect(detail!.ltvAvulsas).toBe(0);
+    expect(detail!.avulsas).toHaveLength(0);
+  });
 });

@@ -1256,6 +1256,59 @@ describe("updatePlan", () => {
     expect(updated!.status).toBe("ativo");
     expect(updated!.movementType).toBe("New");
   });
+
+  it("altera startDate quando passado explicitamente", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Start Update",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-01",
+    });
+
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-01-01", // corrigindo histórico
+    });
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.startDate).toBe("2025-01-01");
+  });
+
+  it("rejeita startDate com formato inválido", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Bad Date",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-01",
+    });
+
+    await expect(
+      updatePlan(db, {
+        planId: plan.id,
+        planType: "Personalizado",
+        planValue: 500,
+        postsCarrossel: 4,
+        postsReels: 0,
+        postsEstatico: 0,
+        postsTrafego: 0,
+        startDate: "01/03/2026", // formato brasileiro — rejeitar
+      })
+    ).rejects.toThrow();
+  });
 });
 
 describe("deletePlan", () => {

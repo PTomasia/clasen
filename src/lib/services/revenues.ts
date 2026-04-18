@@ -196,20 +196,3 @@ export async function getRevenuesSummary(
   };
 }
 
-// ─── getClientLTV ─────────────────────────────────────────────────────────────
-// LTV de 1 cliente = soma de plan_payments (pagos) + soma de one_time_revenues (pagos)
-
-export async function getClientRevenuesTotal(
-  db: any,
-  clientId: number
-): Promise<number> {
-  const revs = await db
-    .select()
-    .from(schema.oneTimeRevenues)
-    .where(eq(schema.oneTimeRevenues.clientId, clientId))
-    .all();
-
-  return revs
-    .filter((r: any) => !!r.isPaid)
-    .reduce((s: number, r: any) => s + r.amount, 0);
-}
