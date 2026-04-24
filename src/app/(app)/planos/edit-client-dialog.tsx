@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 import {
   Dialog,
@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,13 +48,35 @@ export interface EditDialogData {
 export function EditClientDialog({
   open,
   onClose,
+  onNavigate,
   data,
 }: {
   open: boolean;
   onClose: () => void;
+  onNavigate?: (direction: "prev" | "next") => void;
   data: EditDialogData;
 }) {
   const { isPending, error, run } = useDialogAction(onClose);
+
+  useEffect(() => {
+    if (!open || !onNavigate) return;
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        onNavigate!("prev");
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        onNavigate!("next");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onNavigate]);
 
   // Client fields
   const [name, setName] = useState(data.clientName);
@@ -117,8 +140,32 @@ export function EditClientDialog({
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+        <DialogHeader className="flex flex-row items-center justify-between pr-8">
           <DialogTitle>Editar plano e cliente</DialogTitle>
+          {onNavigate && (
+            <div className="flex gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => onNavigate("prev")}
+                title="Plano anterior (← ou ↑)"
+              >
+                <ChevronLeft size={16} />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => onNavigate("next")}
+                title="Próximo plano (→ ou ↓)"
+              >
+                <ChevronRight size={16} />
+              </Button>
+            </div>
+          )}
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -176,7 +223,7 @@ export function EditClientDialog({
           {/* ── Plano ── */}
           <fieldset className="space-y-3">
             <legend className="text-sm font-semibold text-muted-foreground">Plano</legend>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr] gap-3">
               <div className="space-y-1">
                 <Label>Tipo</Label>
                 <Select value={planType} onValueChange={(v) => v && setPlanType(v)}>

@@ -69,6 +69,7 @@ export async function getAllPlans() {
         permanencia: calcularPermanencia(plan.startDate, plan.endDate),
         statusPagamento: calcularStatusPagamento(plan.nextPaymentDate),
         gapsCount: gaps.length,
+        gapMonths: gaps,
         nextAdjustmentDate,
         adjustmentSuggestion,
       };

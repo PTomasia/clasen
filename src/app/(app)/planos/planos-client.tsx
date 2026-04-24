@@ -220,6 +220,34 @@ export function PlanosClient({
     [plans]
   );
 
+  // Navegar entre planos com o modal de edição aberto
+  function handleNavigateEdit(direction: "prev" | "next") {
+    if (!editData) return;
+    const idx = processedPlans.findIndex((p) => p.id === editData.planId);
+    if (idx === -1) return;
+    const nextIdx = direction === "next" ? idx + 1 : idx - 1;
+    const next = processedPlans[nextIdx];
+    if (!next) return;
+    setEditData({
+      clientId: next.clientId,
+      clientName: next.clientName,
+      contactOrigin: next.clientContactOrigin,
+      clientNotes: next.clientNotes,
+      clientSince: next.clientSince,
+      planId: next.id,
+      planType: next.planType,
+      planValue: next.planValue,
+      billingCycleDays: next.billingCycleDays,
+      billingCycleDays2: next.billingCycleDays2,
+      postsCarrossel: next.postsCarrossel,
+      postsReels: next.postsReels,
+      postsEstatico: next.postsEstatico,
+      postsTrafego: next.postsTrafego,
+      startDate: next.startDate,
+      planNotes: next.notes,
+    });
+  }
+
   // Atalho "P": registrar pagamento do plano focado (se ativo)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -493,8 +521,16 @@ export function PlanosClient({
                       {plan.gapsCount > 0 && (
                         <Badge
                           variant="outline"
-                          className="border-destructive/40 bg-destructive/10 text-destructive text-xs"
-                          title={`${plan.gapsCount} ${plan.gapsCount === 1 ? "mês" : "meses"} em aberto`}
+                          className="border-destructive/40 bg-destructive/10 text-destructive text-xs cursor-help"
+                          title={
+                            `${plan.gapsCount} ${plan.gapsCount === 1 ? "mês" : "meses"} em aberto:\n` +
+                            plan.gapMonths
+                              .map((d) => {
+                                const [year, month] = d.split("-");
+                                return new Date(Number(year), Number(month) - 1).toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
+                              })
+                              .join("\n")
+                          }
                         >
                           +{plan.gapsCount}
                         </Badge>
@@ -545,6 +581,19 @@ export function PlanosClient({
                       >
                         <Pencil size={14} />
                       </Button>
+                      {plan.status !== "ativo" &&
+                        plan.paymentStatus !== "em-dia" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setPaymentPlanId(plan.id)}
+                            title="Registrar pagamento pendente"
+                            className="h-8 gap-1"
+                          >
+                            <CreditCard size={14} />
+                            <span className="text-xs font-medium">Pagar</span>
+                          </Button>
+                        )}
                       {plan.status === "ativo" && (
                         <>
                           <Button
@@ -668,6 +717,7 @@ export function PlanosClient({
         <EditClientDialog
           open={!!editData}
           onClose={() => setEditData(null)}
+          onNavigate={handleNavigateEdit}
           data={editData}
         />
       )}
