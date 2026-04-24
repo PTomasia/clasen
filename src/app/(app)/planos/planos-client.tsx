@@ -716,6 +716,7 @@ export function PlanosClient({
 
       {editData && (
         <EditClientDialog
+          key={editData.planId}
           open={!!editData}
           onClose={() => setEditData(null)}
           onNavigate={handleNavigateEdit}
