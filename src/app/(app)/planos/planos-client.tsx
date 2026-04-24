@@ -69,6 +69,7 @@ interface Plan {
   permanencia: number;
   statusPagamento: StatusPagamento;
   gapsCount: number;
+  gapMonths: string[];
   nextAdjustmentDate: string | null;
   adjustmentSuggestion: {
     suggestedValue: number | null;
@@ -525,7 +526,7 @@ export function PlanosClient({
                           title={
                             `${plan.gapsCount} ${plan.gapsCount === 1 ? "mês" : "meses"} em aberto:\n` +
                             plan.gapMonths
-                              .map((d) => {
+                              .map((d: string) => {
                                 const [year, month] = d.split("-");
                                 return new Date(Number(year), Number(month) - 1).toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
                               })
@@ -582,7 +583,7 @@ export function PlanosClient({
                         <Pencil size={14} />
                       </Button>
                       {plan.status !== "ativo" &&
-                        plan.paymentStatus !== "em-dia" && (
+                        plan.statusPagamento !== "em_dia" && (
                           <Button
                             variant="outline"
                             size="sm"
