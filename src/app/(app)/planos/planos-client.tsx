@@ -195,7 +195,7 @@ export function PlanosClient({
   targetCostPerPost: number | null;
 }) {
   // Status filter (existing)
-  const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "cancelado">("todos");
+  const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "cancelado">("ativo");
 
   // New: search, type filter, payment filter
   const [search, setSearch] = useState("");

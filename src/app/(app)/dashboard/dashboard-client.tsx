@@ -12,9 +12,10 @@ import {
 } from "recharts";
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import { Button } from "@/components/ui/button";
-import { Calendar, AlertTriangle, CreditCard } from "lucide-react";
+import { Calendar, AlertTriangle, CreditCard, SkipForward } from "lucide-react";
 import type { DashboardData } from "@/lib/queries/dashboard";
 import { PaymentDialog } from "@/app/(app)/planos/payment-dialog";
+import { skipBillingCycleAction } from "@/lib/actions/plans";
 
 function KPICard({
   label,
@@ -84,6 +85,16 @@ export function DashboardClient({ data }: { data: DashboardData }) {
     clientName: string;
     planValue: number;
   } | null>(null);
+  const [skipping, setSkipping] = useState<number | null>(null);
+
+  async function handleSkip(planId: number) {
+    setSkipping(planId);
+    try {
+      await skipBillingCycleAction(planId);
+    } finally {
+      setSkipping(null);
+    }
+  }
 
   return (
     <>
@@ -150,6 +161,19 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                   <p className="text-sm font-mono font-semibold shrink-0">
                     {formatBRL(row.planValue)}
                   </p>
+                  {row.billingCycleDays && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 shrink-0 gap-1 text-muted-foreground"
+                      disabled={skipping === row.planId}
+                      onClick={() => handleSkip(row.planId)}
+                      title="Pular cobrança deste mês"
+                    >
+                      <SkipForward size={12} />
+                      <span className="text-xs">Pular</span>
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"

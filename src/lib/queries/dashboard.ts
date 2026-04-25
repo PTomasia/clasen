@@ -49,6 +49,7 @@ export interface AtrasadoRow {
   planValue: number;
   nextPaymentDate: string;
   diasAtraso: number;
+  billingCycleDays: number | null;
 }
 
 export interface UpcomingRow {
@@ -198,6 +199,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         planValue: p.planValue,
         nextPaymentDate: p.nextPaymentDate!,
         diasAtraso,
+        billingCycleDays: p.billingCycleDays ?? null,
       };
     })
     .sort((a, b) => b.diasAtraso - a.diasAtraso);
