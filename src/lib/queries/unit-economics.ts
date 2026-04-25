@@ -1,6 +1,7 @@
 import { db } from "../db";
 import * as schema from "../db/schema";
 import { format, subMonths, startOfMonth } from "date-fns";
+import { FINANCIAL_DATA_START } from "../constants";
 import {
   calcularCAC,
   calcularROAS,
@@ -85,8 +86,16 @@ export function aggregateUnitEconomics(input: {
   revenues: RevenueInput[];
   adSpendMap: Map<string, number>;
   today: Date;
+  financialDataStart?: string;
 }): UnitEconomicsData {
-  const { plans, payments, revenues, adSpendMap, today } = input;
+  const { plans, adSpendMap, today, financialDataStart } = input;
+
+  const payments = financialDataStart
+    ? input.payments.filter((p) => p.paymentDate >= financialDataStart)
+    : input.payments;
+  const revenues = financialDataStart
+    ? input.revenues.filter((r) => r.date >= financialDataStart)
+    : input.revenues;
   const currentMonthStart = startOfMonth(today);
 
   // Últimos 12 meses (incluindo o atual)
@@ -253,5 +262,6 @@ export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
     revenues: revenues as any,
     adSpendMap,
     today: new Date(),
+    financialDataStart: FINANCIAL_DATA_START,
   });
 }

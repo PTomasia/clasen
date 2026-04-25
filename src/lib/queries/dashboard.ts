@@ -1,6 +1,7 @@
 import { and, isNotNull, gte, lte, eq, isNull, lt } from "drizzle-orm";
 import { db } from "../db";
 import * as schema from "../db/schema";
+import { FINANCIAL_DATA_START } from "../constants";
 import {
   format,
   addDays,
@@ -163,13 +164,17 @@ export async function getDashboardData(): Promise<DashboardData> {
   const permMedia3M = Math.round(avg(ativosPlus3M));
 
   // ─── MRR últimos 12 meses ─────────────────────────────────────────
+  const paymentsFromCutoff = allPayments.filter(
+    (p) => p.paymentDate >= FINANCIAL_DATA_START
+  );
+
   const mrr: MRRPoint[] = [];
   for (let i = 11; i >= 0; i--) {
     const monthDate = startOfMonth(subMonths(now, i));
     const yyyymm = format(monthDate, "yyyy-MM");
 
     // Somar pagamentos do mês com status "pago"
-    const monthPayments = allPayments.filter((p) => {
+    const monthPayments = paymentsFromCutoff.filter((p) => {
       if (p.status !== "pago") return false;
       return p.paymentDate.startsWith(yyyymm);
     });

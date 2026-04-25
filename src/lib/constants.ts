@@ -42,6 +42,10 @@ export const EXPENSE_CATEGORIES = ["fixo", "variavel"] as const;
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
 // Produtos comuns de receita avulsa
+// Corte temporal: agregações financeiras só consideram dados a partir desta data
+export const FINANCIAL_DATA_START = "2026-01-01";
+
+// Produtos comuns de receita avulsa
 export const REVENUE_PRODUCTS = [
   "Arte para tráfego",
   "PDF",

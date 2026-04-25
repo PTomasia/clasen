@@ -268,3 +268,68 @@ describe("aggregateUnitEconomics — totais", () => {
     expect(data.totals.paybackMeses).toBeNull();
   });
 });
+
+// ─── CUT-1: corte temporal jan/2026 ──────────────────────────────────────────
+
+describe("aggregateUnitEconomics — corte temporal (financialDataStart)", () => {
+  it("exclui pagamentos anteriores ao corte da receita mensal", () => {
+    const data = aggregateUnitEconomics({
+      plans: [],
+      payments: [
+        { clientId: 1, paymentDate: "2025-12-10", amount: 9999, status: "pago" }, // excluído
+        { clientId: 1, paymentDate: "2026-01-10", amount: 500, status: "pago" },  // incluído
+      ],
+      revenues: [],
+      adSpendMap: new Map(),
+      financialDataStart: "2026-01-01",
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2025-12").receita).toBe(0);
+    expect(pickMonth(data, "2026-01").receita).toBe(500);
+  });
+
+  it("exclui receitas avulsas anteriores ao corte", () => {
+    const data = aggregateUnitEconomics({
+      plans: [],
+      payments: [],
+      revenues: [
+        { clientId: 1, date: "2025-11-05", amount: 7777, isPaid: true }, // excluído
+        { clientId: 1, date: "2026-02-05", amount: 200, isPaid: true },  // incluído
+      ],
+      adSpendMap: new Map(),
+      financialDataStart: "2026-01-01",
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2025-11").receita).toBe(0);
+    expect(pickMonth(data, "2026-02").receita).toBe(200);
+  });
+
+  it("LTV exclui pagamentos pré-corte (recalculado apenas com 2026+)", () => {
+    const data = aggregateUnitEconomics({
+      plans: [],
+      payments: [
+        { clientId: 1, paymentDate: "2025-06-01", amount: 5000, status: "pago" }, // excluído do LTV
+        { clientId: 1, paymentDate: "2026-01-01", amount: 600, status: "pago" },  // incluído
+      ],
+      revenues: [],
+      adSpendMap: new Map(),
+      financialDataStart: "2026-01-01",
+      today: TODAY,
+    });
+    // LTV de cliente 1 = 600 (apenas 2026+)
+    expect(data.totals.ltvMedio).toBe(600);
+  });
+
+  it("sem financialDataStart inclui tudo (comportamento legacy)", () => {
+    const data = aggregateUnitEconomics({
+      plans: [],
+      payments: [
+        { clientId: 1, paymentDate: "2025-12-01", amount: 400, status: "pago" },
+      ],
+      revenues: [],
+      adSpendMap: new Map(),
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2025-12").receita).toBe(400);
+  });
+});

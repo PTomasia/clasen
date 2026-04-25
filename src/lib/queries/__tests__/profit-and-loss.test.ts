@@ -220,3 +220,64 @@ describe("aggregateProfitAndLoss — totais", () => {
     expect(data.totals.despesaVariavelTotal).toBe(500);
   });
 });
+
+// ─── CUT-1: corte temporal jan/2026 ──────────────────────────────────────────
+
+describe("aggregateProfitAndLoss — corte temporal (financialDataStart)", () => {
+  it("exclui pagamentos anteriores ao corte (2025-12 excluído, 2026-01 incluído)", () => {
+    const data = aggregateProfitAndLoss({
+      payments: [
+        { paymentDate: "2025-12-05", amount: 9999, status: "pago" }, // excluído pelo corte
+        { paymentDate: "2026-01-05", amount: 500, status: "pago" },  // incluído
+      ],
+      revenues: [],
+      expenses: [],
+      financialDataStart: "2026-01-01",
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2025-12").receitaRecorrente).toBe(0);
+    expect(pickMonth(data, "2026-01").receitaRecorrente).toBe(500);
+  });
+
+  it("exclui receitas avulsas anteriores ao corte", () => {
+    const data = aggregateProfitAndLoss({
+      payments: [],
+      revenues: [
+        { date: "2025-11-10", amount: 8888, isPaid: true }, // excluído
+        { date: "2026-02-10", amount: 300, isPaid: true },  // incluído
+      ],
+      expenses: [],
+      financialDataStart: "2026-01-01",
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2025-11").receitaAvulsa).toBe(0);
+    expect(pickMonth(data, "2026-02").receitaAvulsa).toBe(300);
+  });
+
+  it("exclui despesas anteriores ao corte (month < 2026-01)", () => {
+    const data = aggregateProfitAndLoss({
+      payments: [],
+      revenues: [],
+      expenses: [
+        { month: "2025-12", category: "fixo", amount: 7777, isPaid: true }, // excluído
+        { month: "2026-01", category: "fixo", amount: 1000, isPaid: true },  // incluído
+      ],
+      financialDataStart: "2026-01-01",
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2025-12").despesaTotal).toBe(0);
+    expect(pickMonth(data, "2026-01").despesaTotal).toBe(1000);
+  });
+
+  it("sem financialDataStart inclui tudo (comportamento legacy)", () => {
+    const data = aggregateProfitAndLoss({
+      payments: [
+        { paymentDate: "2025-12-05", amount: 400, status: "pago" },
+      ],
+      revenues: [],
+      expenses: [],
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2025-12").receitaRecorrente).toBe(400);
+  });
+});

@@ -1,6 +1,7 @@
 import { db } from "../db";
 import * as schema from "../db/schema";
 import { format, subMonths, startOfMonth } from "date-fns";
+import { FINANCIAL_DATA_START } from "../constants";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -72,8 +73,20 @@ export function aggregateProfitAndLoss(input: {
   revenues: RevenueInput[];
   expenses: ExpenseInput[];
   today: Date;
+  financialDataStart?: string;
 }): PnLData {
-  const { payments, revenues, expenses, today } = input;
+  const { today, financialDataStart } = input;
+  const cutoffMonth = financialDataStart ? financialDataStart.slice(0, 7) : undefined;
+
+  const payments = financialDataStart
+    ? input.payments.filter((p) => p.paymentDate >= financialDataStart)
+    : input.payments;
+  const revenues = financialDataStart
+    ? input.revenues.filter((r) => r.date >= financialDataStart)
+    : input.revenues;
+  const expenses = cutoffMonth
+    ? input.expenses.filter((e) => e.month >= cutoffMonth)
+    : input.expenses;
   const currentMonthStart = startOfMonth(today);
 
   // Últimos 12 meses (inclui o atual)
@@ -171,5 +184,6 @@ export async function getProfitAndLossData(): Promise<PnLData> {
     revenues: revenues as any,
     expenses: expenses as any,
     today: new Date(),
+    financialDataStart: FINANCIAL_DATA_START,
   });
 }
