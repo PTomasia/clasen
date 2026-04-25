@@ -394,6 +394,44 @@ export async function changePlan(db: any, input: ChangePlanInput) {
   return { oldPlan, newPlan: result.plan, client: result.client };
 }
 
+// ─── skipBillingCycle ─────────────────────────────────────────────────────────
+// Avança nextPaymentDate em 1 ciclo sem registrar pagamento.
+// Uso: cliente "congelado" que pediu para pular a cobrança do mês.
+
+export async function skipBillingCycle(db: any, planId: number) {
+  const plan = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+
+  if (!plan) throw new Error("plano não encontrado");
+  if (plan.status !== "ativo") throw new Error("plano não está ativo");
+  if (!plan.billingCycleDays) throw new Error("plano não tem ciclo de cobrança definido");
+  if (!plan.nextPaymentDate) throw new Error("próximo vencimento não definido");
+
+  const newNextPaymentDate = calcularProximoVencimento(
+    plan.nextPaymentDate,
+    plan.billingCycleDays,
+    plan.billingCycleDays2
+  );
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const logEntry = `Cobrança pulada em ${today}`;
+  const newNotes = plan.notes ? `${plan.notes}\n${logEntry}` : logEntry;
+
+  await db.update(schema.subscriptionPlans)
+    .set({
+      nextPaymentDate: newNextPaymentDate,
+      notes: newNotes,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .run();
+
+  return { ...plan, nextPaymentDate: newNextPaymentDate, notes: newNotes };
+}
+
 // ─── deletePlan ───────────────────────────────────────────────────────────────
 
 export async function deletePlan(db: any, planId: number) {

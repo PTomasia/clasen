@@ -11,6 +11,7 @@ import {
   deletePlan as deletePlanService,
   changePlan as changePlanService,
   getPaymentHistory as getPaymentHistoryService,
+  skipBillingCycle as skipBillingCycleService,
 } from "../services/plans";
 import type { CreatePlanInput, RecordPaymentInput, UpdateClientInput, UpdatePlanInput, ChangePlanInput, ClosePlanOptions } from "../services/plans";
 import { REVALIDATE_PATHS } from "../constants";
@@ -69,5 +70,10 @@ export async function getPaymentHistoryAction(planId: number) {
 
 export async function deletePlanAction(planId: number) {
   await deletePlanService(db as any, planId);
+  revalidateAll();
+}
+
+export async function skipBillingCycleAction(planId: number) {
+  await skipBillingCycleService(db as any, planId);
   revalidateAll();
 }

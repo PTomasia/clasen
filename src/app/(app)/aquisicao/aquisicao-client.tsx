@@ -79,6 +79,9 @@ export function AquisicaoClient({ data }: { data: UnitEconomicsData }) {
       </div>
 
       {/* Table */}
+      <p className="text-sm text-muted-foreground -mb-1">
+        Informe o investimento mensal em ads (Meta, Google, etc) na coluna <strong>Ad Spend</strong> — clique no valor para editar. O valor entra automaticamente no P&L como despesa de marketing.
+      </p>
       <div className="bg-card border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader>
@@ -180,11 +183,11 @@ function MonthRowView({ row }: { row: MonthRow }) {
             title="Clique para editar"
           >
             {row.adSpend > 0 ? formatBRL(row.adSpend) : (
-              <span className="text-muted-foreground italic">—</span>
+              <span className="text-muted-foreground italic text-xs">Clique para informar</span>
             )}
             <Pencil
               size={11}
-              className="opacity-0 group-hover:opacity-100 text-muted-foreground"
+              className="text-muted-foreground"
             />
           </button>
         )}

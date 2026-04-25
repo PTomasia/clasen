@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useTransition } from "react";
 import {
   Table,
   TableBody,
@@ -25,6 +25,7 @@ import {
   TrendingUp,
   TrendingDown,
   Settings,
+  SkipForward,
 } from "lucide-react";
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import type { StatusPagamento } from "@/lib/utils/calculations";
@@ -42,6 +43,7 @@ import { EditClientDialog, type EditDialogData } from "./edit-client-dialog";
 import { ChangePlanDialog, type ChangePlanData } from "./change-plan-dialog";
 import { PaymentHistoryDialog } from "./payment-history-dialog";
 import { TargetPriceDialog } from "./target-price-dialog";
+import { skipBillingCycleAction } from "@/lib/actions/plans";
 
 interface Plan {
   id: number;
@@ -215,6 +217,15 @@ export function PlanosClient({
   const [focusedPlanId, setFocusedPlanId] = useState<number | null>(null);
   const [showTargetPriceDialog, setShowTargetPriceDialog] = useState(false);
 
+  // UX-1.4 — Pular cobrança
+  const [, startSkipTransition] = useTransition();
+  function handleSkipBilling(planId: number) {
+    if (!confirm("Pular cobrança deste mês? O próximo vencimento será avançado em 1 ciclo.")) return;
+    startSkipTransition(async () => {
+      await skipBillingCycleAction(planId);
+    });
+  }
+
   // Derive unique plan types from data
   const planTypes = useMemo(
     () => [...new Set(plans.map((p) => p.planType))].sort(),
@@ -286,9 +297,14 @@ export function PlanosClient({
       statusPagamento: pgtoFilter,
     });
 
-    // 3. Sort
+    // 3. Sort — default: ativo primeiro, depois nome alfabético (UX-1.2)
     if (sortKey) {
       result = sortPlans(result, sortKey, sortDirection);
+    } else {
+      result = [...result].sort((a, b) => {
+        if (a.status === b.status) return a.clientName.localeCompare(b.clientName, "pt-BR");
+        return a.status === "ativo" ? -1 : 1;
+      });
     }
 
     return result;
@@ -455,6 +471,7 @@ export function PlanosClient({
               <TableHead className="text-center">Posts</TableHead>
               <SortableHead label="Perm." sortKey="permanencia" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
               <SortableHead label="Pgto" sortKey="statusPagamento" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
+              <TableHead>Último pgto</TableHead>
               <TableHead>Status</TableHead>
               {targetCostPerPost && <TableHead>Reajuste</TableHead>}
               <TableHead className="text-right">Ações</TableHead>
@@ -463,7 +480,7 @@ export function PlanosClient({
           <TableBody>
             {processedPlans.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={targetCostPerPost ? 10 : 9} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={targetCostPerPost ? 11 : 10} className="text-center text-muted-foreground py-8">
                   Nenhum plano encontrado
                 </TableCell>
               </TableRow>
@@ -537,6 +554,9 @@ export function PlanosClient({
                         </Badge>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                    {plan.lastPaymentDate ? formatDate(plan.lastPaymentDate) : "—"}
                   </TableCell>
                   <TableCell>
                     <PlanStatusBadge status={plan.status} />
@@ -655,6 +675,16 @@ export function PlanosClient({
                             <CreditCard size={14} />
                             <span className="text-xs font-medium">Pagar</span>
                           </Button>
+                          {plan.billingCycleDays && plan.nextPaymentDate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSkipBilling(plan.id)}
+                              title="Pular cobrança — avança o próximo vencimento em 1 ciclo"
+                            >
+                              <SkipForward size={14} />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

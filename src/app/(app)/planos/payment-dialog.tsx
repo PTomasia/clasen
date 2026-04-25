@@ -106,6 +106,11 @@ export function PaymentDialog({
                 <SelectItem value="inadimplente">Inadimplente</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              <strong>Pago</strong> = quitado integralmente.{" "}
+              <strong>Pendente</strong> = pagamento parcial recebido.{" "}
+              <strong>Inadimplente</strong> = cobrança falhou.
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

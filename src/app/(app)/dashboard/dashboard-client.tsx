@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   BarChart,
   Bar,
@@ -10,8 +11,10 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
-import { Calendar, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Calendar, AlertTriangle, CreditCard } from "lucide-react";
 import type { DashboardData } from "@/lib/queries/dashboard";
+import { PaymentDialog } from "@/app/(app)/planos/payment-dialog";
 
 function KPICard({
   label,
@@ -76,7 +79,14 @@ function MRRChart({ data }: { data: DashboardData["mrr"] }) {
 }
 
 export function DashboardClient({ data }: { data: DashboardData }) {
+  const [paymentPlan, setPaymentPlan] = useState<{
+    id: number;
+    clientName: string;
+    planValue: number;
+  } | null>(null);
+
   return (
+    <>
     <div className="space-y-6">
       {/* KPIs principais */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -126,7 +136,7 @@ export function DashboardClient({ data }: { data: DashboardData }) {
               {data.atrasados.map((row) => (
                 <li
                   key={row.planId}
-                  className="flex items-center justify-between py-2.5"
+                  className="flex items-center gap-3 py-2.5"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{row.clientName}</p>
@@ -137,9 +147,24 @@ export function DashboardClient({ data }: { data: DashboardData }) {
                       </span>
                     </p>
                   </div>
-                  <p className="text-sm font-mono font-semibold">
+                  <p className="text-sm font-mono font-semibold shrink-0">
                     {formatBRL(row.planValue)}
                   </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 shrink-0 gap-1"
+                    onClick={() =>
+                      setPaymentPlan({
+                        id: row.planId,
+                        clientName: row.clientName,
+                        planValue: row.planValue,
+                      })
+                    }
+                  >
+                    <CreditCard size={12} />
+                    <span className="text-xs">Pagar</span>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -189,5 +214,14 @@ export function DashboardClient({ data }: { data: DashboardData }) {
         </div>
       </div>
     </div>
+
+      {paymentPlan && (
+        <PaymentDialog
+          open={!!paymentPlan}
+          onClose={() => setPaymentPlan(null)}
+          plan={paymentPlan}
+        />
+      )}
+    </>
   );
 }

@@ -85,6 +85,7 @@ import {
   updatePlan,
   deletePlan,
   changePlan,
+  skipBillingCycle,
 } from "../plans";
 import { getClientStatus } from "../clients";
 
@@ -2144,6 +2145,163 @@ describe("persistência após criação (bug fix: await)", () => {
 
     const ativos = await getActivePlans(db);
     expect(ativos).toHaveLength(0);
+  });
+});
+
+describe("skipBillingCycle", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("avança nextPaymentDate em 1 ciclo", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Pular Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    // createPlan com startDate 2026-04-01 e billing dia 10 → nextPaymentDate = 2026-05-10
+    const before = await getPlanById(db, plan.id);
+    expect(before!.nextPaymentDate).toBe("2026-05-10");
+
+    await skipBillingCycle(db, plan.id);
+
+    const after = await getPlanById(db, plan.id);
+    expect(after!.nextPaymentDate).toBe("2026-06-10");
+  });
+
+  it("com 2 vencimentos por mês: avança para o próximo vencimento do mesmo mês", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Skip Dual",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    // nextPaymentDate inicial = 2026-05-10
+    await skipBillingCycle(db, plan.id);
+
+    const after = await getPlanById(db, plan.id);
+    // Pulou 2026-05-10 → próximo = 2026-05-25 (mesmo mês)
+    expect(after!.nextPaymentDate).toBe("2026-05-25");
+  });
+
+  it("respeita mês curto (dia 30 em fevereiro → dia 28)", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Skip Fev",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 30,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-01-30", amount: 500 });
+    // Após pagamento em 30/jan → nextPaymentDate = 2026-02-28 (dia 30 em fev = 28)
+    const before = await getPlanById(db, plan.id);
+    expect(before!.nextPaymentDate).toBe("2026-02-28");
+
+    await skipBillingCycle(db, plan.id);
+
+    const after = await getPlanById(db, plan.id);
+    // Pulou 2026-02-28 → próximo = 2026-03-30
+    expect(after!.nextPaymentDate).toBe("2026-03-30");
+  });
+
+  it("registra log nas notes do plano", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Log Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await skipBillingCycle(db, plan.id);
+
+    const after = await getPlanById(db, plan.id);
+    expect(after!.notes).toMatch(/Cobrança pulada em \d{4}-\d{2}-\d{2}/);
+  });
+
+  it("preserva notes existentes ao adicionar log", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Notas Preserv",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+      notes: "nota original",
+    });
+
+    await skipBillingCycle(db, plan.id);
+
+    const after = await getPlanById(db, plan.id);
+    expect(after!.notes).toContain("nota original");
+    expect(after!.notes).toContain("Cobrança pulada em");
+  });
+
+  it("rejeita plano inexistente", async () => {
+    await expect(skipBillingCycle(db, 9999)).rejects.toThrow("plano não encontrado");
+  });
+
+  it("rejeita plano sem billingCycleDays", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Sem Ciclo",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await expect(skipBillingCycle(db, plan.id)).rejects.toThrow(
+      "plano não tem ciclo de cobrança definido"
+    );
+  });
+
+  it("rejeita plano cancelado", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Cancelado Skip",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await closePlan(db, plan.id, "2026-03-01");
+
+    await expect(skipBillingCycle(db, plan.id)).rejects.toThrow("plano não está ativo");
   });
 });
 
