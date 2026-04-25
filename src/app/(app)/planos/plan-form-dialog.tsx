@@ -262,14 +262,15 @@ export function PlanFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Vencimento (dia)</Label>
+              <Label>Vencimento (dia) *</Label>
               <Input
                 type="number"
                 min="1"
                 max="31"
-                placeholder="—"
+                placeholder="ex: 10"
                 value={billingCycleDays}
                 onChange={(e) => setBillingCycleDays(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-2">

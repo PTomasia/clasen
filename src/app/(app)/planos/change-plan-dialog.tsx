@@ -146,14 +146,15 @@ export function ChangePlanDialog({
               />
             </div>
             <div className="space-y-1">
-              <Label>Venc. (dia)</Label>
+              <Label>Venc. (dia) *</Label>
               <Input
                 type="number"
                 min="1"
                 max="31"
-                placeholder="—"
+                placeholder="ex: 10"
                 value={billingCycleDays}
                 onChange={(e) => setBillingCycleDays(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-1">

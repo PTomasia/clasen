@@ -1309,6 +1309,206 @@ describe("updatePlan", () => {
       })
     ).rejects.toThrow();
   });
+
+  // ─── FIX-1.1: recalcular nextPaymentDate quando billingCycleDays muda ──────
+  // Reproduz bug observado em produção (24/04/2026): planos da Innera/Dara
+  // ficaram com next_payment_date NULL após payment + update de billing.
+
+  it("FIX-1.1: ao adicionar billingCycleDays em plano com pagamento, recalcula nextPaymentDate", async () => {
+    // Plano criado sem billingCycleDays
+    const { plan } = await createPlan(db, {
+      clientName: "Innera Repro",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-27",
+    });
+
+    // Pagamento registrado (next_payment_date fica null pq não tem billing)
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-11",
+      amount: 500,
+    });
+
+    const beforeUpdate = await getPlanById(db, plan.id);
+    expect(beforeUpdate!.lastPaymentDate).toBe("2026-04-11");
+    expect(beforeUpdate!.nextPaymentDate).toBeNull();
+
+    // Pedro edita e configura billingCycleDays = 30
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 30,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+    });
+
+    const afterUpdate = await getPlanById(db, plan.id);
+    // Próximo vencimento: dia 30 do mês seguinte ao último pagamento (abril → maio/30)
+    expect(afterUpdate!.nextPaymentDate).toBe("2026-05-30");
+    expect(afterUpdate!.lastPaymentDate).toBe("2026-04-11");
+  });
+
+  it("FIX-1.1: ao mudar billingCycleDays existente, recalcula nextPaymentDate", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Mudou Vencimento",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-10",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-10",
+      amount: 500,
+    });
+
+    // Antes: next = 2026-05-10
+    const before = await getPlanById(db, plan.id);
+    expect(before!.nextPaymentDate).toBe("2026-05-10");
+
+    // Cliente pediu pra mudar pro dia 20
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 20,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+    });
+
+    const after = await getPlanById(db, plan.id);
+    expect(after!.nextPaymentDate).toBe("2026-05-20");
+  });
+
+  it("FIX-1.1: plano sem lastPaymentDate, ao adicionar billing, mantém nextPaymentDate de createPlan", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Sem Pagto Ainda",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    // createPlan já calculou: dia 15 do mês seguinte → 2026-05-15
+    const before = await getPlanById(db, plan.id);
+    expect(before!.nextPaymentDate).toBe("2026-05-15");
+    expect(before!.lastPaymentDate).toBeNull();
+
+    // Update mexe em outras coisas, billingCycleDays não muda
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Personalizado",
+      planValue: 600,
+      billingCycleDays: 15,
+      postsCarrossel: 6,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+    });
+
+    const after = await getPlanById(db, plan.id);
+    // nextPaymentDate preservado (não há lastPaymentDate pra recalcular)
+    expect(after!.nextPaymentDate).toBe("2026-05-15");
+  });
+
+  it("FIX-1.1: update sem billingCycleDays não zera nextPaymentDate existente", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Mantém Next",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-10",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-10",
+      amount: 500,
+    });
+
+    // Update remove billingCycleDays (não passa o campo)
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Personalizado",
+      planValue: 500,
+      // billingCycleDays: omitido → vira null
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+    });
+
+    const after = await getPlanById(db, plan.id);
+    // billingCycleDays virou null (comportamento atual de updatePlan), mas
+    // nextPaymentDate é PRESERVADO (não destruir histórico sem necessidade).
+    expect(after!.billingCycleDays).toBeNull();
+    expect(after!.nextPaymentDate).toBe("2026-05-10");
+  });
+
+  it("FIX-1.1: 2 vencimentos por mês são respeitados no recálculo", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dois Vencimentos",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 5,
+      billingCycleDays2: 20,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-03-05",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-05",
+      amount: 250,
+    });
+
+    // Após pagto dia 5, próximo é dia 20 do mesmo mês
+    const before = await getPlanById(db, plan.id);
+    expect(before!.nextPaymentDate).toBe("2026-04-20");
+
+    // Pedro muda pra 8 e 22
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 8,
+      billingCycleDays2: 22,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+    });
+
+    const after = await getPlanById(db, plan.id);
+    // Recalculou após mudança de billing — agora 22 do mesmo mês
+    expect(after!.nextPaymentDate).toBe("2026-04-22");
+  });
 });
 
 describe("deletePlan", () => {

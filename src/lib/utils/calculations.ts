@@ -1,4 +1,4 @@
-import { differenceInMonths, parseISO, format } from "date-fns";
+import { addMonths, differenceInMonths, format, getDaysInMonth, parseISO } from "date-fns";
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -58,6 +58,49 @@ export function calcularStatusPagamento(
   // Evita problemas de timezone com Date objects
   const todayStr = format(new Date(), "yyyy-MM-dd");
   return nextPaymentDate >= todayStr ? "em_dia" : "atrasado";
+}
+
+// ─── Próximo vencimento ────────────────────────────────────────────────────────
+// Dada uma data-base e o(s) dia(s) de vencimento, retorna o próximo vencimento
+// estritamente APÓS a data-base. Suporta 1 ou 2 vencimentos por mês.
+// Respeita meses curtos: dia 30 em fevereiro → último dia do mês.
+
+export function calcularProximoVencimento(
+  fromDate: string,
+  billingDay1: number,
+  billingDay2?: number | null
+): string {
+  const base = parseISO(fromDate);
+  const fromDay = base.getDate();
+
+  if (billingDay2) {
+    const [earlier, later] =
+      billingDay1 < billingDay2 ? [billingDay1, billingDay2] : [billingDay2, billingDay1];
+
+    if (fromDay < later) {
+      const maxDay = getDaysInMonth(base);
+      const actualDay = Math.min(later, maxDay);
+      return format(
+        new Date(base.getFullYear(), base.getMonth(), actualDay),
+        "yyyy-MM-dd"
+      );
+    }
+    const nextMonth = addMonths(base, 1);
+    const maxDay = getDaysInMonth(nextMonth);
+    const actualDay = Math.min(earlier, maxDay);
+    return format(
+      new Date(nextMonth.getFullYear(), nextMonth.getMonth(), actualDay),
+      "yyyy-MM-dd"
+    );
+  }
+
+  const nextMonth = addMonths(base, 1);
+  const maxDay = getDaysInMonth(nextMonth);
+  const actualDay = Math.min(billingDay1, maxDay);
+  return format(
+    new Date(nextMonth.getFullYear(), nextMonth.getMonth(), actualDay),
+    "yyyy-MM-dd"
+  );
 }
 
 // ─── Mediana ───────────────────────────────────────────────────────────────────

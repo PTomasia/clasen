@@ -1,7 +1,7 @@
 import { eq, isNull, sql } from "drizzle-orm";
 import { addMonths, format, parseISO, getDaysInMonth } from "date-fns";
 import * as schema from "../db/schema";
-import { calcularCustoPost, calcularPermanencia } from "../utils/calculations";
+import { calcularCustoPost, calcularPermanencia, calcularProximoVencimento } from "../utils/calculations";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -210,41 +210,13 @@ export async function recordPayment(db: any, input: RecordPaymentInput) {
 
   // Atualizar last_payment_date e next_payment_date no plano
   // billingCycleDays = dia de vencimento no mês (ex: 10 = vence dia 10)
-  let nextPaymentDate: string | null = null;
-  if (plan.billingCycleDays) {
-    const paymentDate = parseISO(input.paymentDate);
-    const payDay = paymentDate.getDate();
-    const due1 = plan.billingCycleDays;
-    const due2 = plan.billingCycleDays2;
-
-    let nextDate: Date;
-
-    if (due2) {
-      // Dois vencimentos: encontrar o próximo após a data de pagamento
-      const [earlier, later] = due1 < due2 ? [due1, due2] : [due2, due1];
-
-      if (payDay < later) {
-        // Próximo é o "later" do mesmo mês
-        const maxDay = getDaysInMonth(paymentDate);
-        const actualDay = Math.min(later, maxDay);
-        nextDate = new Date(paymentDate.getFullYear(), paymentDate.getMonth(), actualDay);
-      } else {
-        // Próximo é o "earlier" do próximo mês
-        const nextMonth = addMonths(paymentDate, 1);
-        const maxDay = getDaysInMonth(nextMonth);
-        const actualDay = Math.min(earlier, maxDay);
-        nextDate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), actualDay);
-      }
-    } else {
-      // Um vencimento: dia X do próximo mês
-      const nextMonth = addMonths(paymentDate, 1);
-      const maxDay = getDaysInMonth(nextMonth);
-      const actualDay = Math.min(due1, maxDay);
-      nextDate = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), actualDay);
-    }
-
-    nextPaymentDate = format(nextDate, "yyyy-MM-dd");
-  }
+  const nextPaymentDate = plan.billingCycleDays
+    ? calcularProximoVencimento(
+        input.paymentDate,
+        plan.billingCycleDays,
+        plan.billingCycleDays2
+      )
+    : null;
 
   await db.update(schema.subscriptionPlans)
     .set({
@@ -349,17 +321,35 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
 
   if (!existing) throw new Error("plano não encontrado");
 
+  const newBillingDay1 = input.billingCycleDays ?? null;
+  const newBillingDay2 = input.billingCycleDays2 ?? null;
+
+  // Recalcular nextPaymentDate quando o ciclo de cobrança muda E há base
+  // temporal (lastPaymentDate). Sem base, preserva o valor anterior.
+  const billingChanged =
+    newBillingDay1 !== existing.billingCycleDays ||
+    newBillingDay2 !== existing.billingCycleDays2;
+  const recalculatedNext =
+    billingChanged && newBillingDay1 && existing.lastPaymentDate
+      ? calcularProximoVencimento(
+          existing.lastPaymentDate,
+          newBillingDay1,
+          newBillingDay2
+        )
+      : undefined;
+
   await db.update(schema.subscriptionPlans)
     .set({
       planType: input.planType,
       planValue: input.planValue,
-      billingCycleDays: input.billingCycleDays ?? null,
-      billingCycleDays2: input.billingCycleDays2 ?? null,
+      billingCycleDays: newBillingDay1,
+      billingCycleDays2: newBillingDay2,
       postsCarrossel: input.postsCarrossel,
       postsReels: input.postsReels,
       postsEstatico: input.postsEstatico,
       postsTrafego: input.postsTrafego,
       ...(input.startDate ? { startDate: input.startDate } : {}),
+      ...(recalculatedNext !== undefined ? { nextPaymentDate: recalculatedNext } : {}),
       notes: input.notes?.trim() || null,
       updatedAt: new Date().toISOString(),
     })
