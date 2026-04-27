@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   UserCheck,
+  GitMerge,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -24,9 +25,10 @@ const navigation = [
   { name: "Receitas Avulsas", href: "/receitas-avulsas", icon: DollarSign, sprint: 4 },
   { name: "Aquisição", href: "/aquisicao", icon: TrendingUp, sprint: 4 },
   { name: "Despesas", href: "/despesas", icon: Receipt, sprint: 5 },
+  { name: "Conciliação", href: "/conciliacao", icon: GitMerge, sprint: 6 },
 ];
 
-const CURRENT_SPRINT = 5;
+const CURRENT_SPRINT = 6;
 
 export function Sidebar() {
   const pathname = usePathname();
