@@ -14,8 +14,10 @@ import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import { Button } from "@/components/ui/button";
 import { Calendar, AlertTriangle, CreditCard, SkipForward } from "lucide-react";
 import type { DashboardData } from "@/lib/queries/dashboard";
+import type { PnLData } from "@/lib/queries/profit-and-loss";
 import { PaymentDialog } from "@/app/(app)/planos/payment-dialog";
 import { skipBillingCycleAction } from "@/lib/actions/plans";
+import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 
 function KPICard({
   label,
@@ -79,7 +81,13 @@ function MRRChart({ data }: { data: DashboardData["mrr"] }) {
   );
 }
 
-export function DashboardClient({ data }: { data: DashboardData }) {
+export function DashboardClient({
+  data,
+  pnl,
+}: {
+  data: DashboardData;
+  pnl: PnLData;
+}) {
   const [paymentPlan, setPaymentPlan] = useState<{
     id: number;
     clientName: string;
@@ -123,6 +131,9 @@ export function DashboardClient({ data }: { data: DashboardData }) {
 
       {/* MRR Chart */}
       <MRRChart data={data.mrr} />
+
+      {/* Evolução mensal: receita, despesa, lucro */}
+      <MonthlyEvolutionChart pnl={pnl} />
 
       {/* Duas colunas: Atrasados + Próximos */}
       <div className="grid md:grid-cols-2 gap-6">
