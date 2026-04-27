@@ -94,7 +94,8 @@ export function AquisicaoClient({ data }: { data: UnitEconomicsData }) {
               <TableHead className="text-right">ROAS</TableHead>
               <TableHead className="text-right">Ativos início</TableHead>
               <TableHead className="text-right">Churned</TableHead>
-              <TableHead className="text-right">Churn %</TableHead>
+              <TableHead className="text-right">Churn % (clientes)</TableHead>
+              <TableHead className="text-right">Churn % (receita)</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -109,7 +110,9 @@ export function AquisicaoClient({ data }: { data: UnitEconomicsData }) {
         <strong>Como é calculado:</strong> Novos clientes = cliente cujo primeiro
         plano começa no mês. CAC = ad spend / novos. ROAS = receita / ad spend.
         Receita = pagamentos recorrentes + avulsas (pagas). Churned = clientes
-        cujo último plano encerrou no mês e não houve retomada.
+        cujo último plano encerrou no mês e não houve retomada.{" "}
+        <strong>Churn % (receita)</strong> = MRR perdido / MRR ativo no início do mês
+        — mais relevante que a contagem de cabeças quando os tickets diferem.
       </p>
     </>
   );
@@ -221,7 +224,18 @@ function MonthRowView({ row }: { row: MonthRow }) {
       </TableCell>
       <TableCell className="text-right font-mono">
         {row.churnRate !== null ? (
-          `${(row.churnRate * 100).toFixed(1)}%`
+          <span className={row.churnRate > 0 ? "text-destructive" : undefined}>
+            {(row.churnRate * 100).toFixed(1)}%
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell className="text-right font-mono">
+        {row.revenueChurnRate !== null ? (
+          <span className={row.revenueChurnRate > 0 ? "text-destructive" : undefined}>
+            {(row.revenueChurnRate * 100).toFixed(1)}%
+          </span>
         ) : (
           <span className="text-muted-foreground">—</span>
         )}

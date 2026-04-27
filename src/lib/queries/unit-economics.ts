@@ -23,7 +23,8 @@ export interface MonthRow {
   roas: number | null;
   ativosInicio: number;
   churned: number;
-  churnRate: number | null; // 0..1
+  churnRate: number | null; // 0..1 (count-based)
+  revenueChurnRate: number | null; // 0..1 (MRR-based)
 }
 
 export interface UnitEconomicsData {
@@ -149,22 +150,31 @@ export function aggregateUnitEconomics(input: {
     // Ativos no início do mês: start_date <= 1º do mês E (end_date IS NULL OR end_date >= 1º do mês)
     const monthStart = m + "-01";
     const activeClientIds = new Set<number>();
+    let mrrInicio = 0;
     for (const p of plans) {
       if (p.startDate > monthStart) continue;
       if (p.endDate && p.endDate < monthStart) continue;
       activeClientIds.add(p.clientId);
+      mrrInicio += p.planValue;
     }
     const ativosInicio = activeClientIds.size;
 
-    // Churned no mês
+    // Churned no mês (count-based) + receita perdida (MRR-based)
     let churned = 0;
-    for (const churnDate of churnDateByClient.values()) {
-      if (monthKey(churnDate) === m) churned++;
+    let receitaPerdida = 0;
+    for (const [cid, churnDate] of churnDateByClient.entries()) {
+      if (monthKey(churnDate) !== m) continue;
+      churned++;
+      // Soma planValues de todos os planos desse cliente
+      for (const p of (plansByClient.get(cid) ?? [])) {
+        receitaPerdida += p.planValue;
+      }
     }
 
     const cac = calcularCAC(adSpend, novosClientes);
     const roas = calcularROAS(receita, adSpend);
     const churnRate = calcularChurnRate(churned, ativosInicio);
+    const revenueChurnRate = mrrInicio > 0 ? receitaPerdida / mrrInicio : null;
 
     return {
       month: m,
@@ -177,6 +187,7 @@ export function aggregateUnitEconomics(input: {
       ativosInicio,
       churned,
       churnRate,
+      revenueChurnRate,
     };
   });
 

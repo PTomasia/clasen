@@ -271,6 +271,73 @@ describe("aggregateUnitEconomics — totais", () => {
 
 // ─── CUT-1: corte temporal jan/2026 ──────────────────────────────────────────
 
+describe("aggregateUnitEconomics — revenueChurnRate", () => {
+  it("revenueChurnRate = receitaPerdida / receitaAtivoInicio", () => {
+    // Cliente 1: plano de 500/mês, encerra em fev/26 → churned em fev
+    // Cliente 2: plano de 1000/mês, ativo sem fim
+    // mrrInicio fev = 500 + 1000 = 1500; receitaPerdida fev = 500
+    // revenueChurnRate = 500 / 1500 ≈ 0.3333
+    const data = aggregateUnitEconomics({
+      plans: [
+        { clientId: 1, planValue: 500, startDate: "2025-01-01", endDate: "2026-02-28" },
+        { clientId: 2, planValue: 1000, startDate: "2025-01-01", endDate: null },
+      ],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map(),
+      today: TODAY,
+    });
+    const fev = pickMonth(data, "2026-02");
+    expect(fev.revenueChurnRate).toBeCloseTo(500 / 1500, 5);
+  });
+
+  it("revenueChurnRate null quando não há ativos no início do mês", () => {
+    const data = aggregateUnitEconomics({
+      plans: [],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map(),
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2026-04").revenueChurnRate).toBeNull();
+  });
+
+  it("cliente com múltiplos planos: soma todos os planValues na perda e no início", () => {
+    // Cliente 1: dois planos simultâneos (500 + 300), encerram em março
+    // Apenas cliente 1 no mês: mrrInicio = 800, receitaPerdida = 800
+    const data = aggregateUnitEconomics({
+      plans: [
+        { clientId: 1, planValue: 500, startDate: "2025-01-01", endDate: "2026-03-31" },
+        { clientId: 1, planValue: 300, startDate: "2025-01-01", endDate: "2026-03-31" },
+      ],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map(),
+      today: TODAY,
+    });
+    const mar = pickMonth(data, "2026-03");
+    expect(mar.revenueChurnRate).toBeCloseTo(1, 5); // 800/800 = 100%
+  });
+
+  it("não conta planos de clientes que têm plano ativo (sem churn)", () => {
+    // Cliente tem plano antigo encerrado + plano novo ativo → sem churn
+    const data = aggregateUnitEconomics({
+      plans: [
+        { clientId: 1, planValue: 500, startDate: "2025-01-01", endDate: "2026-02-28" },
+        { clientId: 1, planValue: 700, startDate: "2026-03-01", endDate: null }, // voltou
+        { clientId: 2, planValue: 1000, startDate: "2025-01-01", endDate: null },
+      ],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map(),
+      today: TODAY,
+    });
+    // Cliente 1 não churn em fev (tem plano ativo); revenueChurnRate deve ser 0/mrrInicio
+    const fev = pickMonth(data, "2026-02");
+    expect(fev.revenueChurnRate).toBe(0); // nenhuma receita perdida / mrrInicio > 0
+  });
+});
+
 describe("aggregateUnitEconomics — corte temporal (financialDataStart)", () => {
   it("exclui pagamentos anteriores ao corte da receita mensal", () => {
     const data = aggregateUnitEconomics({
