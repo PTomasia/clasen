@@ -2,6 +2,7 @@ import { eq, isNull, sql } from "drizzle-orm";
 import { addMonths, format, parseISO, getDaysInMonth } from "date-fns";
 import * as schema from "../db/schema";
 import { calcularCustoPost, calcularPermanencia, calcularProximoVencimento } from "../utils/calculations";
+import { findOrCreateClient } from "./clients";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -66,32 +67,8 @@ export async function createPlan(db: any, input: CreatePlanInput) {
     if (!existing) throw new Error("cliente não encontrado");
     client = existing;
   } else if (input.clientName) {
-    // Match case-insensitive + trim para evitar duplicatas
-    const normalized = input.clientName.trim();
-    if (!normalized) throw new Error("nome do cliente é obrigatório");
-
-    const existing = await db
-      .select()
-      .from(schema.clients)
-      .where(sql`lower(trim(${schema.clients.name})) = ${normalized.toLowerCase()}`)
-      .get();
-
-    if (existing) {
-      client = existing;
-      clientId = existing.id;
-    } else {
-      const inserted = await db
-        .insert(schema.clients)
-        .values({
-          name: normalized,
-          contactOrigin: input.contactOrigin ?? null,
-        })
-        .returning()
-        .get();
-
-      client = inserted;
-      clientId = inserted.id;
-    }
+    client = await findOrCreateClient(db, input.clientName, input.contactOrigin);
+    clientId = client.id;
   } else {
     throw new Error("clientId ou clientName é obrigatório");
   }

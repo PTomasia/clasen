@@ -1,7 +1,37 @@
-import { eq, isNull, and } from "drizzle-orm";
+import { eq, isNull, and, sql } from "drizzle-orm";
 import { differenceInMonths, parseISO } from "date-fns";
 import * as schema from "../db/schema";
 import { calcularCustoPost } from "../utils/calculations";
+
+// ─── findOrCreateClient ────────────────────────────────────────────────────────
+// Match case-insensitive + trim para evitar duplicatas.
+// Usado por createPlan e createRevenue.
+
+export async function findOrCreateClient(
+  db: any,
+  name: string,
+  contactOrigin?: string | null
+): Promise<typeof schema.clients.$inferSelect> {
+  const normalized = name.trim();
+  if (!normalized) throw new Error("nome do cliente é obrigatório");
+
+  const existing = await db
+    .select()
+    .from(schema.clients)
+    .where(sql`lower(trim(${schema.clients.name})) = ${normalized.toLowerCase()}`)
+    .get();
+
+  if (existing) return existing;
+
+  return await db
+    .insert(schema.clients)
+    .values({
+      name: normalized,
+      contactOrigin: contactOrigin?.trim() || null,
+    })
+    .returning()
+    .get();
+}
 
 // ─── Helpers internos ──────────────────────────────────────────────────────────
 

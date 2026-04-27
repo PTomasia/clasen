@@ -38,7 +38,9 @@ export function RevenueDialog({
     onClose();
   });
 
-  const [clientId, setClientId] = useState<string>("none");
+  const [clientMode, setClientMode] = useState<"none" | "existing" | "new">("none");
+  const [clientId, setClientId] = useState<string>("");
+  const [clientName, setClientName] = useState("");
   const [date, setDate] = useState("");
   const [amount, setAmount] = useState("");
   const [product, setProduct] = useState<string>("Arte para tráfego");
@@ -51,7 +53,14 @@ export function RevenueDialog({
   useEffect(() => {
     if (!open) return;
     if (editing) {
-      setClientId(editing.clientId ? String(editing.clientId) : "none");
+      if (editing.clientId) {
+        setClientMode("existing");
+        setClientId(String(editing.clientId));
+      } else {
+        setClientMode("none");
+        setClientId("");
+      }
+      setClientName("");
       setDate(editing.date);
       setAmount(String(editing.amount));
       const isStandard = (REVENUE_PRODUCTS as readonly string[]).includes(editing.product);
@@ -62,7 +71,9 @@ export function RevenueDialog({
       setIsPaid(editing.isPaid);
       setNotes(editing.notes ?? "");
     } else {
-      setClientId("none");
+      setClientMode("none");
+      setClientId("");
+      setClientName("");
       setDate(new Date().toISOString().slice(0, 10));
       setAmount("");
       setProduct("Arte para tráfego");
@@ -78,7 +89,8 @@ export function RevenueDialog({
     e.preventDefault();
     const productFinal = product === "Outro" ? productCustom.trim() : product;
     const input = {
-      clientId: clientId === "none" ? null : Number(clientId),
+      clientId: clientMode === "existing" && clientId ? Number(clientId) : null,
+      clientName: clientMode === "new" ? clientName.trim() || null : null,
       date,
       amount: parseFloat(amount),
       product: productFinal,
@@ -159,19 +171,55 @@ export function RevenueDialog({
 
           <div className="space-y-1.5">
             <Label>Cliente (opcional)</Label>
-            <Select value={clientId} onValueChange={(v) => v && setClientId(v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">— Sem cliente vinculado —</SelectItem>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={clientMode === "none" ? "default" : "outline"}
+                onClick={() => { setClientMode("none"); setClientId(""); setClientName(""); }}
+              >
+                Nenhum
+              </Button>
+              {clients.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={clientMode === "existing" ? "default" : "outline"}
+                  onClick={() => setClientMode("existing")}
+                >
+                  Existente
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant={clientMode === "new" ? "default" : "outline"}
+                onClick={() => { setClientMode("new"); setClientId(""); }}
+              >
+                Novo
+              </Button>
+            </div>
+            {clientMode === "existing" && (
+              <Select value={clientId} onValueChange={(v) => v && setClientId(v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {clientMode === "new" && (
+              <Input
+                placeholder="Nome do cliente"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

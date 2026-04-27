@@ -1,10 +1,12 @@
 import { eq, desc } from "drizzle-orm";
 import * as schema from "../db/schema";
+import { findOrCreateClient } from "./clients";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CreateRevenueInput {
   clientId?: number | null;
+  clientName?: string | null; // alternativa a clientId: cria ou reutiliza cliente
   date: string; // YYYY-MM-DD
   amount: number;
   product: string;
@@ -35,10 +37,17 @@ export async function createRevenue(db: any, input: CreateRevenueInput) {
     throw new Error("produto é obrigatório");
   }
 
+  // Resolver clientId: pode vir direto ou via nome (cria/reutiliza)
+  let resolvedClientId = input.clientId ?? null;
+  if (!resolvedClientId && input.clientName?.trim()) {
+    const client = await findOrCreateClient(db, input.clientName);
+    resolvedClientId = client.id;
+  }
+
   const inserted = await db
     .insert(schema.oneTimeRevenues)
     .values({
-      clientId: input.clientId ?? null,
+      clientId: resolvedClientId,
       date: input.date,
       amount: input.amount,
       product: input.product.trim(),

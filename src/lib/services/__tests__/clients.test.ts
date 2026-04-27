@@ -12,6 +12,7 @@ import {
   getClientStatus,
   getClientsList,
   getClientDetail,
+  findOrCreateClient,
 } from "../clients";
 import { eq } from "drizzle-orm";
 
@@ -574,5 +575,65 @@ describe("getClientDetail", () => {
     expect(detail!.ltvRecorrente).toBe(0);
     expect(detail!.ltvAvulsas).toBe(0);
     expect(detail!.avulsas).toHaveLength(0);
+  });
+});
+
+// ─── findOrCreateClient ───────────────────────────────────────────────────────
+
+describe("findOrCreateClient", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("cria cliente novo quando não existe", async () => {
+    const client = await findOrCreateClient(db, "Ana Silva");
+
+    expect(client.id).toBeDefined();
+    expect(client.name).toBe("Ana Silva");
+
+    const all = db.select().from(schema.clients).all();
+    expect(all).toHaveLength(1);
+  });
+
+  it("reutiliza cliente existente pelo nome (case-insensitive)", async () => {
+    await findOrCreateClient(db, "Ana Silva");
+    const second = await findOrCreateClient(db, "ana silva");
+
+    const all = db.select().from(schema.clients).all();
+    expect(all).toHaveLength(1);
+    expect(second.name).toBe("Ana Silva"); // mantém o original
+  });
+
+  it("reutiliza cliente existente ignorando espaços extras", async () => {
+    await findOrCreateClient(db, "Ana Silva");
+    const second = await findOrCreateClient(db, "  Ana Silva  ");
+
+    const all = db.select().from(schema.clients).all();
+    expect(all).toHaveLength(1);
+    expect(second.id).toBe(all[0].id);
+  });
+
+  it("salva contactOrigin ao criar cliente novo", async () => {
+    const client = await findOrCreateClient(db, "Beatriz Lima", "Instagram");
+
+    const row = db.select().from(schema.clients).all()[0];
+    expect(row.contactOrigin).toBe("Instagram");
+    expect(client.contactOrigin).toBe("Instagram");
+  });
+
+  it("não sobrescreve contactOrigin de cliente já existente", async () => {
+    await findOrCreateClient(db, "Beatriz Lima", "Instagram");
+    await findOrCreateClient(db, "Beatriz Lima", "Google");
+
+    const row = db.select().from(schema.clients).all()[0];
+    expect(row.contactOrigin).toBe("Instagram"); // primeiro valor preservado
+  });
+
+  it("rejeita nome vazio", async () => {
+    await expect(findOrCreateClient(db, "   ")).rejects.toThrow(
+      "nome do cliente é obrigatório"
+    );
   });
 });
