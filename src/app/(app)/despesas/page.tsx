@@ -1,15 +1,21 @@
 import { db } from "@/lib/db";
-import { getExpenses, getExpensesSummary } from "@/lib/services/expenses";
+import { getExpenses, getExpensesSummary, getRecurringToLaunch } from "@/lib/services/expenses";
 import { getProfitAndLossData } from "@/lib/queries/profit-and-loss";
+import { format, addMonths } from "date-fns";
 import { DespesasClient } from "./despesas-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function DespesasPage() {
-  const [expenses, summary, pnl] = await Promise.all([
+  const today = new Date();
+  const currentMonth = format(today, "yyyy-MM");
+  const nextMonth = format(addMonths(today, 1), "yyyy-MM");
+
+  const [expenses, summary, pnl, recurringPending] = await Promise.all([
     getExpenses(db as any),
     getExpensesSummary(db as any),
     getProfitAndLossData(),
+    getRecurringToLaunch(db as any, currentMonth),
   ]);
 
   return (
@@ -21,7 +27,14 @@ export default async function DespesasPage() {
         </p>
       </div>
 
-      <DespesasClient expenses={expenses} summary={summary} pnl={pnl} />
+      <DespesasClient
+        expenses={expenses}
+        summary={summary}
+        pnl={pnl}
+        recurringPendingCount={recurringPending.length}
+        currentMonth={currentMonth}
+        nextMonth={nextMonth}
+      />
     </div>
   );
 }

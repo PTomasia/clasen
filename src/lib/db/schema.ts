@@ -145,6 +145,9 @@ export const expenses = sqliteTable("expenses", {
   category: text("category").notNull().default("variavel"), // fixo, variavel
   amount: real("amount").notNull(),
   isPaid: integer("is_paid", { mode: "boolean" }).notNull().default(true),
+  // Recorrência (5.1): template para lançamento manual no mês seguinte
+  isRecurring: integer("is_recurring", { mode: "boolean" }).notNull().default(false),
+  recurringUntil: text("recurring_until"), // YYYY-MM ou null = sem fim
   // Parcelamento (modelo flat — sem master): null = à vista
   installmentsTotal: integer("installments_total"),
   installmentNumber: integer("installment_number"),

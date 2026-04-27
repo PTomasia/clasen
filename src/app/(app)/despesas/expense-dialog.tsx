@@ -38,6 +38,7 @@ export function ExpenseDialog({
   const [category, setCategory] = useState<"fixo" | "variavel">("fixo");
   const [amount, setAmount] = useState("");
   const [isPaid, setIsPaid] = useState(true);
+  const [isRecurring, setIsRecurring] = useState(false);
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export function ExpenseDialog({
       setCategory(editing.category);
       setAmount(String(editing.amount));
       setIsPaid(editing.isPaid);
+      setIsRecurring(editing.isRecurring ?? false);
       setNotes(editing.notes ?? "");
     } else {
       const now = new Date();
@@ -56,6 +58,7 @@ export function ExpenseDialog({
       setCategory("fixo");
       setAmount("");
       setIsPaid(true);
+      setIsRecurring(false);
       setNotes("");
     }
   }, [open, editing]);
@@ -68,6 +71,7 @@ export function ExpenseDialog({
       category,
       amount: parseFloat(amount),
       isPaid,
+      isRecurring,
       notes: notes.trim() || null,
     };
     run(async () => {
@@ -149,6 +153,19 @@ export function ExpenseDialog({
             />
             <Label htmlFor="isPaid" className="cursor-pointer">
               Já paga
+            </Label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="isRecurring"
+              type="checkbox"
+              checked={isRecurring}
+              onChange={(e) => setIsRecurring(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <Label htmlFor="isRecurring" className="cursor-pointer">
+              Despesa recorrente (lançar automaticamente no próximo mês)
             </Label>
           </div>
 

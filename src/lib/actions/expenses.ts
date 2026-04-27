@@ -6,6 +6,9 @@ import {
   createExpense as createExpenseService,
   updateExpense as updateExpenseService,
   deleteExpense as deleteExpenseService,
+  togglePaidExpense as togglePaidService,
+  duplicateExpense as duplicateExpenseService,
+  launchRecurringExpenses as launchRecurringService,
 } from "../services/expenses";
 import type { CreateExpenseInput, UpdateExpenseInput } from "../services/expenses";
 import { REVALIDATE_PATHS } from "../constants";
@@ -30,4 +33,20 @@ export async function updateExpenseAction(id: number, input: UpdateExpenseInput)
 export async function deleteExpenseAction(id: number) {
   await deleteExpenseService(db as any, id);
   revalidateAll();
+}
+
+export async function togglePaidExpenseAction(id: number) {
+  await togglePaidService(db as any, id);
+  revalidateAll();
+}
+
+export async function duplicateExpenseAction(id: number, targetMonth: string) {
+  await duplicateExpenseService(db as any, id, targetMonth);
+  revalidateAll();
+}
+
+export async function launchRecurringExpensesAction(targetMonth: string) {
+  const created = await launchRecurringService(db as any, targetMonth);
+  revalidateAll();
+  return { count: created.length };
 }

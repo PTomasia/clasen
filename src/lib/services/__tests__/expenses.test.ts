@@ -8,6 +8,10 @@ import {
   deleteExpense,
   getExpenses,
   getExpensesSummary,
+  togglePaidExpense,
+  duplicateExpense,
+  getRecurringToLaunch,
+  launchRecurringExpenses,
 } from "../expenses";
 
 function createTestDb() {
@@ -22,6 +26,8 @@ function createTestDb() {
       category TEXT NOT NULL DEFAULT 'variavel',
       amount REAL NOT NULL,
       is_paid INTEGER NOT NULL DEFAULT 1,
+      is_recurring INTEGER NOT NULL DEFAULT 0,
+      recurring_until TEXT,
       installments_total INTEGER,
       installment_number INTEGER,
       installment_group_id TEXT,
@@ -248,5 +254,93 @@ describe("getExpensesSummary", () => {
     expect(s.totalPendente).toBe(0);
     expect(s.qtdMesAtual).toBe(0);
     expect(s.qtdTotal).toBe(0);
+  });
+});
+
+// ─── togglePaidExpense (5.3) ──────────────────────────────────────────────────
+
+describe("togglePaidExpense", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(() => { db = createTestDb(); });
+
+  it("alterna isPaid de true para false", async () => {
+    const e = await createExpense(db, { month: "2026-04", description: "Teste", category: "fixo", amount: 100, isPaid: true });
+    await togglePaidExpense(db, e.id);
+    const all = await getExpenses(db);
+    expect(all[0].isPaid).toBe(false);
+  });
+
+  it("alterna isPaid de false para true", async () => {
+    const e = await createExpense(db, { month: "2026-04", description: "Teste", category: "fixo", amount: 100, isPaid: false });
+    await togglePaidExpense(db, e.id);
+    const all = await getExpenses(db);
+    expect(all[0].isPaid).toBe(true);
+  });
+
+  it("rejeita id inexistente", async () => {
+    await expect(togglePaidExpense(db, 9999)).rejects.toThrow("despesa não encontrada");
+  });
+});
+
+// ─── duplicateExpense (5.4) ───────────────────────────────────────────────────
+
+describe("duplicateExpense", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(() => { db = createTestDb(); });
+
+  it("copia despesa para outro mês", async () => {
+    const orig = await createExpense(db, { month: "2026-04", description: "Servidor", category: "fixo", amount: 200, isPaid: true });
+    const dup = await duplicateExpense(db, orig.id, "2026-05");
+    expect(dup.month).toBe("2026-05");
+    expect(dup.description).toBe("Servidor");
+    expect(dup.amount).toBe(200);
+    expect(dup.isPaid).toBe(false); // sempre pendente
+  });
+
+  it("duplicata não modifica a original", async () => {
+    const orig = await createExpense(db, { month: "2026-04", description: "Servidor", category: "fixo", amount: 200, isPaid: true });
+    await duplicateExpense(db, orig.id, "2026-05");
+    const all = await getExpenses(db);
+    expect(all).toHaveLength(2);
+    const original = all.find((e) => e.month === "2026-04");
+    expect(original!.isPaid).toBe(true);
+  });
+});
+
+// ─── launchRecurringExpenses (5.1) ────────────────────────────────────────────
+
+describe("launchRecurringExpenses", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(() => { db = createTestDb(); });
+
+  it("cria lançamentos do mês alvo para recorrentes do mês anterior", async () => {
+    await createExpense(db, { month: "2026-04", description: "Plano GitHub", category: "fixo", amount: 50, isPaid: true, isRecurring: true });
+    const created = await launchRecurringExpenses(db, "2026-05");
+    expect(created).toHaveLength(1);
+    expect(created[0].month).toBe("2026-05");
+    expect(created[0].description).toBe("Plano GitHub");
+    expect(created[0].isPaid).toBe(false);
+  });
+
+  it("é idempotente: segunda execução não duplica", async () => {
+    await createExpense(db, { month: "2026-04", description: "Plano GitHub", category: "fixo", amount: 50, isPaid: true, isRecurring: true });
+    await launchRecurringExpenses(db, "2026-05");
+    const second = await launchRecurringExpenses(db, "2026-05");
+    expect(second).toHaveLength(0);
+    const all = await getExpenses(db, { month: "2026-05" });
+    expect(all).toHaveLength(1);
+  });
+
+  it("não lança se recurringUntil já expirou", async () => {
+    await createExpense(db, { month: "2026-04", description: "Antigo", category: "fixo", amount: 30, isPaid: true, isRecurring: true, recurringUntil: "2026-04" });
+    const created = await launchRecurringExpenses(db, "2026-05");
+    expect(created).toHaveLength(0);
+  });
+
+  it("getRecurringToLaunch retorna lista vazia se tudo já foi lançado", async () => {
+    await createExpense(db, { month: "2026-04", description: "Plano GitHub", category: "fixo", amount: 50, isRecurring: true });
+    await createExpense(db, { month: "2026-05", description: "Plano GitHub", category: "fixo", amount: 50 });
+    const pending = await getRecurringToLaunch(db, "2026-05");
+    expect(pending).toHaveLength(0);
   });
 });

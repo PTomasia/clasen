@@ -19,20 +19,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Pencil, Trash2, Search, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, TrendingUp, TrendingDown, RefreshCw, Copy } from "lucide-react";
 import { formatBRL } from "@/lib/utils/formatting";
 import type { ExpenseRow, ExpensesSummary } from "@/lib/services/expenses";
 import type { PnLData } from "@/lib/queries/profit-and-loss";
 import { ExpenseDialog } from "./expense-dialog";
 import { DeleteExpenseDialog } from "./delete-expense-dialog";
+import {
+  togglePaidExpenseAction,
+  duplicateExpenseAction,
+  launchRecurringExpensesAction,
+} from "@/lib/actions/expenses";
 
 interface Props {
   expenses: ExpenseRow[];
   summary: ExpensesSummary;
   pnl: PnLData;
+  recurringPendingCount: number;
+  currentMonth: string;
+  nextMonth: string;
 }
 
-export function DespesasClient({ expenses, summary, pnl }: Props) {
+export function DespesasClient({ expenses, summary, pnl, recurringPendingCount, currentMonth, nextMonth }: Props) {
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState("todos");
   const [categoryFilter, setCategoryFilter] = useState("todos");
@@ -41,13 +49,30 @@ export function DespesasClient({ expenses, summary, pnl }: Props) {
   const [newOpen, setNewOpen] = useState(false);
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
   const [deleting, setDeleting] = useState<ExpenseRow | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const [toggling, setToggling] = useState<number | null>(null);
 
-  // Meses únicos para o filtro
+  // Meses únicos para o filtro — inclui sempre o mês seguinte (5.2)
   const months = useMemo(() => {
     const set = new Set<string>();
+    set.add(nextMonth);
     for (const e of expenses) set.add(e.month);
     return Array.from(set).sort().reverse();
-  }, [expenses]);
+  }, [expenses, nextMonth]);
+
+  async function handleTogglePaid(id: number) {
+    setToggling(id);
+    try { await togglePaidExpenseAction(id); } finally { setToggling(null); }
+  }
+
+  async function handleDuplicate(e: ExpenseRow) {
+    await duplicateExpenseAction(e.id, nextMonth);
+  }
+
+  async function handleLaunchRecurring() {
+    setLaunching(true);
+    try { await launchRecurringExpensesAction(currentMonth); } finally { setLaunching(false); }
+  }
 
   const filtered = useMemo(() => {
     return expenses.filter((e) => {
@@ -113,6 +138,19 @@ export function DespesasClient({ expenses, summary, pnl }: Props) {
           tone={pnl.totals.lucroTotal < 0 ? "danger" : pnl.totals.lucroTotal > 0 ? "success" : "muted"}
         />
       </div>
+
+      {/* 5.1 — Banner despesas recorrentes pendentes */}
+      {recurringPendingCount > 0 && (
+        <div className="flex items-center justify-between bg-primary/5 border border-primary/20 rounded-lg px-4 py-3">
+          <p className="text-sm">
+            <span className="font-semibold">{recurringPendingCount}</span> despesa{recurringPendingCount > 1 ? "s" : ""} recorrente{recurringPendingCount > 1 ? "s" : ""} ainda não lançada{recurringPendingCount > 1 ? "s" : ""} em {currentMonth}.
+          </p>
+          <Button size="sm" disabled={launching} onClick={handleLaunchRecurring}>
+            <RefreshCw size={14} className={launching ? "animate-spin" : ""} />
+            Lançar fixas do mês
+          </Button>
+        </div>
+      )}
 
       {/* ── Filtros + lista ── */}
       <div className="flex flex-wrap gap-2 items-center">
@@ -206,17 +244,37 @@ export function DespesasClient({ expenses, summary, pnl }: Props) {
                   <TableCell className="text-right font-mono">
                     {formatBRL(e.amount)}
                   </TableCell>
+                  {/* 5.3 — Checkbox pago inline */}
                   <TableCell>
-                    {e.isPaid ? (
-                      <Badge className="bg-success/10 text-success border-success/20">Paga</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-accent-foreground border-accent/40 bg-accent/10">
-                        Pendente
-                      </Badge>
-                    )}
+                    <button
+                      className="flex items-center gap-2 group"
+                      disabled={toggling === e.id}
+                      onClick={() => handleTogglePaid(e.id)}
+                      title="Clique para alternar status"
+                    >
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={e.isPaid}
+                        className="w-4 h-4 pointer-events-none"
+                      />
+                      <span className={`text-xs ${e.isPaid ? "text-success" : "text-accent-foreground"}`}>
+                        {e.isPaid ? "Paga" : "Pendente"}
+                      </span>
+                    </button>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex gap-1">
+                      {/* 5.4 — Duplicar para próximo mês */}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground"
+                        title={`Duplicar para ${nextMonth}`}
+                        onClick={() => handleDuplicate(e)}
+                      >
+                        <Copy size={14} />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(e)}>
                         <Pencil size={14} />
                       </Button>

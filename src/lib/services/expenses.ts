@@ -11,6 +11,8 @@ export interface CreateExpenseInput {
   category: ExpenseCategory;
   amount: number;
   isPaid?: boolean;
+  isRecurring?: boolean;
+  recurringUntil?: string | null; // YYYY-MM
   notes?: string | null;
 }
 
@@ -20,6 +22,8 @@ export interface UpdateExpenseInput {
   category: ExpenseCategory;
   amount: number;
   isPaid: boolean;
+  isRecurring?: boolean;
+  recurringUntil?: string | null;
   notes?: string | null;
 }
 
@@ -30,6 +34,8 @@ export interface ExpenseRow {
   category: ExpenseCategory;
   amount: number;
   isPaid: boolean;
+  isRecurring: boolean;
+  recurringUntil: string | null;
   notes: string | null;
 }
 
@@ -42,6 +48,22 @@ export interface ExpensesSummary {
   totalPendente: number;
   qtdMesAtual: number;
   qtdTotal: number;
+}
+
+// ─── toRow ────────────────────────────────────────────────────────────────────
+
+function toRow(r: any): ExpenseRow {
+  return {
+    id: r.id,
+    month: r.month,
+    description: r.description,
+    category: r.category as ExpenseCategory,
+    amount: r.amount,
+    isPaid: !!r.isPaid,
+    isRecurring: !!r.isRecurring,
+    recurringUntil: r.recurringUntil ?? null,
+    notes: r.notes ?? null,
+  };
 }
 
 // ─── Validações ───────────────────────────────────────────────────────────────
@@ -82,20 +104,14 @@ export async function createExpense(
       category: input.category,
       amount: input.amount,
       isPaid: input.isPaid ?? true,
+      isRecurring: input.isRecurring ?? false,
+      recurringUntil: input.recurringUntil ?? null,
       notes: input.notes?.trim() || null,
     })
     .returning()
     .get();
 
-  return {
-    id: inserted.id,
-    month: inserted.month,
-    description: inserted.description,
-    category: inserted.category as ExpenseCategory,
-    amount: inserted.amount,
-    isPaid: !!inserted.isPaid,
-    notes: inserted.notes,
-  };
+  return toRow(inserted);
 }
 
 // ─── updateExpense ────────────────────────────────────────────────────────────
@@ -123,26 +139,15 @@ export async function updateExpense(
       category: input.category,
       amount: input.amount,
       isPaid: input.isPaid,
+      isRecurring: input.isRecurring ?? false,
+      recurringUntil: input.recurringUntil ?? null,
       notes: input.notes?.trim() || null,
     })
     .where(eq(schema.expenses.id, id))
     .run();
 
-  const updated = await db
-    .select()
-    .from(schema.expenses)
-    .where(eq(schema.expenses.id, id))
-    .get();
-
-  return {
-    id: updated.id,
-    month: updated.month,
-    description: updated.description,
-    category: updated.category as ExpenseCategory,
-    amount: updated.amount,
-    isPaid: !!updated.isPaid,
-    notes: updated.notes,
-  };
+  const updated = await db.select().from(schema.expenses).where(eq(schema.expenses.id, id)).get();
+  return toRow(updated);
 }
 
 // ─── deleteExpense ────────────────────────────────────────────────────────────
@@ -170,15 +175,7 @@ export async function getExpenses(
         .orderBy(desc(schema.expenses.month), desc(schema.expenses.id))
         .all();
 
-  return rows.map((r: any) => ({
-    id: r.id,
-    month: r.month,
-    description: r.description,
-    category: r.category as ExpenseCategory,
-    amount: r.amount,
-    isPaid: !!r.isPaid,
-    notes: r.notes,
-  }));
+  return rows.map(toRow);
 }
 
 // ─── getExpensesSummary ───────────────────────────────────────────────────────
@@ -227,4 +224,128 @@ export async function getExpensesSummary(
     qtdMesAtual,
     qtdTotal: all.length,
   };
+}
+
+// ─── togglePaidExpense (5.3) ──────────────────────────────────────────────────
+
+export async function togglePaidExpense(db: any, id: number): Promise<ExpenseRow> {
+  const existing = await db.select().from(schema.expenses).where(eq(schema.expenses.id, id)).get();
+  if (!existing) throw new Error("despesa não encontrada");
+
+  await db
+    .update(schema.expenses)
+    .set({ isPaid: !existing.isPaid })
+    .where(eq(schema.expenses.id, id))
+    .run();
+
+  const updated = await db.select().from(schema.expenses).where(eq(schema.expenses.id, id)).get();
+  return toRow(updated);
+}
+
+// ─── duplicateExpense (5.4) ───────────────────────────────────────────────────
+
+export async function duplicateExpense(
+  db: any,
+  id: number,
+  targetMonth: string
+): Promise<ExpenseRow> {
+  if (!/^\d{4}-\d{2}$/.test(targetMonth)) {
+    throw new Error("mês inválido (use YYYY-MM)");
+  }
+
+  const existing = await db.select().from(schema.expenses).where(eq(schema.expenses.id, id)).get();
+  if (!existing) throw new Error("despesa não encontrada");
+
+  const inserted = await db
+    .insert(schema.expenses)
+    .values({
+      month: targetMonth,
+      description: existing.description,
+      category: existing.category,
+      amount: existing.amount,
+      isPaid: false, // duplicata começa como pendente
+      isRecurring: existing.isRecurring,
+      recurringUntil: existing.recurringUntil ?? null,
+      notes: existing.notes ?? null,
+    })
+    .returning()
+    .get();
+
+  return toRow(inserted);
+}
+
+// ─── getRecurringToLaunch (5.1) ───────────────────────────────────────────────
+// Retorna despesas recorrentes do mês anterior que ainda não têm lançamento
+// no mês alvo. Usado para exibir botão "Lançar fixas do mês".
+
+export async function getRecurringToLaunch(
+  db: any,
+  targetMonth: string // YYYY-MM
+): Promise<ExpenseRow[]> {
+  // Calcular mês anterior
+  const [year, month] = targetMonth.split("-").map(Number);
+  const prevDate = new Date(year, month - 2, 1);
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+
+  // Buscar recorrentes do mês anterior (sem filtro de recurringUntil por hora)
+  const recurring: any[] = await db
+    .select()
+    .from(schema.expenses)
+    .where(
+      and(
+        eq(schema.expenses.month, prevMonth),
+        eq(schema.expenses.isRecurring, true)
+      )
+    )
+    .all();
+
+  if (recurring.length === 0) return [];
+
+  // Buscar lançamentos já existentes no mês alvo
+  const existing: any[] = await db
+    .select()
+    .from(schema.expenses)
+    .where(eq(schema.expenses.month, targetMonth))
+    .all();
+
+  const existingDescriptions = new Set(existing.map((e: any) => e.description.trim().toLowerCase()));
+
+  // Retorna só os que ainda não foram lançados
+  return recurring
+    .filter((r: any) => {
+      if (r.recurringUntil && r.recurringUntil < targetMonth) return false; // expirou
+      return !existingDescriptions.has(r.description.trim().toLowerCase());
+    })
+    .map(toRow);
+}
+
+// ─── launchRecurringExpenses (5.1) ────────────────────────────────────────────
+// Cria os lançamentos faltantes. Idempotente.
+
+export async function launchRecurringExpenses(
+  db: any,
+  targetMonth: string
+): Promise<ExpenseRow[]> {
+  const pending = await getRecurringToLaunch(db, targetMonth);
+  const created: ExpenseRow[] = [];
+
+  for (const template of pending) {
+    const inserted = await db
+      .insert(schema.expenses)
+      .values({
+        month: targetMonth,
+        description: template.description,
+        category: template.category,
+        amount: template.amount,
+        isPaid: false,
+        isRecurring: true,
+        recurringUntil: template.recurringUntil ?? null,
+        notes: template.notes ?? null,
+      })
+      .returning()
+      .get();
+    created.push(toRow(inserted));
+  }
+
+  return created;
 }
