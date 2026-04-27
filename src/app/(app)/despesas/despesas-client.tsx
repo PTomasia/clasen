@@ -228,7 +228,17 @@ export function DespesasClient({ expenses, summary, pnl, recurringPendingCount, 
               filtered.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="font-mono text-xs">{e.month}</TableCell>
-                  <TableCell className="font-medium">{e.description}</TableCell>
+                  <TableCell className="font-medium">
+                    {e.description}
+                    {e.installmentsTotal && e.installmentNumber && (
+                      <span className="ml-1.5 text-xs text-muted-foreground font-normal">
+                        {e.installmentNumber}/{e.installmentsTotal}x
+                      </span>
+                    )}
+                    {e.isRecurring && !e.installmentsTotal && (
+                      <span className="ml-1.5 text-xs text-muted-foreground font-normal">↻</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant="outline"

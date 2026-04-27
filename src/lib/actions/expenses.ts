@@ -9,8 +9,9 @@ import {
   togglePaidExpense as togglePaidService,
   duplicateExpense as duplicateExpenseService,
   launchRecurringExpenses as launchRecurringService,
+  createExpenseInstallments as createExpenseInstallmentsService,
 } from "../services/expenses";
-import type { CreateExpenseInput, UpdateExpenseInput } from "../services/expenses";
+import type { CreateExpenseInput, UpdateExpenseInput, CreateExpenseInstallmentsInput } from "../services/expenses";
 import { REVALIDATE_PATHS } from "../constants";
 
 function revalidateAll() {
@@ -49,4 +50,10 @@ export async function launchRecurringExpensesAction(targetMonth: string) {
   const created = await launchRecurringService(db as any, targetMonth);
   revalidateAll();
   return { count: created.length };
+}
+
+export async function createExpenseInstallmentsAction(input: CreateExpenseInstallmentsInput) {
+  const rows = await createExpenseInstallmentsService(db as any, input);
+  revalidateAll();
+  return { count: rows.length };
 }

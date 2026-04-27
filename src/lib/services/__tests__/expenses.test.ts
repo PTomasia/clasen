@@ -12,6 +12,7 @@ import {
   duplicateExpense,
   getRecurringToLaunch,
   launchRecurringExpenses,
+  createExpenseInstallments,
 } from "../expenses";
 
 function createTestDb() {
@@ -342,5 +343,79 @@ describe("launchRecurringExpenses", () => {
     await createExpense(db, { month: "2026-05", description: "Plano GitHub", category: "fixo", amount: 50 });
     const pending = await getRecurringToLaunch(db, "2026-05");
     expect(pending).toHaveLength(0);
+  });
+});
+
+// ─── createExpenseInstallments (5.5) ─────────────────────────────────────────
+
+describe("createExpenseInstallments", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(() => { db = createTestDb(); });
+
+  it("cria N parcelas com meses sequenciais", async () => {
+    const rows = await createExpenseInstallments(db, {
+      month: "2026-04",
+      description: "Equipamento",
+      category: "variavel",
+      amount: 300,
+      installmentsTotal: 3,
+    });
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.month)).toEqual(["2026-04", "2026-05", "2026-06"]);
+    expect(rows[0].installmentNumber).toBe(1);
+    expect(rows[1].installmentNumber).toBe(2);
+    expect(rows[2].installmentNumber).toBe(3);
+    expect(rows[0].installmentsTotal).toBe(3);
+    // Todas com mesmo groupId
+    const groupId = rows[0].installmentGroupId;
+    expect(groupId).toBeTruthy();
+    expect(rows.every((r) => r.installmentGroupId === groupId)).toBe(true);
+  });
+
+  it("todas as parcelas começam como não pagas (isPaid=false)", async () => {
+    const rows = await createExpenseInstallments(db, {
+      month: "2026-04",
+      description: "Equipamento",
+      category: "variavel",
+      amount: 300,
+      installmentsTotal: 2,
+    });
+    expect(rows.every((r) => r.isPaid === false)).toBe(true);
+  });
+
+  it("rejeita installmentsTotal <= 1", async () => {
+    await expect(
+      createExpenseInstallments(db, {
+        month: "2026-04",
+        description: "X",
+        category: "fixo",
+        amount: 100,
+        installmentsTotal: 1,
+      })
+    ).rejects.toThrow("parcelas");
+  });
+
+  it("rejeita installmentsTotal > 60", async () => {
+    await expect(
+      createExpenseInstallments(db, {
+        month: "2026-04",
+        description: "X",
+        category: "fixo",
+        amount: 100,
+        installmentsTotal: 61,
+      })
+    ).rejects.toThrow("parcelas");
+  });
+
+  it("propaga validações básicas (mês inválido)", async () => {
+    await expect(
+      createExpenseInstallments(db, {
+        month: "2026-4",
+        description: "X",
+        category: "fixo",
+        amount: 100,
+        installmentsTotal: 3,
+      })
+    ).rejects.toThrow("mês");
   });
 });

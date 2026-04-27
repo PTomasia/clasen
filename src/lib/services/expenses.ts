@@ -1,4 +1,5 @@
 import { eq, desc, and } from "drizzle-orm";
+import { addMonths, format } from "date-fns";
 import * as schema from "../db/schema";
 
 export type ExpenseCategory = "fixo" | "variavel";
@@ -13,6 +14,15 @@ export interface CreateExpenseInput {
   isPaid?: boolean;
   isRecurring?: boolean;
   recurringUntil?: string | null; // YYYY-MM
+  notes?: string | null;
+}
+
+export interface CreateExpenseInstallmentsInput {
+  month: string; // YYYY-MM — mês da primeira parcela
+  description: string;
+  category: ExpenseCategory;
+  amount: number; // valor por parcela
+  installmentsTotal: number; // N parcelas (2..60)
   notes?: string | null;
 }
 
@@ -36,6 +46,9 @@ export interface ExpenseRow {
   isPaid: boolean;
   isRecurring: boolean;
   recurringUntil: string | null;
+  installmentsTotal: number | null;
+  installmentNumber: number | null;
+  installmentGroupId: string | null;
   notes: string | null;
 }
 
@@ -62,6 +75,9 @@ function toRow(r: any): ExpenseRow {
     isPaid: !!r.isPaid,
     isRecurring: !!r.isRecurring,
     recurringUntil: r.recurringUntil ?? null,
+    installmentsTotal: r.installmentsTotal ?? null,
+    installmentNumber: r.installmentNumber ?? null,
+    installmentGroupId: r.installmentGroupId ?? null,
     notes: r.notes ?? null,
   };
 }
@@ -317,6 +333,50 @@ export async function getRecurringToLaunch(
       return !existingDescriptions.has(r.description.trim().toLowerCase());
     })
     .map(toRow);
+}
+
+// ─── createExpenseInstallments (5.5) ─────────────────────────────────────────
+// Cria N despesas parceladas com o mesmo installmentGroupId (modelo flat).
+// Cada parcela é um registro independente; isPaid=false para todas.
+
+export async function createExpenseInstallments(
+  db: any,
+  input: CreateExpenseInstallmentsInput
+): Promise<ExpenseRow[]> {
+  validateInput(input);
+
+  if (input.installmentsTotal < 2 || input.installmentsTotal > 60) {
+    throw new Error("número de parcelas deve ser entre 2 e 60");
+  }
+
+  const groupId = crypto.randomUUID();
+  const [year, month] = input.month.split("-").map(Number);
+  const baseDate = new Date(year, month - 1, 1);
+
+  const created: ExpenseRow[] = [];
+
+  for (let i = 0; i < input.installmentsTotal; i++) {
+    const parcMonth = format(addMonths(baseDate, i), "yyyy-MM");
+    const inserted = await db
+      .insert(schema.expenses)
+      .values({
+        month: parcMonth,
+        description: input.description.trim(),
+        category: input.category,
+        amount: input.amount,
+        isPaid: false,
+        isRecurring: false,
+        installmentsTotal: input.installmentsTotal,
+        installmentNumber: i + 1,
+        installmentGroupId: groupId,
+        notes: input.notes?.trim() || null,
+      })
+      .returning()
+      .get();
+    created.push(toRow(inserted));
+  }
+
+  return created;
 }
 
 // ─── launchRecurringExpenses (5.1) ────────────────────────────────────────────

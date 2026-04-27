@@ -19,8 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createExpenseAction, updateExpenseAction } from "@/lib/actions/expenses";
+import {
+  createExpenseAction,
+  updateExpenseAction,
+  createExpenseInstallmentsAction,
+} from "@/lib/actions/expenses";
 import type { ExpenseRow } from "@/lib/services/expenses";
+
+type PaymentMode = "avista" | "parcelado";
 
 export function ExpenseDialog({
   open,
@@ -41,6 +47,10 @@ export function ExpenseDialog({
   const [isRecurring, setIsRecurring] = useState(false);
   const [notes, setNotes] = useState("");
 
+  // Parcelamento — só disponível na criação
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("avista");
+  const [installmentsTotal, setInstallmentsTotal] = useState("2");
+
   useEffect(() => {
     if (!open) return;
     if (editing) {
@@ -51,6 +61,7 @@ export function ExpenseDialog({
       setIsPaid(editing.isPaid);
       setIsRecurring(editing.isRecurring ?? false);
       setNotes(editing.notes ?? "");
+      setPaymentMode("avista"); // edição não altera parcelamento
     } else {
       const now = new Date();
       setMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
@@ -60,11 +71,27 @@ export function ExpenseDialog({
       setIsPaid(true);
       setIsRecurring(false);
       setNotes("");
+      setPaymentMode("avista");
+      setInstallmentsTotal("2");
     }
   }, [open, editing]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!editing && paymentMode === "parcelado") {
+      run(async () => {
+        await createExpenseInstallmentsAction({
+          month,
+          description,
+          category,
+          amount: parseFloat(amount),
+          installmentsTotal: parseInt(installmentsTotal, 10),
+          notes: notes.trim() || null,
+        });
+      });
+      return;
+    }
+
     const input = {
       month,
       description,
@@ -83,6 +110,8 @@ export function ExpenseDialog({
     });
   }
 
+  const isParcelado = !editing && paymentMode === "parcelado";
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md">
@@ -95,7 +124,7 @@ export function ExpenseDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Mês</Label>
+              <Label>Mês {isParcelado && <span className="text-muted-foreground">(1ª parcela)</span>}</Label>
               <Input
                 type="month"
                 required
@@ -104,7 +133,7 @@ export function ExpenseDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Valor (R$)</Label>
+              <Label>Valor por {isParcelado ? "parcela" : "mês"} (R$)</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -143,31 +172,76 @@ export function ExpenseDialog({
             </Select>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              id="isPaid"
-              type="checkbox"
-              checked={isPaid}
-              onChange={(e) => setIsPaid(e.target.checked)}
-              className="w-4 h-4"
-            />
-            <Label htmlFor="isPaid" className="cursor-pointer">
-              Já paga
-            </Label>
-          </div>
+          {/* Modo de pagamento — só na criação */}
+          {!editing && (
+            <div className="space-y-1.5">
+              <Label>Pagamento</Label>
+              <div className="flex gap-1">
+                {(["avista", "parcelado"] as PaymentMode[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setPaymentMode(m)}
+                    className={`px-3 py-1.5 text-sm rounded border transition-colors ${
+                      paymentMode === m
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background border-border text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {m === "avista" ? "À vista" : "Parcelado"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-          <div className="flex items-center gap-2">
-            <input
-              id="isRecurring"
-              type="checkbox"
-              checked={isRecurring}
-              onChange={(e) => setIsRecurring(e.target.checked)}
-              className="w-4 h-4"
-            />
-            <Label htmlFor="isRecurring" className="cursor-pointer">
-              Despesa recorrente (lançar automaticamente no próximo mês)
-            </Label>
-          </div>
+          {/* Número de parcelas */}
+          {isParcelado && (
+            <div className="space-y-1.5">
+              <Label>Número de parcelas</Label>
+              <Input
+                type="number"
+                min="2"
+                max="60"
+                required
+                value={installmentsTotal}
+                onChange={(e) => setInstallmentsTotal(e.target.value)}
+                placeholder="2"
+              />
+            </div>
+          )}
+
+          {/* Já paga — oculto em parcelado (todas começam pendentes) */}
+          {!isParcelado && (
+            <div className="flex items-center gap-2">
+              <input
+                id="isPaid"
+                type="checkbox"
+                checked={isPaid}
+                onChange={(e) => setIsPaid(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <Label htmlFor="isPaid" className="cursor-pointer">
+                Já paga
+              </Label>
+            </div>
+          )}
+
+          {/* Recorrente — só em à vista e sem edição de parcela */}
+          {!isParcelado && (
+            <div className="flex items-center gap-2">
+              <input
+                id="isRecurring"
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => setIsRecurring(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <Label htmlFor="isRecurring" className="cursor-pointer">
+                Despesa recorrente (lançar automaticamente no próximo mês)
+              </Label>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Observação</Label>
@@ -190,7 +264,13 @@ export function ExpenseDialog({
               Cancelar
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : editing ? "Salvar" : "Criar"}
+              {isPending
+                ? "Salvando..."
+                : editing
+                ? "Salvar"
+                : isParcelado
+                ? `Criar ${installmentsTotal || "N"} parcelas`
+                : "Criar"}
             </Button>
           </div>
         </form>
