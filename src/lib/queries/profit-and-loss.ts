@@ -49,6 +49,10 @@ interface ExpenseInput {
   amount: number;
   isPaid: boolean;
 }
+interface MarketingInput {
+  month: string; // YYYY-MM
+  adSpend: number;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -72,10 +76,11 @@ export function aggregateProfitAndLoss(input: {
   payments: PaymentInput[];
   revenues: RevenueInput[];
   expenses: ExpenseInput[];
+  marketing?: MarketingInput[]; // adSpend entra como despesa variável de marketing
   today: Date;
   financialDataStart?: string;
 }): PnLData {
-  const { today, financialDataStart } = input;
+  const { today, financialDataStart, marketing = [] } = input;
   const cutoffMonth = financialDataStart ? financialDataStart.slice(0, 7) : undefined;
 
   const payments = financialDataStart
@@ -119,6 +124,9 @@ export function aggregateProfitAndLoss(input: {
       if (e.category === "fixo") despesaFixa += e.amount;
       else despesaVariavel += e.amount;
     }
+    // adSpend de marketing: entra como despesa variável (regime de caixa)
+    const mktRow = marketing.find((mk) => mk.month === m);
+    if (mktRow && mktRow.adSpend > 0) despesaVariavel += mktRow.adSpend;
 
     const receitaTotal = receitaRecorrente + receitaAvulsa;
     const despesaTotal = despesaFixa + despesaVariavel;
@@ -173,16 +181,18 @@ export function aggregateProfitAndLoss(input: {
 // ─── Query (IO) ───────────────────────────────────────────────────────────────
 
 export async function getProfitAndLossData(): Promise<PnLData> {
-  const [payments, revenues, expenses] = await Promise.all([
+  const [payments, revenues, expenses, marketing] = await Promise.all([
     db.select().from(schema.planPayments).all(),
     db.select().from(schema.oneTimeRevenues).all(),
     db.select().from(schema.expenses).all(),
+    db.select().from(schema.marketingMonthly).all(),
   ]);
 
   return aggregateProfitAndLoss({
     payments: payments as any,
     revenues: revenues as any,
     expenses: expenses as any,
+    marketing: marketing as any,
     today: new Date(),
     financialDataStart: FINANCIAL_DATA_START,
   });

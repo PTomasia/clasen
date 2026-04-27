@@ -281,3 +281,43 @@ describe("aggregateProfitAndLoss — corte temporal (financialDataStart)", () =>
     expect(pickMonth(data, "2025-12").receitaRecorrente).toBe(400);
   });
 });
+
+describe("aggregateProfitAndLoss — adSpend no P&L", () => {
+  it("adSpend entra como despesaVariavel do mês correspondente", () => {
+    const data = aggregateProfitAndLoss({
+      payments: [],
+      revenues: [],
+      expenses: [],
+      marketing: [{ month: "2026-04", adSpend: 500 }],
+      today: TODAY,
+    });
+    const abr = pickMonth(data, "2026-04");
+    expect(abr.despesaVariavel).toBe(500);
+    expect(abr.despesaTotal).toBe(500);
+    expect(abr.lucroLiquido).toBe(-500);
+  });
+
+  it("adSpend zero não impacta despesas", () => {
+    const data = aggregateProfitAndLoss({
+      payments: [],
+      revenues: [],
+      expenses: [],
+      marketing: [{ month: "2026-04", adSpend: 0 }],
+      today: TODAY,
+    });
+    const abr = pickMonth(data, "2026-04");
+    expect(abr.despesaTotal).toBe(0);
+  });
+
+  it("adSpend soma com despesas existentes do mesmo mês", () => {
+    const data = aggregateProfitAndLoss({
+      payments: [],
+      revenues: [],
+      expenses: [{ month: "2026-04", category: "variavel", amount: 300, isPaid: true }],
+      marketing: [{ month: "2026-04", adSpend: 200 }],
+      today: TODAY,
+    });
+    const abr = pickMonth(data, "2026-04");
+    expect(abr.despesaVariavel).toBe(500); // 300 + 200
+  });
+});
