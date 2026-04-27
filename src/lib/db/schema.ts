@@ -111,6 +111,10 @@ export const oneTimeRevenues = sqliteTable("one_time_revenues", {
   channel: text("channel"), // WhatsApp, Instagram, etc.
   campaign: text("campaign"),
   isPaid: integer("is_paid", { mode: "boolean" }).notNull().default(true),
+  // Parcelamento (modelo flat — sem master): null = à vista
+  installmentsTotal: integer("installments_total"),    // número total de parcelas
+  installmentNumber: integer("installment_number"),    // índice desta parcela (1..N)
+  installmentGroupId: text("installment_group_id"),    // UUID agrupador das parcelas
   notes: text("notes"),
   createdAt: text("created_at")
     .notNull()
@@ -141,6 +145,10 @@ export const expenses = sqliteTable("expenses", {
   category: text("category").notNull().default("variavel"), // fixo, variavel
   amount: real("amount").notNull(),
   isPaid: integer("is_paid", { mode: "boolean" }).notNull().default(true),
+  // Parcelamento (modelo flat — sem master): null = à vista
+  installmentsTotal: integer("installments_total"),
+  installmentNumber: integer("installment_number"),
+  installmentGroupId: text("installment_group_id"),
   notes: text("notes"),
   createdAt: text("created_at")
     .notNull()

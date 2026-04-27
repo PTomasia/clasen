@@ -1,4 +1,5 @@
 import { eq, desc } from "drizzle-orm";
+import { addMonths, format, parseISO } from "date-fns";
 import * as schema from "../db/schema";
 import { findOrCreateClient } from "./clients";
 
@@ -7,12 +8,13 @@ import { findOrCreateClient } from "./clients";
 export interface CreateRevenueInput {
   clientId?: number | null;
   clientName?: string | null; // alternativa a clientId: cria ou reutiliza cliente
-  date: string; // YYYY-MM-DD
-  amount: number;
+  date: string; // YYYY-MM-DD — primeira parcela se parcelado
+  amount: number; // total (dividido por N internamente se parcelado)
   product: string;
   channel?: string | null;
   campaign?: string | null;
   isPaid?: boolean;
+  installmentsTotal?: number | null; // null ou 1 = à vista; >1 = parcelado
   notes?: string | null;
 }
 
@@ -44,22 +46,57 @@ export async function createRevenue(db: any, input: CreateRevenueInput) {
     resolvedClientId = client.id;
   }
 
-  const inserted = await db
-    .insert(schema.oneTimeRevenues)
-    .values({
-      clientId: resolvedClientId,
-      date: input.date,
-      amount: input.amount,
-      product: input.product.trim(),
-      channel: input.channel?.trim() || null,
-      campaign: input.campaign?.trim() || null,
-      isPaid: input.isPaid ?? true,
-      notes: input.notes?.trim() || null,
-    })
-    .returning()
-    .get();
+  const n = !input.installmentsTotal || input.installmentsTotal <= 1
+    ? null
+    : input.installmentsTotal;
 
-  return inserted;
+  // À vista: insere uma linha sem campos de parcela
+  if (!n) {
+    return await db
+      .insert(schema.oneTimeRevenues)
+      .values({
+        clientId: resolvedClientId,
+        date: input.date,
+        amount: input.amount,
+        product: input.product.trim(),
+        channel: input.channel?.trim() || null,
+        campaign: input.campaign?.trim() || null,
+        isPaid: input.isPaid ?? true,
+        installmentsTotal: null,
+        installmentNumber: null,
+        installmentGroupId: null,
+        notes: input.notes?.trim() || null,
+      })
+      .returning()
+      .get();
+  }
+
+  // Parcelado: N linhas com mesmo installmentGroupId
+  const groupId = crypto.randomUUID();
+  const perInstallment = Math.round((input.amount / n) * 100) / 100;
+  const baseDate = parseISO(input.date);
+  const common = {
+    clientId: resolvedClientId,
+    product: input.product.trim(),
+    channel: input.channel?.trim() || null,
+    campaign: input.campaign?.trim() || null,
+    isPaid: false, // parcelas começam como não pagas
+    installmentsTotal: n,
+    installmentGroupId: groupId,
+    notes: input.notes?.trim() || null,
+  };
+
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const date = format(addMonths(baseDate, i), "yyyy-MM-dd");
+    const inserted = await db
+      .insert(schema.oneTimeRevenues)
+      .values({ ...common, date, amount: perInstallment, installmentNumber: i + 1 })
+      .returning()
+      .get();
+    rows.push(inserted);
+  }
+  return rows;
 }
 
 // ─── updateRevenue ────────────────────────────────────────────────────────────
@@ -127,6 +164,9 @@ export interface RevenueRow {
   channel: string | null;
   campaign: string | null;
   isPaid: boolean;
+  installmentsTotal: number | null;
+  installmentNumber: number | null;
+  installmentGroupId: string | null;
   notes: string | null;
 }
 
@@ -150,6 +190,9 @@ export async function getRevenues(db: any): Promise<RevenueRow[]> {
     channel: r.channel,
     campaign: r.campaign,
     isPaid: !!r.isPaid,
+    installmentsTotal: r.installmentsTotal ?? null,
+    installmentNumber: r.installmentNumber ?? null,
+    installmentGroupId: r.installmentGroupId ?? null,
     notes: r.notes,
   }));
 }

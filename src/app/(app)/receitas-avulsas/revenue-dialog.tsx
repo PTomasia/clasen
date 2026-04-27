@@ -48,6 +48,8 @@ export function RevenueDialog({
   const [channel, setChannel] = useState("");
   const [campaign, setCampaign] = useState("");
   const [isPaid, setIsPaid] = useState(true);
+  const [installmentMode, setInstallmentMode] = useState<"avista" | "parcelado">("avista");
+  const [installmentsTotal, setInstallmentsTotal] = useState("2");
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
@@ -69,6 +71,8 @@ export function RevenueDialog({
       setChannel(editing.channel ?? "");
       setCampaign(editing.campaign ?? "");
       setIsPaid(editing.isPaid);
+      setInstallmentMode("avista"); // edição não suporta alterar parcelamento
+      setInstallmentsTotal("2");
       setNotes(editing.notes ?? "");
     } else {
       setClientMode("none");
@@ -81,6 +85,8 @@ export function RevenueDialog({
       setChannel("");
       setCampaign("");
       setIsPaid(true);
+      setInstallmentMode("avista");
+      setInstallmentsTotal("2");
       setNotes("");
     }
   }, [open, editing]);
@@ -92,6 +98,7 @@ export function RevenueDialog({
       clientId: clientMode === "existing" && clientId ? Number(clientId) : null,
       clientName: clientMode === "new" ? clientName.trim() || null : null,
       date,
+      installmentsTotal: installmentMode === "parcelado" ? parseInt(installmentsTotal) || 2 : null,
       amount: parseFloat(amount),
       product: productFinal,
       channel: channel.trim() || null,
@@ -243,18 +250,58 @@ export function RevenueDialog({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              id="isPaid"
-              type="checkbox"
-              checked={isPaid}
-              onChange={(e) => setIsPaid(e.target.checked)}
-              className="w-4 h-4"
-            />
-            <Label htmlFor="isPaid" className="cursor-pointer">
-              Pagamento recebido
-            </Label>
-          </div>
+          {/* Parcelamento — só disponível em criação */}
+          {!editing && (
+            <div className="space-y-1.5">
+              <Label>Pagamento</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={installmentMode === "avista" ? "default" : "outline"}
+                  onClick={() => setInstallmentMode("avista")}
+                >
+                  À vista
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={installmentMode === "parcelado" ? "default" : "outline"}
+                  onClick={() => setInstallmentMode("parcelado")}
+                >
+                  Parcelado
+                </Button>
+              </div>
+              {installmentMode === "parcelado" && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="2"
+                    max="24"
+                    className="w-24"
+                    value={installmentsTotal}
+                    onChange={(e) => setInstallmentsTotal(e.target.value)}
+                  />
+                  <span className="text-sm text-muted-foreground">parcelas mensais a partir da data acima</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {installmentMode === "avista" && (
+            <div className="flex items-center gap-2">
+              <input
+                id="isPaid"
+                type="checkbox"
+                checked={isPaid}
+                onChange={(e) => setIsPaid(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <Label htmlFor="isPaid" className="cursor-pointer">
+                Pagamento recebido
+              </Label>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="notes">Observação</Label>

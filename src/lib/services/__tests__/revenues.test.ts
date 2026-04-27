@@ -45,6 +45,9 @@ function createTestDb() {
       channel TEXT,
       campaign TEXT,
       is_paid INTEGER NOT NULL DEFAULT 1,
+      installments_total INTEGER,
+      installment_number INTEGER,
+      installment_group_id TEXT,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -198,5 +201,132 @@ describe("getRevenues / getRevenuesSummary", () => {
     expect(summary.totalGeral).toBe(1100); // 100 + 200 + 500 + 300
     expect(summary.totalPendente).toBe(999);
     expect(summary.qtdMesAtual).toBe(2);
+  });
+});
+
+// ─── Parcelamento ─────────────────────────────────────────────────────────────
+
+describe("createRevenue — parcelamento flat", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(() => { db = createTestDb(); });
+
+  it("à vista: não preenche campos de parcela", async () => {
+    const rev = await createRevenue(db, {
+      date: "2026-04-01",
+      amount: 300,
+      product: "Arte para tráfego",
+    });
+
+    expect(rev.installmentsTotal).toBeNull();
+    expect(rev.installmentNumber).toBeNull();
+    expect(rev.installmentGroupId).toBeNull();
+  });
+
+  it("3x: cria 3 linhas com mesmo installmentGroupId", async () => {
+    const revs = await createRevenue(db, {
+      date: "2026-04-01",
+      amount: 300,
+      product: "PDF",
+      installmentsTotal: 3,
+    });
+
+    // retorna array de N quando parcelado
+    expect(Array.isArray(revs)).toBe(true);
+    const arr = revs as any[];
+    expect(arr).toHaveLength(3);
+
+    // mesmo grupo
+    const groupId = arr[0].installmentGroupId;
+    expect(groupId).toBeTruthy();
+    expect(arr.every((r) => r.installmentGroupId === groupId)).toBe(true);
+
+    // índices 1, 2, 3
+    expect(arr.map((r) => r.installmentNumber)).toEqual([1, 2, 3]);
+
+    // installmentsTotal em todas
+    expect(arr.every((r) => r.installmentsTotal === 3)).toBe(true);
+  });
+
+  it("3x: valor por parcela = total / N (arredondado)", async () => {
+    const revs = await createRevenue(db, {
+      date: "2026-04-01",
+      amount: 300,
+      product: "PDF",
+      installmentsTotal: 3,
+    }) as any[];
+
+    const totalSaved = revs.reduce((s: number, r: any) => s + r.amount, 0);
+    expect(totalSaved).toBeCloseTo(300, 1);
+    expect(revs[0].amount).toBeCloseTo(100, 1);
+  });
+
+  it("3x: datas mensais a partir da data da primeira parcela", async () => {
+    const revs = await createRevenue(db, {
+      date: "2026-04-10",
+      amount: 300,
+      product: "PDF",
+      installmentsTotal: 3,
+    }) as any[];
+
+    expect(revs[0].date).toBe("2026-04-10");
+    expect(revs[1].date).toBe("2026-05-10");
+    expect(revs[2].date).toBe("2026-06-10");
+  });
+
+  it("3x: todas as parcelas iniciam como isPaid=false", async () => {
+    const revs = await createRevenue(db, {
+      date: "2026-04-01",
+      amount: 300,
+      product: "PDF",
+      installmentsTotal: 3,
+    }) as any[];
+
+    expect(revs.every((r: any) => r.isPaid === false)).toBe(true);
+  });
+
+  it("installmentsTotal=1: trata como à vista (sem campos parcela)", async () => {
+    const rev = await createRevenue(db, {
+      date: "2026-04-01",
+      amount: 300,
+      product: "PDF",
+      installmentsTotal: 1,
+    });
+
+    // retorna objeto único (não array)
+    expect(Array.isArray(rev)).toBe(false);
+    const r = rev as any;
+    expect(r.installmentsTotal).toBeNull();
+    expect(r.installmentGroupId).toBeNull();
+  });
+
+  it("getRevenues inclui campos de parcelamento", async () => {
+    await createRevenue(db, {
+      date: "2026-04-01",
+      amount: 300,
+      product: "PDF",
+      installmentsTotal: 2,
+    });
+
+    const rows = await getRevenues(db);
+    expect(rows).toHaveLength(2);
+    // ambas têm os campos de parcela (ordem por date desc, 2ª parcela pode vir primeiro)
+    expect(rows.every((r) => r.installmentsTotal === 2)).toBe(true);
+    expect(rows.every((r) => r.installmentGroupId)).toBeTruthy();
+    const numbers = rows.map((r) => r.installmentNumber).sort();
+    expect(numbers).toEqual([1, 2]);
+  });
+
+  it("getRevenuesSummary: parcelas isPaid=false não entram no total", async () => {
+    // parcelas criadas como isPaid=false
+    await createRevenue(db, {
+      date: "2026-04-01",
+      amount: 300,
+      product: "PDF",
+      installmentsTotal: 3,
+    });
+
+    const summary = await getRevenuesSummary(db, "2026-04-30");
+    expect(summary.totalMesAtual).toBe(0);      // nenhuma paga
+    expect(summary.totalPendente).toBeCloseTo(300, 1); // todas pendentes
   });
 });

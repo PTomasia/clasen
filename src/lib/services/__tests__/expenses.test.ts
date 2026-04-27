@@ -22,6 +22,9 @@ function createTestDb() {
       category TEXT NOT NULL DEFAULT 'variavel',
       amount REAL NOT NULL,
       is_paid INTEGER NOT NULL DEFAULT 1,
+      installments_total INTEGER,
+      installment_number INTEGER,
+      installment_group_id TEXT,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

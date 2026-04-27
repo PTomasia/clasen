@@ -84,6 +84,9 @@ function createTestDb() {
       channel TEXT,
       campaign TEXT,
       is_paid INTEGER NOT NULL DEFAULT 1,
+      installments_total INTEGER,
+      installment_number INTEGER,
+      installment_group_id TEXT,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

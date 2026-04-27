@@ -181,7 +181,14 @@ export function RevenuesClient({ revenues, summary, clients }: Props) {
               filtered.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{formatDate(r.date)}</TableCell>
-                  <TableCell className="font-medium">{r.product}</TableCell>
+                  <TableCell className="font-medium">
+                    {r.product}
+                    {r.installmentsTotal && r.installmentNumber && (
+                      <span className="ml-1.5 text-xs text-muted-foreground font-normal">
+                        {r.installmentNumber}/{r.installmentsTotal}x
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {r.clientName ?? <span className="italic">—</span>}
                   </TableCell>
