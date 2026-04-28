@@ -345,6 +345,55 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
   return { ...existing, ...input };
 }
 
+// ─── updateBillingDays (inline edit on /planos table) ────────────────────────
+
+export async function updateBillingDays(
+  db: any,
+  planId: number,
+  billingCycleDays: number,
+  billingCycleDays2: number | null = null
+): Promise<void> {
+  if (!Number.isInteger(billingCycleDays) || billingCycleDays < 1 || billingCycleDays > 31) {
+    throw new Error("dia de vencimento deve ser inteiro entre 1 e 31");
+  }
+  if (billingCycleDays2 !== null) {
+    if (!Number.isInteger(billingCycleDays2) || billingCycleDays2 < 1 || billingCycleDays2 > 31) {
+      throw new Error("segundo dia de vencimento deve ser inteiro entre 1 e 31");
+    }
+    if (billingCycleDays2 === billingCycleDays) {
+      throw new Error("os dois dias de vencimento devem ser diferentes");
+    }
+  }
+
+  const existing = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+
+  if (!existing) throw new Error("plano não encontrado");
+
+  const billingChanged =
+    billingCycleDays !== existing.billingCycleDays ||
+    billingCycleDays2 !== existing.billingCycleDays2;
+
+  const recalculatedNext =
+    billingChanged && existing.lastPaymentDate
+      ? calcularProximoVencimento(existing.lastPaymentDate, billingCycleDays, billingCycleDays2)
+      : undefined;
+
+  await db
+    .update(schema.subscriptionPlans)
+    .set({
+      billingCycleDays,
+      billingCycleDays2,
+      ...(recalculatedNext !== undefined ? { nextPaymentDate: recalculatedNext } : {}),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .run();
+}
+
 // ─── changePlan (Upgrade / Downgrade) ─────────────────────────────────────────
 
 export interface ChangePlanInput {

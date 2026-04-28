@@ -44,6 +44,7 @@ import { ChangePlanDialog, type ChangePlanData } from "./change-plan-dialog";
 import { PaymentHistoryDialog } from "./payment-history-dialog";
 import { TargetPriceDialog } from "./target-price-dialog";
 import { skipBillingCycleAction } from "@/lib/actions/plans";
+import { BillingDayCell } from "./billing-day-cell";
 
 interface Plan {
   id: number;
@@ -197,9 +198,8 @@ export function PlanosClient({
   // Status filter (existing)
   const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "cancelado">("ativo");
 
-  // New: search, type filter, payment filter
+  // New: search, payment filter
   const [search, setSearch] = useState("");
-  const [planTypeFilter, setPlanTypeFilter] = useState("todos");
   const [pgtoFilter, setPgtoFilter] = useState("todos");
 
   // Sorting
@@ -225,12 +225,6 @@ export function PlanosClient({
       await skipBillingCycleAction(planId);
     });
   }
-
-  // Derive unique plan types from data
-  const planTypes = useMemo(
-    () => [...new Set(plans.map((p) => p.planType))].sort(),
-    [plans]
-  );
 
   // Navegar entre planos com o modal de edição aberto
   function handleNavigateEdit(direction: "prev" | "next") {
@@ -293,7 +287,6 @@ export function PlanosClient({
     // 2. Additional filters
     result = filterPlans(result, {
       search,
-      planType: planTypeFilter,
       statusPagamento: pgtoFilter,
     });
 
@@ -308,7 +301,7 @@ export function PlanosClient({
     }
 
     return result;
-  }, [plans, statusFilter, search, planTypeFilter, pgtoFilter, sortKey, sortDirection]);
+  }, [plans, statusFilter, search, pgtoFilter, sortKey, sortDirection]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -329,7 +322,7 @@ export function PlanosClient({
   const closePlan = plans.find((p) => p.id === closePlanId);
   const deletePlan = plans.find((p) => p.id === deletePlanId);
 
-  const hasActiveFilters = search || planTypeFilter !== "todos" || pgtoFilter !== "todos";
+  const hasActiveFilters = search || pgtoFilter !== "todos";
 
   // Cards de resumo — planos ativos
   const activePlans = useMemo(() => plans.filter((p) => p.status === "ativo"), [plans]);
@@ -424,16 +417,6 @@ export function PlanosClient({
             />
           </div>
           <select
-            value={planTypeFilter}
-            onChange={(e) => setPlanTypeFilter(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          >
-            <option value="todos">Tipo: Todos</option>
-            {planTypes.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-          <select
             value={pgtoFilter}
             onChange={(e) => setPgtoFilter(e.target.value)}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
@@ -449,7 +432,6 @@ export function PlanosClient({
               size="sm"
               onClick={() => {
                 setSearch("");
-                setPlanTypeFilter("todos");
                 setPgtoFilter("todos");
               }}
             >
@@ -465,7 +447,7 @@ export function PlanosClient({
           <TableHeader>
             <TableRow>
               <SortableHead label="Cliente" sortKey="clientName" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
-              <SortableHead label="Tipo" sortKey="planType" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
+              <SortableHead label="Vencimento" sortKey="billingCycleDays" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
               <SortableHead label="Valor" sortKey="planValue" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
               <SortableHead label="$/post" sortKey="custoPost" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
               <TableHead className="text-center">Posts</TableHead>
@@ -502,8 +484,12 @@ export function PlanosClient({
                       {plan.clientName}
                     </button>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{plan.planType}</Badge>
+                  <TableCell className="text-center">
+                    <BillingDayCell
+                      planId={plan.id}
+                      billingCycleDays={plan.billingCycleDays}
+                      billingCycleDays2={plan.billingCycleDays2}
+                    />
                   </TableCell>
                   <TableCell className="text-right font-mono">
                     {formatBRL(plan.planValue)}

@@ -8,7 +8,8 @@ export type SortKey =
   | "planValue"
   | "custoPost"
   | "permanencia"
-  | "statusPagamento";
+  | "statusPagamento"
+  | "billingCycleDays";
 
 export type SortDirection = "asc" | "desc";
 
@@ -19,6 +20,7 @@ export interface PlanRow {
   custoPost: number | null;
   permanencia: number;
   statusPagamento: StatusPagamento;
+  billingCycleDays: number | null;
 }
 
 interface FilterOptions {

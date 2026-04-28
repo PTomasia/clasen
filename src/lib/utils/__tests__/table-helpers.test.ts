@@ -132,6 +132,27 @@ describe("sortPlans", () => {
     expect(sorted.map((p) => p.planType)).toEqual(["Essential", "Personalizado", "Tráfego"]);
   });
 
+  it("ordena por billingCycleDays asc com nulls no final", () => {
+    const plans = [
+      makePlan({ billingCycleDays: 25 }),
+      makePlan({ billingCycleDays: null }),
+      makePlan({ billingCycleDays: 5 }),
+      makePlan({ billingCycleDays: 15 }),
+    ];
+    const sorted = sortPlans(plans, "billingCycleDays", "asc");
+    expect(sorted.map((p) => p.billingCycleDays)).toEqual([5, 15, 25, null]);
+  });
+
+  it("ordena por billingCycleDays desc com nulls no final", () => {
+    const plans = [
+      makePlan({ billingCycleDays: null }),
+      makePlan({ billingCycleDays: 5 }),
+      makePlan({ billingCycleDays: 25 }),
+    ];
+    const sorted = sortPlans(plans, "billingCycleDays", "desc");
+    expect(sorted.map((p) => p.billingCycleDays)).toEqual([25, 5, null]);
+  });
+
   it("ordena por statusPagamento asc (atrasado primeiro)", () => {
     const plans = [
       makePlan({ statusPagamento: "sem_pagamento" }),

@@ -90,6 +90,7 @@ import {
   getPaymentGaps,
   updateClient,
   updatePlan,
+  updateBillingDays,
   deletePlan,
   changePlan,
   skipBillingCycle,
@@ -1517,6 +1518,141 @@ describe("updatePlan", () => {
     const after = await getPlanById(db, plan.id);
     // Recalculou após mudança de billing — agora 22 do mesmo mês
     expect(after!.nextPaymentDate).toBe("2026-04-22");
+  });
+});
+
+describe("updateBillingDays (inline edit)", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("atualiza apenas billingCycleDays e recalcula nextPaymentDate", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ana",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, {
+      planId: plan.id,
+      paymentDate: "2026-04-10",
+      amount: 500,
+    });
+
+    await updateBillingDays(db, plan.id, 25);
+
+    const after = await getPlanById(db, plan.id);
+    expect(after!.billingCycleDays).toBe(25);
+    expect(after!.billingCycleDays2).toBeNull();
+    expect(after!.nextPaymentDate).toBe("2026-05-25"); // 1x/mês: sempre próximo mês após lastPayment
+  });
+
+  it("atualiza com 2 dias de vencimento", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ana",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await updateBillingDays(db, plan.id, 5, 20);
+
+    const after = await getPlanById(db, plan.id);
+    expect(after!.billingCycleDays).toBe(5);
+    expect(after!.billingCycleDays2).toBe(20);
+  });
+
+  it("remove o segundo dia ao passar null", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ana",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await updateBillingDays(db, plan.id, 10, null);
+
+    const after = await getPlanById(db, plan.id);
+    expect(after!.billingCycleDays).toBe(10);
+    expect(after!.billingCycleDays2).toBeNull();
+  });
+
+  it("rejeita dia fora do range 1-31", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ana",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await expect(updateBillingDays(db, plan.id, 0)).rejects.toThrow("entre 1 e 31");
+    await expect(updateBillingDays(db, plan.id, 32)).rejects.toThrow("entre 1 e 31");
+    await expect(updateBillingDays(db, plan.id, 15, 50)).rejects.toThrow("entre 1 e 31");
+  });
+
+  it("rejeita quando os dois dias são iguais", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ana",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await expect(updateBillingDays(db, plan.id, 15, 15)).rejects.toThrow("diferentes");
+  });
+
+  it("lança erro se o plano não existe", async () => {
+    await expect(updateBillingDays(db, 99999, 10)).rejects.toThrow("plano não encontrado");
+  });
+
+  it("não altera nextPaymentDate se não há lastPaymentDate", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Ana",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const before = await getPlanById(db, plan.id);
+    await updateBillingDays(db, plan.id, 25);
+    const after = await getPlanById(db, plan.id);
+
+    expect(after!.billingCycleDays).toBe(25);
+    expect(after!.nextPaymentDate).toBe(before!.nextPaymentDate); // não mudou (sem lastPayment)
   });
 });
 
