@@ -326,6 +326,10 @@ export function PlanosClient({
 
   // Cards de resumo — planos ativos
   const activePlans = useMemo(() => plans.filter((p) => p.status === "ativo"), [plans]);
+  const activeClientsCount = useMemo(
+    () => new Set(activePlans.map((p) => p.clientId)).size,
+    [activePlans]
+  );
   const activeTotal = useMemo(
     () => activePlans.reduce((sum, p) => sum + p.planValue, 0),
     [activePlans]
@@ -345,6 +349,10 @@ export function PlanosClient({
         <div className="bg-card border rounded-lg px-4 py-3 min-w-[140px]">
           <p className="text-xs text-muted-foreground">Planos ativos</p>
           <p className="text-lg font-semibold">{activePlans.length}</p>
+        </div>
+        <div className="bg-card border rounded-lg px-4 py-3 min-w-[140px]">
+          <p className="text-xs text-muted-foreground">Clientes ativos</p>
+          <p className="text-lg font-semibold">{activeClientsCount}</p>
         </div>
         <div className="bg-card border rounded-lg px-4 py-3 min-w-[160px]">
           <p className="text-xs text-muted-foreground">Receita mensal</p>
