@@ -9,7 +9,7 @@ export const PAYMENT_TARGETS = [
   { clientName: "Bárbara Brandao", paidUntil: "13/03/2026", billingDay: 30, amount: 400 },
   { clientName: "Beatriz Viçoza", paidUntil: "13/03/2026", billingDay: 15, amount: 350 },
   { clientName: "Bia Gracher", paidUntil: "11/03/2026", billingDay: 30, amount: 270 },
-  { clientName: "Borba Gato", paidUntil: "11/03/2026", billingDay: 10, amount: 900, inactiveOnly: true },
+  { clientName: "Borba Gato", paidUntil: "11/03/2026", billingDay: 10, amount: 900, inactiveOnly: true, allowAmountMismatch: true },
   { clientName: "Dr Fernando", paidUntil: "02/03/2026", billingDay: 15, amount: 380 },
   { clientName: "Espaço Essenzia", paidUntil: "17/03/2026", billingDay: 15, amount: 600 },
   { clientName: "Fernanda Muniz", paidUntil: "16/03/2026", billingDay: 15, amount: 1005 },
@@ -105,6 +105,9 @@ export function resolvePlan(plans, target) {
 
   const sameAmount = candidates.filter((plan) => cents(plan.plan_value) === cents(target.amount));
   if (sameAmount.length > 0) candidates = sameAmount;
+  else if (target.allowAmountMismatch) {
+    warnings.push(`valor do plano diverge do informado (${target.amount})`);
+  }
   else {
     return {
       status: "blocked",

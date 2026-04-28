@@ -138,6 +138,9 @@ export const marketingMonthly = sqliteTable("marketing_monthly", {
     .default(sql`(datetime('now'))`),
 });
 
+// ─── Standalone Payments (DEPRECATED - Sprint B.7) ──────────────────────────
+// [2026-04-28] Migrado para one_time_revenues. Tabela será dropada via migration.
+
 // ─── Expenses (Sprint 5) ──────────────────────────────────────────────────────
 export const expenses = sqliteTable("expenses", {
   id: integer("id").primaryKey({ autoIncrement: true }),

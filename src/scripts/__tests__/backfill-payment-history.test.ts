@@ -90,6 +90,21 @@ describe("backfill-payment-history", () => {
     expect(result.warnings).toContain("plano selecionado está inativo/cancelado");
   });
 
+  it("permite divergência de valor quando autorizado explicitamente", () => {
+    const result = resolvePlan([{ ...activePlan, plan_value: 800, status: "cancelado", end_date: "2026-04-12" }], {
+      clientName: "Borba Gato",
+      paidUntil: "11/03/2026",
+      billingDay: 10,
+      amount: 900,
+      inactiveOnly: true,
+      allowAmountMismatch: true,
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.plan.plan_value).toBe(800);
+    expect(result.warnings).toContain("valor do plano diverge do informado (900)");
+  });
+
   it("bloqueia quando nenhum plano bate com o valor informado", () => {
     const result = resolvePlan([{ ...activePlan, plan_value: 800, status: "cancelado", end_date: "2026-04-12" }], {
       clientName: "Borba Gato",

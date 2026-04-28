@@ -32,9 +32,13 @@ export async function getAllPlans() {
   const targetRaw = await getSetting(db as any, TARGET_COST_PER_POST_KEY);
   const targetCostPerPost = targetRaw ? Number(targetRaw) : null;
 
+  // Ler earliest_tracked_month UMA VEZ para aplicar cutoff histórico
+  const earliestTrackedRaw = await getSetting(db as any, "earliest_tracked_month");
+  const minDate = earliestTrackedRaw ? `${earliestTrackedRaw}-01` : undefined;
+
   const enriched = await Promise.all(
     plans.map(async ({ plan, clientName, clientContactOrigin, clientNotes, clientSince }) => {
-      const gaps = await getPaymentGaps(db as any, plan.id);
+      const gaps = await getPaymentGaps(db as any, plan.id, undefined, minDate);
 
       // Reajuste: só para planos ativos
       const nextAdjustmentDate =

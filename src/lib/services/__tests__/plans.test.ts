@@ -66,6 +66,12 @@ function createTestDb() {
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE agency_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   return db;
@@ -2561,6 +2567,41 @@ describe("getPaymentGaps", () => {
     // Fevereiro continua gap, março foi congelado
     expect(gaps).toContain("2026-02-10");
     expect(gaps).not.toContain("2026-03-10");
+  });
+
+  it("respeita earliest_tracked_month em agency_settings — cutoff histórico", async () => {
+    // Cenário: plano desde agosto/2025, sem pagamentos. Hoje = 28/04/2026.
+    const { plan } = await createPlan(db, {
+      clientName: "Cliente Antigo",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-08-01",
+    });
+
+    // SEM cutoff: esperaria todos os gaps desde set/2025 até abr/2026 (~8 meses)
+    const gapsSemCutoff = await getPaymentGaps(db, plan.id, "2026-04-28");
+    expect(gapsSemCutoff.length).toBe(8); // 8 gaps históricos (set 2025 até abr 2026)
+    expect(gapsSemCutoff).toContain("2025-09-15");
+    expect(gapsSemCutoff).toContain("2026-01-15");
+
+    // COM cutoff: passa minDate = "2026-02-01"
+    // Agora deve retornar apenas gaps de fev, mar, abr/2026
+    const gapsComCutoff = await getPaymentGaps(db, plan.id, "2026-04-28", "2026-02-01");
+    expect(gapsComCutoff).toContain("2026-02-15");
+    expect(gapsComCutoff).toContain("2026-03-15");
+    expect(gapsComCutoff).toContain("2026-04-15");
+
+    // Nenhum gap anterior a fevereiro
+    expect(gapsComCutoff).not.toContain("2025-09-15");
+    expect(gapsComCutoff).not.toContain("2025-12-15");
+    expect(gapsComCutoff).not.toContain("2026-01-15");
+
+    expect(gapsComCutoff.length).toBe(3); // Exatamente 3 gaps
   });
 });
 

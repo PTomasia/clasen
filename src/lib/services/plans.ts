@@ -513,7 +513,8 @@ export async function getPaymentHistory(db: any, planId: number) {
 export async function getPaymentGaps(
   db: any,
   planId: number,
-  referenceDate: string = format(new Date(), "yyyy-MM-dd")
+  referenceDate: string = format(new Date(), "yyyy-MM-dd"),
+  minDate?: string
 ): Promise<string[]> {
   const plan = await db
     .select()
@@ -537,6 +538,15 @@ export async function getPaymentGaps(
 
   const gaps: string[] = [];
   let cursor = addMonths(start, 1);
+
+  // Aplicar cutoff histórico: se minDate for fornecido, começar do mês máximo entre o plano e minDate
+  if (minDate) {
+    const minDateParsed = parseISO(minDate);
+    const minDateCursor = addMonths(minDateParsed, 0); // mesmo mês que minDate
+    if (minDateCursor > cursor) {
+      cursor = minDateCursor;
+    }
+  }
 
   if (plan.billingCycleDays2) {
     const [earlier, later] =
