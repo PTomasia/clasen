@@ -59,6 +59,7 @@ function createTestDb() {
       payment_date TEXT NOT NULL,
       amount REAL NOT NULL,
       status TEXT NOT NULL DEFAULT 'pago',
+      skipped INTEGER NOT NULL DEFAULT 0,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );

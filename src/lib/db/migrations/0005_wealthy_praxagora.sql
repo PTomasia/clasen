@@ -1,0 +1,1 @@
+ALTER TABLE `plan_payments` ADD `skipped` integer DEFAULT false NOT NULL;

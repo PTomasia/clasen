@@ -83,6 +83,7 @@ export const planPayments = sqliteTable("plan_payments", {
   paymentDate: text("payment_date").notNull(),
   amount: real("amount").notNull(),
   status: text("status").notNull().default("pago"), // pago, pendente, inadimplente
+  skipped: integer("skipped", { mode: "boolean" }).notNull().default(false),
   notes: text("notes"),
   createdAt: text("created_at")
     .notNull()

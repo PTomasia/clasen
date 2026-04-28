@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useDialogAction } from "@/lib/hooks/use-dialog-action";
 import {
   Dialog,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -17,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getPaymentHistoryAction } from "@/lib/actions/plans";
+import { getPaymentHistoryAction, skipPaymentMonthAction } from "@/lib/actions/plans";
 import { formatBRL } from "@/lib/utils/formatting";
 
 interface PaymentHistoryData {
@@ -65,6 +66,19 @@ export function PaymentHistoryDialog({
 }) {
   const { isPending, error, run } = useDialogAction();
   const [data, setData] = useState<PaymentHistoryData | null>(null);
+  const [freezePending, startFreeze] = useTransition();
+  const [freezingMonth, setFreezingMonth] = useState<string | null>(null);
+
+  function handleFreeze(gapDate: string) {
+    const month = gapDate.slice(0, 7);
+    setFreezingMonth(month);
+    startFreeze(async () => {
+      await skipPaymentMonthAction(planId, month);
+      const result = await getPaymentHistoryAction(planId);
+      setData(result);
+      setFreezingMonth(null);
+    });
+  }
 
   useEffect(() => {
     if (open && planId) {
@@ -121,15 +135,30 @@ export function PaymentHistoryDialog({
             )}
 
             {data.gaps.length > 0 && (
-              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 space-y-1">
+              <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 space-y-2">
                 <p className="text-sm font-semibold text-destructive">
                   {data.gaps.length === 1
-                    ? "1 mês em aberto"
-                    : `${data.gaps.length} meses em aberto`}
+                    ? "1 vencimento em aberto"
+                    : `${data.gaps.length} vencimentos em aberto`}
                 </p>
-                <p className="text-xs text-destructive/80">
-                  {data.gaps.map((d) => formatDate(d)).join(", ")}
-                </p>
+                {data.gaps.map((gapDate) => (
+                  <div key={gapDate} className="flex items-center justify-between">
+                    <span className="text-xs text-destructive/80 font-mono">
+                      {formatDate(gapDate)}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-xs px-2 border-destructive/40 text-destructive hover:bg-destructive/10"
+                      disabled={freezePending && freezingMonth === gapDate.slice(0, 7)}
+                      onClick={() => handleFreeze(gapDate)}
+                    >
+                      {freezePending && freezingMonth === gapDate.slice(0, 7)
+                        ? "Congelando..."
+                        : "Congelar"}
+                    </Button>
+                  </div>
+                ))}
               </div>
             )}
 

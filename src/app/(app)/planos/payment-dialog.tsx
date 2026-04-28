@@ -25,6 +25,7 @@ interface Plan {
   id: number;
   clientName: string;
   planValue: number;
+  billingCycleDays2?: number | null;
 }
 
 export function PaymentDialog({
@@ -40,7 +41,10 @@ export function PaymentDialog({
   const [paymentDate, setPaymentDate] = useState(
     new Date().toISOString().split("T")[0]
   );
-  const [amount, setAmount] = useState(plan.planValue.toString());
+  const defaultAmount = plan.billingCycleDays2
+    ? (plan.planValue / 2).toFixed(2)
+    : plan.planValue.toString();
+  const [amount, setAmount] = useState(defaultAmount);
   const [status, setStatus] = useState("pago");
 
   function handleSubmit(e: React.FormEvent) {

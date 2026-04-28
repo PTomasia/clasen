@@ -62,6 +62,7 @@ function createTestDb() {
       payment_date TEXT NOT NULL,
       amount REAL NOT NULL,
       status TEXT NOT NULL DEFAULT 'pago',
+      skipped INTEGER NOT NULL DEFAULT 0,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -86,6 +87,7 @@ import {
   deletePlan,
   changePlan,
   skipBillingCycle,
+  skipPaymentMonth,
 } from "../plans";
 import { getClientStatus } from "../clients";
 
@@ -2178,7 +2180,7 @@ describe("skipBillingCycle", () => {
     expect(after!.nextPaymentDate).toBe("2026-06-10");
   });
 
-  it("com 2 vencimentos por mês: avança para o próximo vencimento do mesmo mês", async () => {
+  it("com 2 vencimentos por mês: avança nextPaymentDate para o próximo vencimento", async () => {
     const { plan } = await createPlan(db, {
       clientName: "Skip Dual",
       planType: "Personalizado",
@@ -2192,12 +2194,16 @@ describe("skipBillingCycle", () => {
       startDate: "2026-04-01",
     });
 
-    // nextPaymentDate inicial = 2026-05-10
+    // createPlan com startDate 2026-04-01 e billing 10/25:
+    // calcularProximoVencimento("2026-04-01", 10, 25) → April 1 < 25 → "2026-04-25"
+    const initial = await getPlanById(db, plan.id);
+    expect(initial!.nextPaymentDate).toBe("2026-04-25");
+
     await skipBillingCycle(db, plan.id);
 
     const after = await getPlanById(db, plan.id);
-    // Pulou 2026-05-10 → próximo = 2026-05-25 (mesmo mês)
-    expect(after!.nextPaymentDate).toBe("2026-05-25");
+    // Pulou 2026-04-25 → próximo = 2026-05-10 (1º vencimento do mês seguinte)
+    expect(after!.nextPaymentDate).toBe("2026-05-10");
   });
 
   it("respeita mês curto (dia 30 em fevereiro → dia 28)", async () => {
@@ -2451,5 +2457,268 @@ describe("getPaymentGaps", () => {
     // Hoje 15/04, primeiro vencimento é 25/05 — sem gap ainda
     const gaps = await getPaymentGaps(db, plan.id, "2026-04-15");
     expect(gaps).toEqual([]);
+  });
+
+  it("com 2 vencimentos: detecta 2 gaps por mês se nenhum foi pago", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dual Gap All",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-02-01",
+    });
+
+    // Nenhum pagamento — ambos vencimentos de março em aberto
+    const gaps = await getPaymentGaps(db, plan.id, "2026-03-28");
+    expect(gaps).toContain("2026-03-10");
+    expect(gaps).toContain("2026-03-25");
+    expect(gaps).toHaveLength(2);
+  });
+
+  it("com 2 vencimentos: detecta 1 gap se só o 1º foi pago", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dual Gap Second",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-02-01",
+    });
+
+    // Pagou só o 1º vencimento de março
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-10", amount: 250 });
+
+    const gaps = await getPaymentGaps(db, plan.id, "2026-03-28");
+    expect(gaps).toEqual(["2026-03-25"]);
+  });
+
+  it("com 2 vencimentos: detecta 1 gap se só o 2º foi pago", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Dual Gap First",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-02-01",
+    });
+
+    // Pagou só o 2º vencimento de março
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-25", amount: 250 });
+
+    const gaps = await getPaymentGaps(db, plan.id, "2026-03-28");
+    expect(gaps).toEqual(["2026-03-10"]);
+  });
+
+  it("com 2 vencimentos: registro skipped=true fecha ambos os gaps do mês", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Skip Dual Gap",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      billingCycleDays2: 25,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-02-01",
+    });
+
+    await skipPaymentMonth(db, plan.id, "2026-03");
+
+    const gaps = await getPaymentGaps(db, plan.id, "2026-03-28");
+    expect(gaps).toEqual([]);
+  });
+
+  it("registro skipped=true fecha gap de plano com 1 vencimento", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Skip Single Gap",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await skipPaymentMonth(db, plan.id, "2026-03");
+
+    const gaps = await getPaymentGaps(db, plan.id, "2026-04-15");
+    // Fevereiro continua gap, março foi congelado
+    expect(gaps).toContain("2026-02-10");
+    expect(gaps).not.toContain("2026-03-10");
+  });
+});
+
+describe("skipPaymentMonth", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("cria registro skipped=true no mês correto com amount=0", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Congelar Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await skipPaymentMonth(db, plan.id, "2026-03");
+
+    const payments = await getPaymentsByPlan(db, plan.id);
+    expect(payments).toHaveLength(1);
+    expect(payments[0].amount).toBe(0);
+    expect(payments[0].skipped).toBe(true);
+    expect(payments[0].status).toBe("pago");
+    expect(payments[0].paymentDate).toBe("2026-03-10");
+    expect(payments[0].notes).toBe("Mês congelado");
+  });
+
+  it("não altera nextPaymentDate nem lastPaymentDate do plano", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Congelar Sem Alterar",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const before = await getPlanById(db, plan.id);
+    await skipPaymentMonth(db, plan.id, "2026-03");
+    const after = await getPlanById(db, plan.id);
+
+    expect(after!.nextPaymentDate).toBe(before!.nextPaymentDate);
+    expect(after!.lastPaymentDate).toBe(before!.lastPaymentDate);
+  });
+
+  it("rejeita mês já registrado com pagamento real", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Já Pago",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-08", amount: 500 });
+
+    await expect(
+      skipPaymentMonth(db, plan.id, "2026-03")
+    ).rejects.toThrow("mês já registrado");
+  });
+
+  it("rejeita mês já registrado como pulado", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Já Pulado",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await skipPaymentMonth(db, plan.id, "2026-03");
+
+    await expect(
+      skipPaymentMonth(db, plan.id, "2026-03")
+    ).rejects.toThrow("mês já registrado");
+  });
+
+  it("rejeita plano cancelado", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Cancelado Congelar",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await closePlan(db, plan.id, "2026-03-01");
+
+    await expect(
+      skipPaymentMonth(db, plan.id, "2026-03")
+    ).rejects.toThrow("plano cancelado");
+  });
+
+  it("rejeita formato de mês inválido", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Formato Inválido",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await expect(skipPaymentMonth(db, plan.id, "03/2026")).rejects.toThrow(
+      "formato de mês inválido"
+    );
+    await expect(skipPaymentMonth(db, plan.id, "2026-3")).rejects.toThrow(
+      "formato de mês inválido"
+    );
+  });
+
+  it("rejeita plano não encontrado", async () => {
+    await expect(skipPaymentMonth(db, 9999, "2026-03")).rejects.toThrow(
+      "plano não encontrado"
+    );
+  });
+
+  it("ajusta dia para meses curtos (dia 30 em fevereiro → 28)", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Fev Congelado",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 30,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await skipPaymentMonth(db, plan.id, "2026-02");
+
+    const payments = await getPaymentsByPlan(db, plan.id);
+    expect(payments[0].paymentDate).toBe("2026-02-28");
   });
 });

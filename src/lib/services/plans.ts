@@ -73,19 +73,28 @@ export async function createPlan(db: any, input: CreatePlanInput) {
     throw new Error("clientId ou clientName é obrigatório");
   }
 
-  // Calcular próximo vencimento (primeiro pagamento sempre no próximo mês)
+  // Calcular próximo vencimento a partir do startDate.
+  // Com 2 vencimentos, pode cair ainda no mesmo mês do startDate.
   let nextPaymentDate: string | null = null;
   if (input.billingCycleDays) {
-    const startDate = parseISO(input.startDate);
-    const nextMonth = addMonths(startDate, 1);
-    const maxDay = getDaysInMonth(nextMonth);
-    const actualDay = Math.min(input.billingCycleDays, maxDay);
-    const dueDate = new Date(
-      nextMonth.getFullYear(),
-      nextMonth.getMonth(),
-      actualDay
-    );
-    nextPaymentDate = format(dueDate, "yyyy-MM-dd");
+    if (input.billingCycleDays2) {
+      nextPaymentDate = calcularProximoVencimento(
+        input.startDate,
+        input.billingCycleDays,
+        input.billingCycleDays2
+      );
+    } else {
+      const startDate = parseISO(input.startDate);
+      const nextMonth = addMonths(startDate, 1);
+      const maxDay = getDaysInMonth(nextMonth);
+      const actualDay = Math.min(input.billingCycleDays, maxDay);
+      const dueDate = new Date(
+        nextMonth.getFullYear(),
+        nextMonth.getMonth(),
+        actualDay
+      );
+      nextPaymentDate = format(dueDate, "yyyy-MM-dd");
+    }
   }
 
   // Criar plano
@@ -498,7 +507,8 @@ export async function getPaymentHistory(db: any, planId: number) {
 // ─── getPaymentGaps ───────────────────────────────────────────────────────────
 // Retorna as datas de vencimento (YYYY-MM-DD) esperadas que NÃO foram pagas,
 // do startDate até o referenceDate (ou endDate, o que for menor).
-// Um mês "espera pagamento" se o vencimento desse mês já passou em referenceDate.
+// Com 2 vencimentos por mês, gera 2 due dates por mês.
+// Registros com skipped=true fecham TODOS os gaps do mês.
 
 export async function getPaymentGaps(
   db: any,
@@ -520,36 +530,149 @@ export async function getPaymentGaps(
     .where(eq(schema.planPayments.planId, planId))
     .all();
 
-  const paidMonthKeys = new Set(
-    payments.map((p: { paymentDate: string }) => p.paymentDate.slice(0, 7))
-  );
-
   const start = parseISO(plan.startDate);
-  const ref = parseISO(referenceDate);
   const effectiveEnd = plan.endDate && plan.endDate < referenceDate
     ? parseISO(plan.endDate)
-    : ref;
+    : parseISO(referenceDate);
 
   const gaps: string[] = [];
-  // Primeiro vencimento: próximo mês após startDate
   let cursor = addMonths(start, 1);
 
-  while (cursor <= effectiveEnd) {
-    const maxDay = getDaysInMonth(cursor);
-    const dueDay = Math.min(plan.billingCycleDays, maxDay);
-    const dueDate = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay);
+  if (plan.billingCycleDays2) {
+    const [earlier, later] =
+      plan.billingCycleDays < plan.billingCycleDays2
+        ? [plan.billingCycleDays, plan.billingCycleDays2]
+        : [plan.billingCycleDays2, plan.billingCycleDays];
 
-    // Só considera gap se o vencimento já passou em relação ao referenceDate
-    if (dueDate <= effectiveEnd) {
-      const monthKey = format(cursor, "yyyy-MM");
-      if (!paidMonthKeys.has(monthKey)) {
-        gaps.push(format(dueDate, "yyyy-MM-dd"));
+    // Meses congelados fecham todos os gaps do mês
+    const skippedMonths = new Set<string>(
+      payments
+        .filter((p: { skipped: boolean }) => p.skipped)
+        .map((p: { paymentDate: string }) => p.paymentDate.slice(0, 7))
+    );
+
+    // Pagamentos reais: determinar qual due date cobrem (dueDate1 = earlier, dueDate2 = later)
+    // Pagamento com day < actualLater do mês → cobre dueDate1; caso contrário → cobre dueDate2
+    const coveredDueDates = new Set<string>();
+    for (const p of payments) {
+      if (p.skipped) continue;
+      const [y, m, dayStr] = p.paymentDate.split("-");
+      const payDay = Number(dayStr);
+      const monthLastDay = getDaysInMonth(new Date(Number(y), Number(m) - 1));
+      const actualLater = Math.min(later, monthLastDay);
+      const monthKey = p.paymentDate.slice(0, 7);
+      if (payDay < actualLater) {
+        const actualEarlier = Math.min(earlier, monthLastDay);
+        coveredDueDates.add(`${monthKey}-${String(actualEarlier).padStart(2, "0")}`);
+      } else {
+        coveredDueDates.add(`${monthKey}-${String(actualLater).padStart(2, "0")}`);
       }
     }
-    cursor = addMonths(cursor, 1);
+
+    while (cursor <= effectiveEnd) {
+      const monthKey = format(cursor, "yyyy-MM");
+
+      if (!skippedMonths.has(monthKey)) {
+        const maxDay = getDaysInMonth(cursor);
+        const dueDay1 = Math.min(earlier, maxDay);
+        const dueDay2 = Math.min(later, maxDay);
+        const dueDate1 = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay1);
+        const dueDate2 = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay2);
+
+        if (dueDate1 <= effectiveEnd) {
+          const key1 = format(dueDate1, "yyyy-MM-dd");
+          if (!coveredDueDates.has(key1)) gaps.push(key1);
+        }
+        if (dueDate2 <= effectiveEnd) {
+          const key2 = format(dueDate2, "yyyy-MM-dd");
+          if (!coveredDueDates.has(key2)) gaps.push(key2);
+        }
+      }
+
+      cursor = addMonths(cursor, 1);
+    }
+  } else {
+    // 1 vencimento por mês
+    const skippedMonths = new Set<string>(
+      payments
+        .filter((p: { skipped: boolean }) => p.skipped)
+        .map((p: { paymentDate: string }) => p.paymentDate.slice(0, 7))
+    );
+    const paidMonthKeys = new Set<string>(
+      payments
+        .filter((p: { skipped: boolean }) => !p.skipped)
+        .map((p: { paymentDate: string }) => p.paymentDate.slice(0, 7))
+    );
+
+    while (cursor <= effectiveEnd) {
+      const maxDay = getDaysInMonth(cursor);
+      const dueDay = Math.min(plan.billingCycleDays, maxDay);
+      const dueDate = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay);
+
+      if (dueDate <= effectiveEnd) {
+        const monthKey = format(cursor, "yyyy-MM");
+        if (!paidMonthKeys.has(monthKey) && !skippedMonths.has(monthKey)) {
+          gaps.push(format(dueDate, "yyyy-MM-dd"));
+        }
+      }
+      cursor = addMonths(cursor, 1);
+    }
   }
 
   return gaps;
+}
+
+// ─── skipPaymentMonth ─────────────────────────────────────────────────────────
+// Registra mês congelado: insere plan_payment com amount=0, skipped=true.
+// Não altera lastPaymentDate nem nextPaymentDate do plano.
+
+export async function skipPaymentMonth(
+  db: any,
+  planId: number,
+  month: string
+): Promise<void> {
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new Error("formato de mês inválido (esperado YYYY-MM)");
+  }
+
+  const plan = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+
+  if (!plan) throw new Error("plano não encontrado");
+  if (plan.status === "cancelado") throw new Error("plano cancelado");
+
+  // Verificar se já existe qualquer registro para esse mês
+  const existing = await db
+    .select()
+    .from(schema.planPayments)
+    .where(eq(schema.planPayments.planId, planId))
+    .all();
+
+  const hasRecord = existing.some(
+    (p: { paymentDate: string }) => p.paymentDate.slice(0, 7) === month
+  );
+  if (hasRecord) throw new Error("mês já registrado");
+
+  // Calcular dueDate: dia de vencimento do plano naquele mês
+  const [y, m] = month.split("-").map(Number);
+  const monthDate = new Date(y, m - 1);
+  const maxDay = getDaysInMonth(monthDate);
+  const billingDay = plan.billingCycleDays ?? 1;
+  const actualDay = Math.min(billingDay, maxDay);
+  const paymentDate = `${month}-${String(actualDay).padStart(2, "0")}`;
+
+  await db.insert(schema.planPayments).values({
+    planId,
+    clientId: plan.clientId,
+    paymentDate,
+    amount: 0,
+    status: "pago",
+    skipped: true,
+    notes: "Mês congelado",
+  }).run();
 }
 
 export async function getActivePlans(db: any) {
