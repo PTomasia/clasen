@@ -200,6 +200,7 @@ export function DashboardClient({
   data,
   pnl,
   operational,
+  unit,
 }: {
   data: DashboardData;
   pnl: PnLData;
@@ -207,6 +208,7 @@ export function DashboardClient({
     postsPorCliente: PostsPorClienteResult;
     evolution: OperationalMonth[];
   };
+  unit: import("@/lib/queries/unit-economics").UnitEconomicsData;
 }) {
   const [paymentPlan, setPaymentPlan] = useState<{
     id: number;
@@ -243,17 +245,33 @@ export function DashboardClient({
           />
         </div>
         <div className="grid grid-cols-3 lg:grid-cols-1 gap-4 lg:h-full auto-rows-fr">
-          <KPICard label="Clientes ativos" value={String(data.clientesAtivos)} href="/clientes" />
-          <KPICard label="Ticket médio" value={formatBRL(data.ticketMedio)} sub="por cliente" href="/clientes" />
           <KPICard
-            label="$/post médio"
-            value={formatBRL(data.ticketMedioPorPost)}
+            label="LTV médio"
+            value={formatBRL(unit.totals.ltvMedio)}
             sub={
-              operational.postsPorCliente.ratio !== null
-                ? `${operational.postsPorCliente.ratio.toFixed(1)} posts/cliente`
-                : undefined
+              unit.totals.ltvCacRatio != null
+                ? `LTV/CAC ${unit.totals.ltvCacRatio.toFixed(1)}x`
+                : "por cliente pagante"
             }
-            href="/planos"
+            href="/clientes"
+          />
+          {(() => {
+            const last = pnl.rows[pnl.rows.length - 1];
+            const prev = pnl.rows.length >= 2 ? pnl.rows[pnl.rows.length - 2] : null;
+            const margem = prev?.margemLiquida ?? null;
+            return (
+              <KPICard
+                label="Margem líquida"
+                value={margem != null ? `${(margem * 100).toFixed(1)}%` : "—"}
+                sub={prev ? `${prev.label} (mês fechado)` : last?.label}
+                href="/despesas"
+              />
+            );
+          })()}
+          <KPICard
+            label="Clientes ativos"
+            value={String(data.clientesAtivos)}
+            href="/clientes"
           />
         </div>
       </div>
@@ -266,13 +284,10 @@ export function DashboardClient({
           </h2>
           <span className="text-[10px] text-muted-foreground/70">em meses</span>
         </div>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <PermanenciaStat label="Geral" value={`${data.permMediaGeral}m`} />
-          <PermanenciaStat label="Ativos" value={`${data.permMediaAtivos}m`} />
-          <PermanenciaStat label="Inativos" value={`${data.permMediaInativos}m`} />
           <PermanenciaStat label="Mediana" value={`${data.permMediana}m`} />
-          <PermanenciaStat label="Média +3M" value={`${data.permMedia3M}m`} sub="ativos >3m" />
-          <PermanenciaStat label="Ativos +3M" value={String(data.ativosPlus3M)} sub="clientes" />
+          <PermanenciaStat label="Ativos +3M" value={String(data.ativosPlus3M)} sub="clientes (proxy retenção)" />
         </div>
       </div>
 
