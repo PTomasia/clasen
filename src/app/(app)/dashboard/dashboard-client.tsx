@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar, AlertTriangle, CreditCard, SkipForward } from "lucide-react";
 import type {
@@ -24,6 +25,33 @@ import { skipBillingCycleAction } from "@/lib/actions/plans";
 import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
+function HeroKPI({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="bg-card border rounded-xl p-7 md:p-8">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className="mt-2 text-5xl md:text-6xl font-medium leading-none tracking-tight"
+        style={{ fontFamily: "var(--font-heading), serif" }}
+      >
+        {value}
+      </p>
+      {sub && (
+        <p className="text-xs text-muted-foreground mt-3">{sub}</p>
+      )}
+    </div>
+  );
+}
+
 function KPICard({
   label,
   value,
@@ -35,9 +63,28 @@ function KPICard({
 }) {
   return (
     <div className="bg-card border rounded-lg p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-xl font-bold font-mono">{value}</p>
-      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className="mt-1 text-2xl leading-tight tracking-tight"
+        style={{ fontFamily: "var(--font-heading), serif" }}
+      >
+        {value}
+      </p>
+      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+function PermanenciaStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="font-mono font-semibold text-lg leading-none">{value}</p>
+      {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
     </div>
   );
 }
@@ -117,34 +164,45 @@ export function DashboardClient({
   return (
     <>
     <div className="space-y-6">
-      {/* KPIs principais */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <KPICard label="Clientes ativos" value={String(data.clientesAtivos)} />
-        <KPICard label="Posts ativos" value={String(data.postsAtivos)} />
-        <KPICard
-          label="Posts/cliente"
-          value={
-            operational.postsPorCliente.ratio !== null
-              ? operational.postsPorCliente.ratio.toFixed(1)
-              : "—"
-          }
-          sub={`${operational.postsPorCliente.clientes} clientes · ${operational.postsPorCliente.posts} posts/mês`}
-        />
-        <KPICard label="Receita bruta" value={formatBRL(data.receitaBruta)} />
-        <KPICard label="Ticket médio" value={formatBRL(data.ticketMedio)} sub="por cliente" />
-        <KPICard label="Ticket médio/post" value={formatBRL(data.ticketMedioPorPost)} sub="$/post médio" />
+      {/* Hero + 3 primários */}
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
+          <HeroKPI
+            label="Receita bruta mensal"
+            value={formatBRL(data.receitaBruta)}
+            sub={`${data.clientesAtivos} clientes ativos · ${data.postsAtivos} posts/mês`}
+          />
+        </div>
+        <div className="grid grid-cols-3 lg:grid-cols-1 gap-4">
+          <KPICard label="Clientes ativos" value={String(data.clientesAtivos)} />
+          <KPICard label="Ticket médio" value={formatBRL(data.ticketMedio)} sub="por cliente" />
+          <KPICard
+            label="$/post médio"
+            value={formatBRL(data.ticketMedioPorPost)}
+            sub={
+              operational.postsPorCliente.ratio !== null
+                ? `${operational.postsPorCliente.ratio.toFixed(1)} posts/cliente`
+                : undefined
+            }
+          />
+        </div>
       </div>
 
-      {/* Permanência */}
-      <div>
-        <h2 className="text-sm font-semibold text-muted-foreground mb-3">Permanência</h2>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <KPICard label="Média geral" value={`${data.permMediaGeral}m`} />
-          <KPICard label="Média ativos" value={`${data.permMediaAtivos}m`} />
-          <KPICard label="Média inativos" value={`${data.permMediaInativos}m`} />
-          <KPICard label="Mediana" value={`${data.permMediana}m`} />
-          <KPICard label="Média +3M" value={`${data.permMedia3M}m`} sub="ativos >3 meses" />
-          <KPICard label="Ativos +3M" value={String(data.ativosPlus3M)} sub="clientes" />
+      {/* Permanência — strip compacto */}
+      <div className="bg-card border rounded-lg px-5 py-4">
+        <div className="flex items-baseline gap-2 mb-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Permanência
+          </h2>
+          <span className="text-[10px] text-muted-foreground/70">em meses</span>
+        </div>
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+          <PermanenciaStat label="Geral" value={`${data.permMediaGeral}m`} />
+          <PermanenciaStat label="Ativos" value={`${data.permMediaAtivos}m`} />
+          <PermanenciaStat label="Inativos" value={`${data.permMediaInativos}m`} />
+          <PermanenciaStat label="Mediana" value={`${data.permMediana}m`} />
+          <PermanenciaStat label="Média +3M" value={`${data.permMedia3M}m`} sub="ativos >3m" />
+          <PermanenciaStat label="Ativos +3M" value={String(data.ativosPlus3M)} sub="clientes" />
         </div>
       </div>
 
@@ -173,25 +231,35 @@ export function DashboardClient({
 
           {data.atrasados.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center">
-              Nenhum pagamento atrasado
+              ✓ Nenhum pagamento atrasado
             </p>
           ) : (
-            <ul className="divide-y max-h-[300px] overflow-y-auto">
+            <ul className="divide-y max-h-[300px] overflow-y-auto -mx-5">
               {data.atrasados.map((row) => (
                 <li
                   key={row.planId}
-                  className="flex items-center gap-3 py-2.5"
+                  className="relative flex items-center gap-3 py-2.5 px-5 pl-[18px]"
                 >
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent"
+                  />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{row.clientName}</p>
+                    <p className="text-sm font-semibold truncate">{row.clientName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {row.planType} · venceu {formatDate(row.nextPaymentDate)}{" "}
-                      <span className="text-accent font-medium">
-                        ({row.diasAtraso}d atrás)
-                      </span>
+                      {row.planType} · venceu {formatDate(row.nextPaymentDate)}
                     </p>
                   </div>
-                  <p className="text-sm font-mono font-semibold shrink-0">
+                  <span
+                    className={cn(
+                      "shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-accent/10 text-accent tabular-nums",
+                      row.diasAtraso >= 30 && "animate-pulse"
+                    )}
+                    title={`${row.diasAtraso} dias em atraso`}
+                  >
+                    {row.diasAtraso}d
+                  </span>
+                  <p className="text-sm font-mono font-semibold shrink-0 tabular-nums">
                     {formatBRL(row.planValue)}
                   </p>
                   {row.billingCycleDays && (
@@ -234,7 +302,10 @@ export function DashboardClient({
             <Calendar size={18} className="text-primary" />
             <h2 className="font-semibold">Próximos 7 dias</h2>
             {data.upcoming.length > 0 && (
-              <span className="ml-auto text-sm font-mono font-semibold text-primary">
+              <span
+                className="ml-auto text-2xl text-primary tracking-tight tabular-nums"
+                style={{ fontFamily: "var(--font-heading), serif" }}
+              >
                 {formatBRL(
                   data.upcoming.reduce((s, r) => s + r.planValue, 0)
                 )}
