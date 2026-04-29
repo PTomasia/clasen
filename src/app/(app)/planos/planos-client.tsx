@@ -446,8 +446,8 @@ export function PlanosClient({
       </div>
 
       {/* Tabela */}
-      <div className="bg-card rounded-lg border shadow-sm overflow-x-auto">
-        <Table>
+      <div className="bg-card rounded-lg border shadow-sm">
+        <Table containerClassName="max-h-[calc(100vh-260px)] overflow-auto rounded-lg">
           <TableHeader className="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_var(--border)]">
             <TableRow>
               <SortableHead label="Cliente" sortKey="clientName" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
