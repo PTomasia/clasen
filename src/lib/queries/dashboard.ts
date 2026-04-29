@@ -8,6 +8,7 @@ import {
   subMonths,
   parseISO,
   differenceInMonths,
+  differenceInCalendarDays,
   startOfMonth,
 } from "date-fns";
 import {
@@ -193,8 +194,9 @@ export async function getDashboardData(): Promise<DashboardData> {
     .filter((p) => p.nextPaymentDate && p.nextPaymentDate < today)
     .map((p) => {
       const client = clientMap.get(p.clientId);
-      const diasAtraso = Math.floor(
-        (Date.now() - parseISO(p.nextPaymentDate!).getTime()) / (1000 * 60 * 60 * 24)
+      const diasAtraso = differenceInCalendarDays(
+        now,
+        parseISO(p.nextPaymentDate!)
       );
       return {
         planId: p.id,

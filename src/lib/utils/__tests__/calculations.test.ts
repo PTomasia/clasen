@@ -5,6 +5,8 @@ import {
   calcularStatusPagamento,
   calcularMediana,
   calcularTotalPostsEquivalentes,
+  assertBillingDays,
+  isDataPassada,
 } from "../calculations";
 
 // ─── $/post ────────────────────────────────────────────────────────────────────
@@ -266,5 +268,76 @@ describe("calcularMediana", () => {
 
   it("par com decimais retorna média correta", () => {
     expect(calcularMediana([1, 2, 3, 4])).toBe(2.5);
+  });
+});
+
+// ─── assertBillingDays ─────────────────────────────────────────────────────────
+describe("assertBillingDays", () => {
+  it("aceita inteiro 1-31 com day2 null", () => {
+    expect(() => assertBillingDays(1, null)).not.toThrow();
+    expect(() => assertBillingDays(15, null)).not.toThrow();
+    expect(() => assertBillingDays(31, null)).not.toThrow();
+  });
+
+  it("aceita dois dias diferentes 1-31", () => {
+    expect(() => assertBillingDays(10, 25)).not.toThrow();
+  });
+
+  it("rejeita day1 fora de 1-31", () => {
+    expect(() => assertBillingDays(0, null)).toThrow(/entre 1 e 31/);
+    expect(() => assertBillingDays(32, null)).toThrow(/entre 1 e 31/);
+    expect(() => assertBillingDays(-1, null)).toThrow(/entre 1 e 31/);
+  });
+
+  it("rejeita day1 não-inteiro", () => {
+    expect(() => assertBillingDays(1.5, null)).toThrow(/inteiro/);
+  });
+
+  it("rejeita day2 fora de 1-31", () => {
+    expect(() => assertBillingDays(10, 0)).toThrow(/segundo dia/);
+    expect(() => assertBillingDays(10, 32)).toThrow(/segundo dia/);
+  });
+
+  it("rejeita day2 não-inteiro", () => {
+    expect(() => assertBillingDays(10, 25.5)).toThrow(/segundo dia/);
+  });
+
+  it("rejeita dois dias iguais", () => {
+    expect(() => assertBillingDays(10, 10)).toThrow(/diferentes/);
+  });
+
+  it("aceita day1 undefined (sem ciclo)", () => {
+    expect(() => assertBillingDays(undefined, undefined)).not.toThrow();
+    expect(() => assertBillingDays(null, null)).not.toThrow();
+  });
+
+  it("rejeita day2 informado sem day1", () => {
+    expect(() => assertBillingDays(null, 10)).toThrow(/segundo dia.*sem.*primeiro/i);
+  });
+});
+
+// ─── isDataPassada ────────────────────────────────────────────────────────────
+describe("isDataPassada", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-15T12:00:00"));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("retorna true para data anterior a hoje", () => {
+    expect(isDataPassada("2026-04-14")).toBe(true);
+  });
+
+  it("retorna false para data igual a hoje (hoje não está atrasada)", () => {
+    expect(isDataPassada("2026-04-15")).toBe(false);
+  });
+
+  it("retorna false para data futura", () => {
+    expect(isDataPassada("2026-04-16")).toBe(false);
+  });
+
+  it("aceita referência custom", () => {
+    expect(isDataPassada("2026-04-10", "2026-04-15")).toBe(true);
+    expect(isDataPassada("2026-04-15", "2026-04-15")).toBe(false);
   });
 });

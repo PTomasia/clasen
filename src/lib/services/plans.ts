@@ -1,12 +1,10 @@
 import { eq, isNull, sql } from "drizzle-orm";
 import { addMonths, format, parseISO, getDaysInMonth } from "date-fns";
 import * as schema from "../db/schema";
-import { calcularCustoPost, calcularPermanencia, calcularProximoVencimento } from "../utils/calculations";
+import { assertBillingDays, calcularCustoPost, calcularPermanencia, calcularProximoVencimento } from "../utils/calculations";
 import { findOrCreateClient } from "./clients";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-
-type Db = Parameters<typeof eq> extends never ? never : any; // accepts any drizzle db instance
 
 export interface CreatePlanInput {
   clientId?: number;
@@ -53,6 +51,8 @@ export async function createPlan(db: any, input: CreatePlanInput) {
     );
   }
 
+  assertBillingDays(input.billingCycleDays, input.billingCycleDays2);
+
   // Criar ou reutilizar cliente
   let clientId = input.clientId;
   let client: typeof schema.clients.$inferSelect;
@@ -73,29 +73,14 @@ export async function createPlan(db: any, input: CreatePlanInput) {
     throw new Error("clientId ou clientName é obrigatório");
   }
 
-  // Calcular próximo vencimento a partir do startDate.
   // Com 2 vencimentos, pode cair ainda no mesmo mês do startDate.
-  let nextPaymentDate: string | null = null;
-  if (input.billingCycleDays) {
-    if (input.billingCycleDays2) {
-      nextPaymentDate = calcularProximoVencimento(
+  const nextPaymentDate: string | null = input.billingCycleDays
+    ? calcularProximoVencimento(
         input.startDate,
         input.billingCycleDays,
         input.billingCycleDays2
-      );
-    } else {
-      const startDate = parseISO(input.startDate);
-      const nextMonth = addMonths(startDate, 1);
-      const maxDay = getDaysInMonth(nextMonth);
-      const actualDay = Math.min(input.billingCycleDays, maxDay);
-      const dueDate = new Date(
-        nextMonth.getFullYear(),
-        nextMonth.getMonth(),
-        actualDay
-      );
-      nextPaymentDate = format(dueDate, "yyyy-MM-dd");
-    }
-  }
+      )
+    : null;
 
   // Criar plano
   const plan = await db
@@ -301,6 +286,8 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
     throw new Error("data de início inválida (YYYY-MM-DD)");
   }
 
+  assertBillingDays(input.billingCycleDays, input.billingCycleDays2);
+
   const existing = await db
     .select()
     .from(schema.subscriptionPlans)
@@ -355,17 +342,7 @@ export async function updateBillingDays(
   billingCycleDays: number,
   billingCycleDays2: number | null = null
 ): Promise<void> {
-  if (!Number.isInteger(billingCycleDays) || billingCycleDays < 1 || billingCycleDays > 31) {
-    throw new Error("dia de vencimento deve ser inteiro entre 1 e 31");
-  }
-  if (billingCycleDays2 !== null) {
-    if (!Number.isInteger(billingCycleDays2) || billingCycleDays2 < 1 || billingCycleDays2 > 31) {
-      throw new Error("segundo dia de vencimento deve ser inteiro entre 1 e 31");
-    }
-    if (billingCycleDays2 === billingCycleDays) {
-      throw new Error("os dois dias de vencimento devem ser diferentes");
-    }
-  }
+  assertBillingDays(billingCycleDays, billingCycleDays2);
 
   const existing = await db
     .select()
