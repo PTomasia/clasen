@@ -214,6 +214,7 @@ export function DashboardClient({
     id: number;
     clientName: string;
     planValue: number;
+    paymentDate?: string;
   } | null>(null);
   const [skipping, setSkipping] = useState<number | null>(null);
 
@@ -383,6 +384,7 @@ export function DashboardClient({
                         id: row.planId,
                         clientName: row.clientName,
                         planValue: row.planValue,
+                        paymentDate: row.nextPaymentDate,
                       })
                     }
                   >
@@ -450,6 +452,7 @@ export function DashboardClient({
           open={!!paymentPlan}
           onClose={() => setPaymentPlan(null)}
           plan={paymentPlan}
+          defaultPaymentDate={paymentPlan.paymentDate}
         />
       )}
     </>
