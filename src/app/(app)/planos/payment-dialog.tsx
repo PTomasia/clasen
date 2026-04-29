@@ -32,14 +32,16 @@ export function PaymentDialog({
   open,
   onClose,
   plan,
+  defaultPaymentDate,
 }: {
   open: boolean;
   onClose: () => void;
   plan: Plan;
+  defaultPaymentDate?: string;
 }) {
   const { isPending, error, run } = useDialogAction(onClose);
   const [paymentDate, setPaymentDate] = useState(
-    new Date().toISOString().split("T")[0]
+    defaultPaymentDate ?? new Date().toISOString().split("T")[0]
   );
   const defaultAmount = plan.billingCycleDays2
     ? (plan.planValue / 2).toFixed(2)
