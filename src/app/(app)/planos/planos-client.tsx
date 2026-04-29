@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useTransition } from "react";
+import { useState, useMemo, useEffect, useRef, useTransition } from "react";
 import {
   Table,
   TableBody,
@@ -26,8 +26,10 @@ import {
   TrendingDown,
   Settings,
   SkipForward,
+  MoreHorizontal,
 } from "lucide-react";
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
+import { cn } from "@/lib/utils";
 import { isDataPassada, type StatusPagamento } from "@/lib/utils/calculations";
 import {
   sortPlans,
@@ -85,6 +87,88 @@ interface Plan {
 interface Client {
   id: number;
   name: string;
+}
+
+// ─── Row Actions Menu (kebab "...") ───────────────────────────────────────────
+
+type ActionItem =
+  | { type: "item"; label: string; icon: React.ComponentType<{ size?: number }>; onClick: () => void; destructive?: boolean }
+  | { type: "separator" };
+
+function RowActionsMenu({ items }: { items: ActionItem[] }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative inline-block">
+      <Button
+        ref={triggerRef}
+        variant="ghost"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        title="Mais ações"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <MoreHorizontal size={14} />
+      </Button>
+      {open && (
+        <div
+          ref={menuRef}
+          role="menu"
+          className="absolute right-0 top-full mt-1 z-50 min-w-[200px] rounded-md border bg-popover shadow-lg py-1 text-sm"
+        >
+          {items.map((item, i) => {
+            if (item.type === "separator") {
+              return <div key={`sep-${i}`} className="my-1 border-t" aria-hidden />;
+            }
+            return (
+              <button
+                key={item.label}
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(false);
+                  item.onClick();
+                }}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
+                  item.destructive
+                    ? "text-destructive hover:bg-destructive/10"
+                    : "hover:bg-muted/60"
+                )}
+              >
+                <item.icon size={14} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
@@ -654,33 +738,6 @@ export function PlanosClient({
                   )}
                   <TableCell className="text-right">
                     <div className="flex gap-1 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          setEditData({
-                            clientId: plan.clientId,
-                            clientName: plan.clientName,
-                            contactOrigin: plan.clientContactOrigin,
-                            clientNotes: plan.clientNotes,
-                            clientSince: plan.clientSince,
-                            planId: plan.id,
-                            planType: plan.planType,
-                            planValue: plan.planValue,
-                            billingCycleDays: plan.billingCycleDays,
-                            billingCycleDays2: plan.billingCycleDays2,
-                            postsCarrossel: plan.postsCarrossel,
-                            postsReels: plan.postsReels,
-                            postsEstatico: plan.postsEstatico,
-                            postsTrafego: plan.postsTrafego,
-                            startDate: plan.startDate,
-                            planNotes: plan.notes,
-                          })
-                        }
-                        title="Editar cliente"
-                      >
-                        <Pencil size={14} />
-                      </Button>
                       {plan.status !== "ativo" &&
                         plan.statusPagamento !== "em_dia" && (
                           <Button
@@ -697,54 +754,6 @@ export function PlanosClient({
                       {plan.status === "ativo" && (
                         <>
                           <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setChangeData({
-                                data: {
-                                  planId: plan.id,
-                                  clientName: plan.clientName,
-                                  planType: plan.planType,
-                                  planValue: plan.planValue,
-                                  billingCycleDays: plan.billingCycleDays,
-                            billingCycleDays2: plan.billingCycleDays2,
-                                  postsCarrossel: plan.postsCarrossel,
-                                  postsReels: plan.postsReels,
-                                  postsEstatico: plan.postsEstatico,
-                                  postsTrafego: plan.postsTrafego,
-                                },
-                                type: "Upgrade",
-                              })
-                            }
-                            title="Upgrade"
-                          >
-                            <TrendingUp size={14} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              setChangeData({
-                                data: {
-                                  planId: plan.id,
-                                  clientName: plan.clientName,
-                                  planType: plan.planType,
-                                  planValue: plan.planValue,
-                                  billingCycleDays: plan.billingCycleDays,
-                            billingCycleDays2: plan.billingCycleDays2,
-                                  postsCarrossel: plan.postsCarrossel,
-                                  postsReels: plan.postsReels,
-                                  postsEstatico: plan.postsEstatico,
-                                  postsTrafego: plan.postsTrafego,
-                                },
-                                type: "Downgrade",
-                              })
-                            }
-                            title="Downgrade"
-                          >
-                            <TrendingDown size={14} />
-                          </Button>
-                          <Button
                             variant="default"
                             size="sm"
                             onClick={() => setPaymentPlanId(plan.id)}
@@ -754,39 +763,106 @@ export function PlanosClient({
                             <CreditCard size={14} />
                             <span className="text-xs font-medium">Pagar</span>
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleSkipBilling(plan.id)}
-                            title="Pular cobrança — avança o próximo vencimento em 1 ciclo"
-                            disabled={!plan.billingCycleDays || !plan.nextPaymentDate}
-                            className={
-                              !plan.billingCycleDays || !plan.nextPaymentDate
-                                ? "invisible"
-                                : ""
-                            }
-                          >
-                            <SkipForward size={14} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setClosePlanId(plan.id)}
-                            title="Encerrar plano"
-                          >
-                            <XCircle size={14} />
-                          </Button>
+                          {plan.billingCycleDays && plan.nextPaymentDate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSkipBilling(plan.id)}
+                              title="Pular cobrança — avança o próximo vencimento em 1 ciclo"
+                            >
+                              <SkipForward size={14} />
+                            </Button>
+                          )}
                         </>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeletePlanId(plan.id)}
-                        title="Excluir registro"
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 size={14} />
-                      </Button>
+                      <RowActionsMenu
+                        items={[
+                          {
+                            type: "item",
+                            label: "Editar plano",
+                            icon: Pencil,
+                            onClick: () =>
+                              setEditData({
+                                clientId: plan.clientId,
+                                clientName: plan.clientName,
+                                contactOrigin: plan.clientContactOrigin,
+                                clientNotes: plan.clientNotes,
+                                clientSince: plan.clientSince,
+                                planId: plan.id,
+                                planType: plan.planType,
+                                planValue: plan.planValue,
+                                billingCycleDays: plan.billingCycleDays,
+                                billingCycleDays2: plan.billingCycleDays2,
+                                postsCarrossel: plan.postsCarrossel,
+                                postsReels: plan.postsReels,
+                                postsEstatico: plan.postsEstatico,
+                                postsTrafego: plan.postsTrafego,
+                                startDate: plan.startDate,
+                                planNotes: plan.notes,
+                              }),
+                          },
+                          ...(plan.status === "ativo"
+                            ? ([
+                                {
+                                  type: "item",
+                                  label: "Upgrade",
+                                  icon: TrendingUp,
+                                  onClick: () =>
+                                    setChangeData({
+                                      data: {
+                                        planId: plan.id,
+                                        clientName: plan.clientName,
+                                        planType: plan.planType,
+                                        planValue: plan.planValue,
+                                        billingCycleDays: plan.billingCycleDays,
+                                        billingCycleDays2: plan.billingCycleDays2,
+                                        postsCarrossel: plan.postsCarrossel,
+                                        postsReels: plan.postsReels,
+                                        postsEstatico: plan.postsEstatico,
+                                        postsTrafego: plan.postsTrafego,
+                                      },
+                                      type: "Upgrade",
+                                    }),
+                                },
+                                {
+                                  type: "item",
+                                  label: "Downgrade",
+                                  icon: TrendingDown,
+                                  onClick: () =>
+                                    setChangeData({
+                                      data: {
+                                        planId: plan.id,
+                                        clientName: plan.clientName,
+                                        planType: plan.planType,
+                                        planValue: plan.planValue,
+                                        billingCycleDays: plan.billingCycleDays,
+                                        billingCycleDays2: plan.billingCycleDays2,
+                                        postsCarrossel: plan.postsCarrossel,
+                                        postsReels: plan.postsReels,
+                                        postsEstatico: plan.postsEstatico,
+                                        postsTrafego: plan.postsTrafego,
+                                      },
+                                      type: "Downgrade",
+                                    }),
+                                },
+                                {
+                                  type: "item",
+                                  label: "Encerrar plano",
+                                  icon: XCircle,
+                                  onClick: () => setClosePlanId(plan.id),
+                                },
+                              ] as ActionItem[])
+                            : []),
+                          { type: "separator" },
+                          {
+                            type: "item",
+                            label: "Excluir registro",
+                            icon: Trash2,
+                            onClick: () => setDeletePlanId(plan.id),
+                            destructive: true,
+                          },
+                        ]}
+                      />
                     </div>
                   </TableCell>
                 </TableRow>
@@ -826,6 +902,7 @@ export function PlanosClient({
           plan={deletePlan}
         />
       )}
+
 
       {editData && (
         <EditClientDialog
