@@ -1,7 +1,7 @@
 import { eq, isNull, and, sql } from "drizzle-orm";
-import { differenceInMonths, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
 import * as schema from "../db/schema";
-import { calcularCustoPost } from "../utils/calculations";
+import { calcularCustoPost, calcularPermanenciaCliente } from "../utils/calculations";
 
 // ─── findOrCreateClient ────────────────────────────────────────────────────────
 // Match case-insensitive + trim para evitar duplicatas.
@@ -98,40 +98,6 @@ export async function createClient(
 type ClientRecord = typeof schema.clients.$inferSelect;
 type PlanRecord = typeof schema.subscriptionPlans.$inferSelect;
 
-/**
- * Calcula permanência (em meses) do cliente considerando todos seus planos.
- *
- * - `firstStart` = `client.clientSince` (override) ou startDate do primeiro plano.
- * - Se cliente está ativo (tem plano sem endDate): conta até `referenceDate`.
- * - Se inativo: conta até o endDate mais recente entre seus planos.
- * - Retorna 0 se não houver data inicial detectável.
- */
-function calculatePermanencia(
-  client: ClientRecord,
-  plans: PlanRecord[],
-  referenceDate: Date
-): number {
-  const isAtivo = plans.some((p) => !p.endDate);
-
-  const firstStart =
-    client.clientSince ?? plans.map((p) => p.startDate).sort()[0];
-
-  if (!firstStart) return 0;
-
-  if (isAtivo) {
-    return differenceInMonths(referenceDate, parseISO(firstStart));
-  }
-
-  const lastEnd = plans
-    .filter((p) => p.endDate)
-    .map((p) => p.endDate as string)
-    .sort()
-    .reverse()[0];
-
-  if (!lastEnd) return 0;
-  return differenceInMonths(parseISO(lastEnd), parseISO(firstStart));
-}
-
 // ─── getClientStatus ───────────────────────────────────────────────────────────
 
 export async function getClientStatus(
@@ -193,7 +159,7 @@ export async function getClientsList(
     const activePlans = plans.filter((p) => !p.endDate);
     const status: "ativo" | "inativo" = activePlans.length > 0 ? "ativo" : "inativo";
 
-    const permanencia = calculatePermanencia(client, plans, referenceDate);
+    const permanencia = calcularPermanenciaCliente(client, plans, referenceDate) ?? 0;
 
     // Valor mensal: soma dos planos ativos
     const valorMensal = activePlans.reduce((sum, p) => sum + p.planValue, 0);
@@ -268,7 +234,7 @@ export async function getClientDetail(
   const activePlans = plans.filter((p) => !p.endDate);
   const status: "ativo" | "inativo" = activePlans.length > 0 ? "ativo" : "inativo";
 
-  const permanencia = calculatePermanencia(client, plans, referenceDate);
+  const permanencia = calcularPermanenciaCliente(client, plans, referenceDate) ?? 0;
 
   // Ordenar planos por start_date desc
   const sortedPlans = [...plans].sort((a, b) =>

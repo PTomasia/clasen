@@ -7,6 +7,7 @@ import {
   calcularTotalPostsEquivalentes,
   assertBillingDays,
   isDataPassada,
+  calcularPermanenciaCliente,
 } from "../calculations";
 
 // ─── $/post ────────────────────────────────────────────────────────────────────
@@ -339,5 +340,72 @@ describe("isDataPassada", () => {
   it("aceita referência custom", () => {
     expect(isDataPassada("2026-04-10", "2026-04-15")).toBe(true);
     expect(isDataPassada("2026-04-15", "2026-04-15")).toBe(false);
+  });
+});
+
+// ─── calcularPermanenciaCliente ───────────────────────────────────────────────
+describe("calcularPermanenciaCliente", () => {
+  const refDate = new Date("2026-04-15T00:00:00");
+
+  it("cliente ativo: conta do firstStart até referenceDate", () => {
+    expect(
+      calcularPermanenciaCliente(
+        { clientSince: null },
+        [{ startDate: "2026-01-15", endDate: null }],
+        refDate
+      )
+    ).toBe(3);
+  });
+
+  it("clientSince override prevalece sobre menor startDate", () => {
+    expect(
+      calcularPermanenciaCliente(
+        { clientSince: "2025-04-15" },
+        [{ startDate: "2026-01-15", endDate: null }],
+        refDate
+      )
+    ).toBe(12);
+  });
+
+  it("cliente inativo: conta do firstStart até maior endDate", () => {
+    expect(
+      calcularPermanenciaCliente(
+        { clientSince: null },
+        [
+          { startDate: "2025-01-15", endDate: "2025-06-15" },
+          { startDate: "2025-07-15", endDate: "2025-12-15" },
+        ],
+        refDate
+      )
+    ).toBe(11);
+  });
+
+  it("múltiplos planos ativos: usa o startDate mais antigo", () => {
+    expect(
+      calcularPermanenciaCliente(
+        { clientSince: null },
+        [
+          { startDate: "2025-10-15", endDate: null },
+          { startDate: "2025-04-15", endDate: null },
+        ],
+        refDate
+      )
+    ).toBe(12);
+  });
+
+  it("retorna null se não há plano nem clientSince", () => {
+    expect(
+      calcularPermanenciaCliente({ clientSince: null }, [], refDate)
+    ).toBeNull();
+  });
+
+  it("plano sem endDate é tratado como ativo (conta até refDate)", () => {
+    expect(
+      calcularPermanenciaCliente(
+        { clientSince: null },
+        [{ startDate: "2025-04-15", endDate: null }],
+        refDate
+      )
+    ).toBe(12);
   });
 });
