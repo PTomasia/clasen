@@ -406,10 +406,15 @@ export function PlanosClient({
 
   // Cards de resumo — planos ativos
   const activePlans = useMemo(() => plans.filter((p) => p.status === "ativo"), [plans]);
-  const activeClientsCount = useMemo(
-    () => new Set(activePlans.map((p) => p.clientId)).size,
-    [activePlans]
-  );
+  const postsAtuais = useMemo(() => {
+    return activePlans.reduce(
+      (acc, p) => ({
+        conteudo: acc.conteudo + p.postsCarrossel + p.postsReels + p.postsEstatico,
+        trafego: acc.trafego + p.postsTrafego,
+      }),
+      { conteudo: 0, trafego: 0 }
+    );
+  }, [activePlans]);
   const activeTotal = useMemo(
     () => activePlans.reduce((sum, p) => sum + p.planValue, 0),
     [activePlans]
@@ -476,8 +481,14 @@ export function PlanosClient({
           <p className="text-lg font-semibold">{activePlans.length}</p>
         </div>
         <div className="bg-card border rounded-lg px-4 py-3 min-w-[140px]">
-          <p className="text-xs text-muted-foreground">Clientes ativos</p>
-          <p className="text-lg font-semibold">{activeClientsCount}</p>
+          <p className="text-xs text-muted-foreground">Posts atuais</p>
+          <p className="text-lg font-semibold tabular-nums">
+            {postsAtuais.conteudo}
+            <span className="text-xs text-muted-foreground font-normal"> conteúdo</span>
+          </p>
+          <p className="text-[11px] text-muted-foreground tabular-nums -mt-0.5">
+            · {postsAtuais.trafego} tráfego
+          </p>
         </div>
         <div className="bg-card border rounded-lg px-4 py-3 min-w-[160px]">
           <p className="text-xs text-muted-foreground">Receita mensal</p>

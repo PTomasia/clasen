@@ -39,7 +39,7 @@ function HeroKPI({
   href?: string;
 }) {
   const inner = (
-    <>
+    <div className="flex h-full flex-col justify-between">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </p>
@@ -49,8 +49,8 @@ function HeroKPI({
       >
         {value}
       </p>
-      {sub && <p className="text-xs text-muted-foreground mt-3">{sub}</p>}
-    </>
+      <p className="text-xs text-muted-foreground mt-3 min-h-[1rem]">{sub ?? ""}</p>
+    </div>
   );
   const baseClass = "block bg-card border rounded-xl p-7 md:p-8 h-full";
   if (href) {
@@ -78,7 +78,7 @@ function KPICard({
   href?: string;
 }) {
   const inner = (
-    <>
+    <div className="flex h-full flex-col justify-between">
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </p>
@@ -88,8 +88,8 @@ function KPICard({
       >
         {value}
       </p>
-      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
-    </>
+      <p className="text-xs text-muted-foreground mt-1 min-h-[1rem]">{sub ?? ""}</p>
+    </div>
   );
   const baseClass = "block bg-card border rounded-lg p-4 h-full";
   if (href) {
@@ -233,7 +233,7 @@ export function DashboardClient({
             href="/planos"
           />
         </div>
-        <div className="grid grid-cols-3 lg:grid-cols-1 gap-4">
+        <div className="grid grid-cols-3 lg:grid-cols-1 gap-4 lg:h-full auto-rows-fr">
           <KPICard label="Clientes ativos" value={String(data.clientesAtivos)} href="/clientes" />
           <KPICard label="Ticket médio" value={formatBRL(data.ticketMedio)} sub="por cliente" href="/clientes" />
           <KPICard
