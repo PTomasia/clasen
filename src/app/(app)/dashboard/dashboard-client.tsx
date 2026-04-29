@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   BarChart,
   Bar,
@@ -13,7 +14,8 @@ import {
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Calendar, AlertTriangle, CreditCard, SkipForward } from "lucide-react";
+import { Calendar, AlertTriangle, CreditCard, SkipForward, CheckCircle2, BarChart3 } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import type {
   DashboardData,
   OperationalMonth,
@@ -29,13 +31,15 @@ function HeroKPI({
   label,
   value,
   sub,
+  href,
 }: {
   label: string;
   value: string;
   sub?: string;
+  href?: string;
 }) {
-  return (
-    <div className="bg-card border rounded-xl p-7 md:p-8">
+  const inner = (
+    <>
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </p>
@@ -45,24 +49,36 @@ function HeroKPI({
       >
         {value}
       </p>
-      {sub && (
-        <p className="text-xs text-muted-foreground mt-3">{sub}</p>
-      )}
-    </div>
+      {sub && <p className="text-xs text-muted-foreground mt-3">{sub}</p>}
+    </>
   );
+  const baseClass = "block bg-card border rounded-xl p-7 md:p-8 h-full";
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={cn(baseClass, "transition-colors hover:bg-muted/40 hover:border-primary/30")}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={baseClass}>{inner}</div>;
 }
 
 function KPICard({
   label,
   value,
   sub,
+  href,
 }: {
   label: string;
   value: string;
   sub?: string;
+  href?: string;
 }) {
-  return (
-    <div className="bg-card border rounded-lg p-4">
+  const inner = (
+    <>
       <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </p>
@@ -73,8 +89,20 @@ function KPICard({
         {value}
       </p>
       {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
-    </div>
+    </>
   );
+  const baseClass = "block bg-card border rounded-lg p-4 h-full";
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={cn(baseClass, "transition-colors hover:bg-muted/40 hover:border-primary/30")}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={baseClass}>{inner}</div>;
 }
 
 function PermanenciaStat({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -94,9 +122,11 @@ function MRRChart({ data }: { data: DashboardData["mrr"] }) {
     return (
       <div className="bg-card border rounded-lg p-5">
         <h2 className="font-semibold mb-4">MRR — Últimos 12 meses</h2>
-        <p className="text-sm text-muted-foreground py-8 text-center">
-          Nenhum pagamento registrado ainda. O gráfico aparece conforme os pagamentos são lançados.
-        </p>
+        <EmptyState
+          icon={BarChart3}
+          title="Sem dados de pagamento ainda"
+          description="O gráfico aparece conforme os pagamentos são lançados em /planos."
+        />
       </div>
     );
   }
@@ -200,11 +230,12 @@ export function DashboardClient({
             label="Receita bruta mensal"
             value={formatBRL(data.receitaBruta)}
             sub={`${data.clientesAtivos} clientes ativos · ${data.postsAtivos} posts/mês`}
+            href="/planos"
           />
         </div>
         <div className="grid grid-cols-3 lg:grid-cols-1 gap-4">
-          <KPICard label="Clientes ativos" value={String(data.clientesAtivos)} />
-          <KPICard label="Ticket médio" value={formatBRL(data.ticketMedio)} sub="por cliente" />
+          <KPICard label="Clientes ativos" value={String(data.clientesAtivos)} href="/clientes" />
+          <KPICard label="Ticket médio" value={formatBRL(data.ticketMedio)} sub="por cliente" href="/clientes" />
           <KPICard
             label="$/post médio"
             value={formatBRL(data.ticketMedioPorPost)}
@@ -213,6 +244,7 @@ export function DashboardClient({
                 ? `${operational.postsPorCliente.ratio.toFixed(1)} posts/cliente`
                 : undefined
             }
+            href="/planos"
           />
         </div>
       </div>
@@ -259,9 +291,12 @@ export function DashboardClient({
           </div>
 
           {data.atrasados.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              ✓ Nenhum pagamento atrasado
-            </p>
+            <EmptyState
+              icon={CheckCircle2}
+              title="Em dia esta semana"
+              tone="success"
+              className="py-6"
+            />
           ) : (
             <ul className="divide-y max-h-[300px] overflow-y-auto -mx-5">
               {data.atrasados.map((row) => (
@@ -343,9 +378,12 @@ export function DashboardClient({
           </div>
 
           {data.upcoming.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              Nenhum pagamento nos próximos 7 dias
-            </p>
+            <EmptyState
+              icon={Calendar}
+              title="Semana tranquila"
+              description="Nenhum vencimento nos próximos 7 dias."
+              className="py-6"
+            />
           ) : (
             <ul className="divide-y max-h-[300px] overflow-y-auto">
               {data.upcoming.map((row) => (
