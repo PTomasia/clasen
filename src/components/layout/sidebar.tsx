@@ -17,15 +17,33 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, sprint: 3 },
-  { name: "Planos", href: "/planos", icon: FileText, sprint: 1 },
-  { name: "Clientes", href: "/clientes", icon: Users, sprint: 2 },
-  { name: "Perfil Ideal", href: "/icp", icon: UserCheck, sprint: 3 },
-  { name: "Receitas Avulsas", href: "/receitas-avulsas", icon: DollarSign, sprint: 4 },
-  { name: "Aquisição", href: "/aquisicao", icon: TrendingUp, sprint: 4 },
-  { name: "Despesas", href: "/despesas", icon: Receipt, sprint: 5 },
-  { name: "Conciliação", href: "/conciliacao", icon: GitMerge, sprint: 6 },
+type NavItem = { name: string; href: string; icon: typeof LayoutDashboard; sprint: number };
+type NavGroup = { label: string; items: NavItem[] };
+
+const navigation: NavGroup[] = [
+  {
+    label: "Operação",
+    items: [
+      { name: "Planos", href: "/planos", icon: FileText, sprint: 1 },
+      { name: "Clientes", href: "/clientes", icon: Users, sprint: 2 },
+      { name: "Conciliação", href: "/conciliacao", icon: GitMerge, sprint: 6 },
+    ],
+  },
+  {
+    label: "Análise",
+    items: [
+      { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, sprint: 3 },
+      { name: "Perfil Ideal", href: "/icp", icon: UserCheck, sprint: 3 },
+      { name: "Aquisição", href: "/aquisicao", icon: TrendingUp, sprint: 4 },
+    ],
+  },
+  {
+    label: "Financeiro",
+    items: [
+      { name: "Receitas Avulsas", href: "/receitas-avulsas", icon: DollarSign, sprint: 4 },
+      { name: "Despesas", href: "/despesas", icon: Receipt, sprint: 5 },
+    ],
+  },
 ];
 
 const CURRENT_SPRINT = 6;
@@ -70,41 +88,52 @@ export function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
-          {navigation.map((item) => {
-            const isActive = pathname === item.href;
-            const isAvailable = item.sprint <= CURRENT_SPRINT;
+        <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+          {navigation.map((group) => {
+            const renderedItems = group.items.map((item) => {
+              const isActive = pathname === item.href;
+              const isAvailable = item.sprint <= CURRENT_SPRINT;
 
-            if (!isAvailable) {
+              if (!isAvailable) {
+                return (
+                  <div
+                    key={item.name}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/40 cursor-not-allowed"
+                  >
+                    <item.icon size={18} />
+                    <span className="text-sm">{item.name}</span>
+                    <span className="ml-auto text-xs bg-sidebar-accent/50 px-1.5 py-0.5 rounded text-sidebar-foreground/50">
+                      em breve
+                    </span>
+                  </div>
+                );
+              }
+
               return (
-                <div
+                <Link
                   key={item.name}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sidebar-foreground/40 cursor-not-allowed"
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                  )}
                 >
                   <item.icon size={18} />
-                  <span className="text-sm">{item.name}</span>
-                  <span className="ml-auto text-xs bg-sidebar-accent/50 px-1.5 py-0.5 rounded text-sidebar-foreground/50">
-                    em breve
-                  </span>
-                </div>
+                  <span>{item.name}</span>
+                </Link>
               );
-            }
+            });
 
             return (
-              <Link
-                key={item.name}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                )}
-              >
-                <item.icon size={18} />
-                <span>{item.name}</span>
-              </Link>
+              <div key={group.label}>
+                <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/40">
+                  {group.label}
+                </p>
+                <div className="space-y-1">{renderedItems}</div>
+              </div>
             );
           })}
         </nav>
