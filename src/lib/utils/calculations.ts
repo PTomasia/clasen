@@ -103,6 +103,36 @@ export function calcularProximoVencimento(
   );
 }
 
+// ─── Permanência considerando múltiplos planos ────────────────────────────────
+// `clientSince` (override manual) prevalece sobre o menor startDate dos planos.
+// Cliente é "ativo" se algum plano não tem endDate. Retorna null quando não há
+// data detectável (sem planos e sem clientSince, ou inativo sem endDate registrado).
+
+export function calcularPermanenciaCliente(
+  client: { clientSince: string | null | undefined },
+  plans: ReadonlyArray<{ startDate: string; endDate: string | null | undefined }>,
+  referenceDate: Date
+): number | null {
+  const isAtivo = plans.some((p) => !p.endDate);
+  const firstStart =
+    client.clientSince ?? plans.map((p) => p.startDate).sort()[0];
+
+  if (!firstStart) return null;
+
+  if (isAtivo) {
+    return differenceInMonths(referenceDate, parseISO(firstStart));
+  }
+
+  const lastEnd = plans
+    .filter((p) => p.endDate)
+    .map((p) => p.endDate as string)
+    .sort()
+    .reverse()[0];
+
+  if (!lastEnd) return null;
+  return differenceInMonths(parseISO(lastEnd), parseISO(firstStart));
+}
+
 // ─── Comparação de data ISO vs hoje ───────────────────────────────────────────
 // Comparação lexicográfica YYYY-MM-DD (mesmo padrão de calcularStatusPagamento).
 // Hoje não conta como atrasado.

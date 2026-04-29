@@ -382,7 +382,6 @@ export interface ChangePlanInput {
 }
 
 export async function changePlan(db: any, input: ChangePlanInput) {
-  // Buscar plano antigo
   const oldPlan = await db
     .select()
     .from(schema.subscriptionPlans)
@@ -392,10 +391,11 @@ export async function changePlan(db: any, input: ChangePlanInput) {
   if (!oldPlan) throw new Error("plano não encontrado");
   if (oldPlan.status === "cancelado") throw new Error("plano já está encerrado");
 
-  // Encerrar plano antigo
   await closePlan(db, input.oldPlanId, input.endDate);
 
-  // Criar novo plano para o mesmo cliente, herdando billingCycleDays se não informado
+  // Compensating action: se createPlan falhar, reabrir o plano antigo.
+  // Driver libsql/better-sqlite3 não compartilham assinatura de transaction,
+  // por isso o rollback é manual em vez de db.transaction().
   const newPlanInput: CreatePlanInput = {
     clientId: oldPlan.clientId,
     ...input.newPlan,
@@ -403,7 +403,20 @@ export async function changePlan(db: any, input: ChangePlanInput) {
     billingCycleDays2: input.newPlan.billingCycleDays2 ?? oldPlan.billingCycleDays2 ?? undefined,
   };
 
-  const result = await createPlan(db, newPlanInput);
+  let result;
+  try {
+    result = await createPlan(db, newPlanInput);
+  } catch (err) {
+    await db.update(schema.subscriptionPlans)
+      .set({
+        endDate: oldPlan.endDate,
+        status: oldPlan.status,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(schema.subscriptionPlans.id, input.oldPlanId))
+      .run();
+    throw err;
+  }
 
   return { oldPlan, newPlan: result.plan, client: result.client };
 }
@@ -710,6 +723,89 @@ export async function getActualLastPayment(
   return realPayments[0].paymentDate;
 }
 
+// ─── Helpers privados de getPaymentGaps ───────────────────────────────────────
+
+type GapPayment = { paymentDate: string; skipped: boolean };
+
+function monthsKeysOf(payments: ReadonlyArray<GapPayment>, predicate: (p: GapPayment) => boolean): Set<string> {
+  return new Set(payments.filter(predicate).map((p) => p.paymentDate.slice(0, 7)));
+}
+
+function gapsForSingleBilling(
+  cursor: Date,
+  effectiveEnd: Date,
+  billingDay: number,
+  payments: ReadonlyArray<GapPayment>
+): string[] {
+  const skippedMonths = monthsKeysOf(payments, (p) => p.skipped);
+  const paidMonths = monthsKeysOf(payments, (p) => !p.skipped);
+  const out: string[] = [];
+
+  while (cursor <= effectiveEnd) {
+    const maxDay = getDaysInMonth(cursor);
+    const dueDay = Math.min(billingDay, maxDay);
+    const dueDate = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay);
+
+    if (dueDate <= effectiveEnd) {
+      const monthKey = format(cursor, "yyyy-MM");
+      if (!paidMonths.has(monthKey) && !skippedMonths.has(monthKey)) {
+        out.push(format(dueDate, "yyyy-MM-dd"));
+      }
+    }
+    cursor = addMonths(cursor, 1);
+  }
+  return out;
+}
+
+function gapsForDoubleBilling(
+  cursor: Date,
+  effectiveEnd: Date,
+  rawDay1: number,
+  rawDay2: number,
+  payments: ReadonlyArray<GapPayment>
+): string[] {
+  const [earlier, later] = rawDay1 < rawDay2 ? [rawDay1, rawDay2] : [rawDay2, rawDay1];
+  const skippedMonths = monthsKeysOf(payments, (p) => p.skipped);
+
+  // Pagamento com day < actualLater do mês cobre dueDate1; caso contrário cobre dueDate2.
+  const coveredDueDates = new Set<string>();
+  for (const p of payments) {
+    if (p.skipped) continue;
+    const [y, m, dayStr] = p.paymentDate.split("-");
+    const payDay = Number(dayStr);
+    const monthLastDay = getDaysInMonth(new Date(Number(y), Number(m) - 1));
+    const actualLater = Math.min(later, monthLastDay);
+    const monthKey = p.paymentDate.slice(0, 7);
+    if (payDay < actualLater) {
+      const actualEarlier = Math.min(earlier, monthLastDay);
+      coveredDueDates.add(`${monthKey}-${String(actualEarlier).padStart(2, "0")}`);
+    } else {
+      coveredDueDates.add(`${monthKey}-${String(actualLater).padStart(2, "0")}`);
+    }
+  }
+
+  const out: string[] = [];
+  while (cursor <= effectiveEnd) {
+    const monthKey = format(cursor, "yyyy-MM");
+    if (!skippedMonths.has(monthKey)) {
+      const maxDay = getDaysInMonth(cursor);
+      const dueDate1 = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(earlier, maxDay));
+      const dueDate2 = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(later, maxDay));
+
+      if (dueDate1 <= effectiveEnd) {
+        const key1 = format(dueDate1, "yyyy-MM-dd");
+        if (!coveredDueDates.has(key1)) out.push(key1);
+      }
+      if (dueDate2 <= effectiveEnd) {
+        const key2 = format(dueDate2, "yyyy-MM-dd");
+        if (!coveredDueDates.has(key2)) out.push(key2);
+      }
+    }
+    cursor = addMonths(cursor, 1);
+  }
+  return out;
+}
+
 // ─── getPaymentGaps ───────────────────────────────────────────────────────────
 // Retorna as datas de vencimento (YYYY-MM-DD) esperadas que NÃO foram pagas,
 // do startDate até o referenceDate (ou endDate, o que for menor).
@@ -755,84 +851,19 @@ export async function getPaymentGaps(
   }
 
   if (plan.billingCycleDays2) {
-    const [earlier, later] =
-      plan.billingCycleDays < plan.billingCycleDays2
-        ? [plan.billingCycleDays, plan.billingCycleDays2]
-        : [plan.billingCycleDays2, plan.billingCycleDays];
-
-    // Meses congelados fecham todos os gaps do mês
-    const skippedMonths = new Set<string>(
-      payments
-        .filter((p: { skipped: boolean }) => p.skipped)
-        .map((p: { paymentDate: string }) => p.paymentDate.slice(0, 7))
+    gaps.push(
+      ...gapsForDoubleBilling(
+        cursor,
+        effectiveEnd,
+        plan.billingCycleDays,
+        plan.billingCycleDays2,
+        payments
+      )
     );
-
-    // Pagamentos reais: determinar qual due date cobrem (dueDate1 = earlier, dueDate2 = later)
-    // Pagamento com day < actualLater do mês → cobre dueDate1; caso contrário → cobre dueDate2
-    const coveredDueDates = new Set<string>();
-    for (const p of payments) {
-      if (p.skipped) continue;
-      const [y, m, dayStr] = p.paymentDate.split("-");
-      const payDay = Number(dayStr);
-      const monthLastDay = getDaysInMonth(new Date(Number(y), Number(m) - 1));
-      const actualLater = Math.min(later, monthLastDay);
-      const monthKey = p.paymentDate.slice(0, 7);
-      if (payDay < actualLater) {
-        const actualEarlier = Math.min(earlier, monthLastDay);
-        coveredDueDates.add(`${monthKey}-${String(actualEarlier).padStart(2, "0")}`);
-      } else {
-        coveredDueDates.add(`${monthKey}-${String(actualLater).padStart(2, "0")}`);
-      }
-    }
-
-    while (cursor <= effectiveEnd) {
-      const monthKey = format(cursor, "yyyy-MM");
-
-      if (!skippedMonths.has(monthKey)) {
-        const maxDay = getDaysInMonth(cursor);
-        const dueDay1 = Math.min(earlier, maxDay);
-        const dueDay2 = Math.min(later, maxDay);
-        const dueDate1 = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay1);
-        const dueDate2 = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay2);
-
-        if (dueDate1 <= effectiveEnd) {
-          const key1 = format(dueDate1, "yyyy-MM-dd");
-          if (!coveredDueDates.has(key1)) gaps.push(key1);
-        }
-        if (dueDate2 <= effectiveEnd) {
-          const key2 = format(dueDate2, "yyyy-MM-dd");
-          if (!coveredDueDates.has(key2)) gaps.push(key2);
-        }
-      }
-
-      cursor = addMonths(cursor, 1);
-    }
   } else {
-    // 1 vencimento por mês
-    const skippedMonths = new Set<string>(
-      payments
-        .filter((p: { skipped: boolean }) => p.skipped)
-        .map((p: { paymentDate: string }) => p.paymentDate.slice(0, 7))
+    gaps.push(
+      ...gapsForSingleBilling(cursor, effectiveEnd, plan.billingCycleDays, payments)
     );
-    const paidMonthKeys = new Set<string>(
-      payments
-        .filter((p: { skipped: boolean }) => !p.skipped)
-        .map((p: { paymentDate: string }) => p.paymentDate.slice(0, 7))
-    );
-
-    while (cursor <= effectiveEnd) {
-      const maxDay = getDaysInMonth(cursor);
-      const dueDay = Math.min(plan.billingCycleDays, maxDay);
-      const dueDate = new Date(cursor.getFullYear(), cursor.getMonth(), dueDay);
-
-      if (dueDate <= effectiveEnd) {
-        const monthKey = format(cursor, "yyyy-MM");
-        if (!paidMonthKeys.has(monthKey) && !skippedMonths.has(monthKey)) {
-          gaps.push(format(dueDate, "yyyy-MM-dd"));
-        }
-      }
-      cursor = addMonths(cursor, 1);
-    }
   }
 
   return gaps;

@@ -2078,10 +2078,8 @@ describe("changePlan (upgrade/downgrade)", () => {
     expect(payments[0].amount).toBe(500);
   });
 
-  it("plano antigo fica encerrado se createPlan falha (sem rollback — bug conhecido)", async () => {
-    // Documenta: changePlan NÃO tem transação atômica.
-    // Se createPlan falha, o plano antigo já está cancelado.
-    const { plan: oldPlan } = await createPlan(db, {
+  it("rollback: se createPlan falha, plano antigo permanece ativo e nenhum novo plano é criado", async () => {
+    const { plan: oldPlan, client } = await createPlan(db, {
       clientName: "Rollback Test",
       planType: "Essential",
       planValue: 500,
@@ -2099,7 +2097,7 @@ describe("changePlan (upgrade/downgrade)", () => {
         endDate: "2026-04-15",
         newPlan: {
           planType: "Personalizado",
-          planValue: 0, // inválido
+          planValue: 0,
           postsCarrossel: 4,
           postsReels: 0,
           postsEstatico: 0,
@@ -2110,16 +2108,23 @@ describe("changePlan (upgrade/downgrade)", () => {
       })
     ).rejects.toThrow("valor deve ser maior que zero");
 
-    // Bug conhecido: plano antigo fica cancelado sem novo plano criado
+    // Plano antigo: estado original preservado
     const oldPlanAfter = db
       .select()
       .from(schema.subscriptionPlans)
       .where(eq(schema.subscriptionPlans.id, oldPlan.id))
       .get();
+    expect(oldPlanAfter!.status).toBe(oldPlan.status);
+    expect(oldPlanAfter!.endDate).toBe(oldPlan.endDate);
 
-    // Documentando o comportamento atual (sem rollback):
-    expect(oldPlanAfter!.status).toBe("cancelado");
-    expect(oldPlanAfter!.endDate).toBe("2026-04-15");
+    // Nenhum plano novo do mesmo cliente
+    const allPlansForClient = db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.clientId, client.id))
+      .all();
+    expect(allPlansForClient).toHaveLength(1);
+    expect(allPlansForClient[0].id).toBe(oldPlan.id);
   });
 });
 

@@ -7,13 +7,13 @@ import {
   addDays,
   subMonths,
   parseISO,
-  differenceInMonths,
   differenceInCalendarDays,
   startOfMonth,
 } from "date-fns";
 import {
   calcularCustoPost,
   calcularMediana,
+  calcularPermanenciaCliente,
   calcularTotalPostsEquivalentes,
 } from "../utils/calculations";
 
@@ -134,23 +134,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     const plans = allPlans.filter((p) => p.clientId === client.id);
     if (plans.length === 0) continue;
 
+    const tenure = calcularPermanenciaCliente(client, plans, now);
+    if (tenure === null) continue;
+
     const isAtivo = plans.some((p) => !p.endDate);
-    const firstStart = client.clientSince ?? plans.map((p) => p.startDate).sort()[0];
-    if (!firstStart) continue;
-
-    let tenure: number;
-    if (isAtivo) {
-      tenure = differenceInMonths(now, parseISO(firstStart));
-    } else {
-      const lastEnd = plans
-        .filter((p) => p.endDate)
-        .map((p) => p.endDate as string)
-        .sort()
-        .reverse()[0];
-      if (!lastEnd) continue;
-      tenure = differenceInMonths(parseISO(lastEnd), parseISO(firstStart));
-    }
-
     tenures.push({ clientId: client.id, tenure, isAtivo });
   }
 
