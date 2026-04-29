@@ -352,6 +352,37 @@ export function PlanosClient({
   const potentialDeltaPct =
     activeTotal > 0 ? (potentialDelta / activeTotal) * 100 : 0;
 
+  // Receita potencial — apenas reajustes vencidos:
+  // planos cujo nextAdjustmentDate já passou (≥6 meses sem reajuste) E
+  // ainda têm sugestão (abaixo do alvo). Demais mantêm valor atual.
+  const overdueAdjustments = useMemo(
+    () =>
+      activePlans.filter(
+        (p) =>
+          p.nextAdjustmentDate &&
+          isDataPassada(p.nextAdjustmentDate) &&
+          p.adjustmentSuggestion?.suggestedValue != null
+      ),
+    [activePlans]
+  );
+  const overdueTotal = useMemo(
+    () =>
+      activePlans.reduce(
+        (sum, p) => {
+          const isOverdue =
+            p.nextAdjustmentDate &&
+            isDataPassada(p.nextAdjustmentDate) &&
+            p.adjustmentSuggestion?.suggestedValue != null;
+          return sum + (isOverdue ? p.adjustmentSuggestion!.suggestedValue! : p.planValue);
+        },
+        0
+      ),
+    [activePlans]
+  );
+  const overdueDelta = overdueTotal - activeTotal;
+  const overdueDeltaPct =
+    activeTotal > 0 ? (overdueDelta / activeTotal) * 100 : 0;
+
   return (
     <>
       {/* Resumo */}
@@ -368,6 +399,25 @@ export function PlanosClient({
           <p className="text-xs text-muted-foreground">Receita mensal</p>
           <p className="text-lg font-semibold font-mono">{formatBRL(activeTotal)}</p>
         </div>
+        {targetCostPerPost && overdueAdjustments.length > 0 && (
+          <div
+            className="rounded-lg px-4 py-3 min-w-[180px] border bg-accent/10 border-accent/40"
+            title={`Soma considerando apenas os ${overdueAdjustments.length} ${overdueAdjustments.length === 1 ? "reajuste vencido" : "reajustes vencidos"} (planos com ≥6 meses ainda abaixo do $/post alvo). Demais mantêm valor atual.`}
+          >
+            <p className="text-xs text-accent flex items-center gap-1">
+              Reajustes vencidos
+              <span className="text-[10px] text-muted-foreground/70">
+                {overdueAdjustments.length}
+              </span>
+            </p>
+            <p className="text-lg font-semibold font-mono text-accent">
+              {formatBRL(overdueTotal)}
+            </p>
+            <p className="text-[10px] text-accent/80 mt-0.5 tabular-nums">
+              +{formatBRL(overdueDelta)} (+{overdueDeltaPct.toFixed(1)}%)
+            </p>
+          </div>
+        )}
         {targetCostPerPost && potentialDelta > 0 && (
           <div
             className="rounded-lg px-4 py-3 min-w-[180px] border bg-primary/5 border-primary/30"
