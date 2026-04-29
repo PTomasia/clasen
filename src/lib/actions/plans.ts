@@ -6,6 +6,8 @@ import {
   createPlan as createPlanService,
   closePlan as closePlanService,
   recordPayment as recordPaymentService,
+  updatePayment as updatePaymentService,
+  deletePayment as deletePaymentService,
   updateClient as updateClientService,
   updatePlan as updatePlanService,
   updateBillingDays as updateBillingDaysService,
@@ -15,7 +17,15 @@ import {
   skipBillingCycle as skipBillingCycleService,
   skipPaymentMonth as skipPaymentMonthService,
 } from "../services/plans";
-import type { CreatePlanInput, RecordPaymentInput, UpdateClientInput, UpdatePlanInput, ChangePlanInput, ClosePlanOptions } from "../services/plans";
+import type {
+  CreatePlanInput,
+  RecordPaymentInput,
+  UpdateClientInput,
+  UpdatePlanInput,
+  UpdatePaymentInput,
+  ChangePlanInput,
+  ClosePlanOptions,
+} from "../services/plans";
 import { REVALIDATE_PATHS } from "../constants";
 
 // ─── Helper — revalida todos os paths de uma vez ─────────────────────────────
@@ -47,6 +57,20 @@ export async function recordPaymentAction(input: RecordPaymentInput) {
   const payment = await recordPaymentService(db as any, input);
   revalidateAll();
   return { paymentId: payment.id };
+}
+
+export async function updatePaymentAction(
+  planId: number,
+  paymentId: number,
+  input: UpdatePaymentInput
+) {
+  await updatePaymentService(db as any, planId, paymentId, input);
+  revalidateAll();
+}
+
+export async function deletePaymentAction(planId: number, paymentId: number) {
+  await deletePaymentService(db as any, planId, paymentId);
+  revalidateAll();
 }
 
 export async function updateClientAction(input: UpdateClientInput) {

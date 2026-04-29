@@ -133,14 +133,14 @@ function AdjustmentCell({
 
   return (
     <div className="text-xs">
-      <span className={isOverdue ? "text-accent font-medium" : "text-muted-foreground"}>
+      <span className={isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}>
         {formatDate(nextDate)} {isOverdue && "⚠"}
       </span>
       <br />
-      <span className="font-mono font-medium">
+      <span className={`font-mono font-medium ${isOverdue ? "text-destructive" : ""}`}>
         {formatBRL(suggestion.suggestedValue)}
       </span>
-      <span className="text-muted-foreground ml-1">
+      <span className={`ml-1 ${isOverdue ? "text-destructive/80" : "text-muted-foreground"}`}>
         (+{suggestion.percentChange.toFixed(0)}%{suggestion.capped ? " max" : ""})
       </span>
     </div>
@@ -463,7 +463,15 @@ export function PlanosClient({
               <SortableHead label="Pgto" sortKey="statusPagamento" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
               <TableHead>Último pgto</TableHead>
               <TableHead>Status</TableHead>
-              {targetCostPerPost && <TableHead>Reajuste</TableHead>}
+              {targetCostPerPost && (
+                <SortableHead
+                  label="Reajuste"
+                  sortKey="nextAdjustmentDate"
+                  currentSort={sortKey}
+                  currentDirection={sortDirection}
+                  onSort={handleSort}
+                />
+              )}
               <TableHead className="text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -669,16 +677,20 @@ export function PlanosClient({
                             <CreditCard size={14} />
                             <span className="text-xs font-medium">Pagar</span>
                           </Button>
-                          {plan.billingCycleDays && plan.nextPaymentDate && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleSkipBilling(plan.id)}
-                              title="Pular cobrança — avança o próximo vencimento em 1 ciclo"
-                            >
-                              <SkipForward size={14} />
-                            </Button>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSkipBilling(plan.id)}
+                            title="Pular cobrança — avança o próximo vencimento em 1 ciclo"
+                            disabled={!plan.billingCycleDays || !plan.nextPaymentDate}
+                            className={
+                              !plan.billingCycleDays || !plan.nextPaymentDate
+                                ? "invisible"
+                                : ""
+                            }
+                          >
+                            <SkipForward size={14} />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"

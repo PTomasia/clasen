@@ -4,10 +4,11 @@ import * as schema from "../db/schema";
 import {
   calcularCustoPost,
   calcularPermanencia,
+  calcularProximoVencimento,
   calcularStatusPagamento,
 } from "../utils/calculations";
 import { calcularProximoReajuste, calcularSugestaoReajuste } from "../utils/adjustments";
-import { getPaymentGaps } from "../services/plans";
+import { getActualLastPayment, getPaymentGaps } from "../services/plans";
 import { getSetting, TARGET_COST_PER_POST_KEY } from "../services/settings";
 
 // ─── Queries — leitura pura, usáveis em Server Components ──────────────────────
@@ -40,6 +41,20 @@ export async function getAllPlans() {
     plans.map(async ({ plan, clientName, clientContactOrigin, clientNotes, clientSince }) => {
       const gaps = await getPaymentGaps(db as any, plan.id, undefined, minDate);
 
+      // Fonte da verdade para datas de pagamento: plan_payments.
+      // subscription_plans.last_payment_date pode estar dessincronizado se houve
+      // inserção direta na tabela (via Drizzle Studio, scripts, etc.).
+      const actualLastPayment = await getActualLastPayment(db as any, plan.id);
+      const effectiveLastPayment = actualLastPayment ?? plan.lastPaymentDate;
+      const effectiveNextPayment =
+        effectiveLastPayment && plan.billingCycleDays
+          ? calcularProximoVencimento(
+              effectiveLastPayment,
+              plan.billingCycleDays,
+              plan.billingCycleDays2
+            )
+          : plan.nextPaymentDate;
+
       // Reajuste: só para planos ativos
       const nextAdjustmentDate =
         plan.status === "ativo"
@@ -59,6 +74,8 @@ export async function getAllPlans() {
 
       return {
         ...plan,
+        lastPaymentDate: effectiveLastPayment,
+        nextPaymentDate: effectiveNextPayment,
         clientName,
         clientContactOrigin,
         clientNotes,
@@ -71,7 +88,7 @@ export async function getAllPlans() {
           trafego: plan.postsTrafego,
         }),
         permanencia: calcularPermanencia(plan.startDate, plan.endDate),
-        statusPagamento: calcularStatusPagamento(plan.nextPaymentDate),
+        statusPagamento: calcularStatusPagamento(effectiveNextPayment),
         gapsCount: gaps.length,
         gapMonths: gaps,
         nextAdjustmentDate,

@@ -120,7 +120,7 @@ export function ChangePlanDialog({
           )}
 
           {/* Tipo e Valor */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-4 gap-3 items-end">
             <div className="space-y-1">
               <Label>Tipo</Label>
               <Select value={planType} onValueChange={(v) => v && setPlanType(v)}>
@@ -146,7 +146,7 @@ export function ChangePlanDialog({
               />
             </div>
             <div className="space-y-1">
-              <Label>Venc. (dia) *</Label>
+              <Label title="Dia do mês em que o plano vence">Venc. *</Label>
               <Input
                 type="number"
                 min="1"
@@ -158,7 +158,9 @@ export function ChangePlanDialog({
               />
             </div>
             <div className="space-y-1">
-              <Label>2º venc. (dia)</Label>
+              <Label title="2º dia de vencimento (planos com 2 cobranças por mês)">
+                2º venc.
+              </Label>
               <Input
                 type="number"
                 min="1"

@@ -23,6 +23,7 @@ function createTestDb() {
       client_since TEXT,
       birthday TEXT,
       whatsapp TEXT,
+      email TEXT,
       city TEXT,
       state TEXT,
       niche TEXT,

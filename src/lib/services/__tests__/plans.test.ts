@@ -19,6 +19,7 @@ function createTestDb() {
       client_since TEXT,
       birthday TEXT,
       whatsapp TEXT,
+      email TEXT,
       city TEXT,
       state TEXT,
       niche TEXT,
@@ -88,6 +89,9 @@ import {
   getPaymentsByPlan,
   getPaymentHistory,
   getPaymentGaps,
+  getActualLastPayment,
+  updatePayment,
+  deletePayment,
   updateClient,
   updatePlan,
   updateBillingDays,
@@ -2738,6 +2742,429 @@ describe("getPaymentGaps", () => {
     expect(gapsComCutoff).not.toContain("2026-01-15");
 
     expect(gapsComCutoff.length).toBe(3); // Exatamente 3 gaps
+  });
+
+  it("regressão: getPaymentGaps detecta gap no mês corrente quando billing já passou", async () => {
+    // Sanity check do cenário reportado em /planos: pagou só março, billing 15, hoje 28/04.
+    const { plan } = await createPlan(db, {
+      clientName: "Cliente Marco",
+      planType: "Personalizado",
+      planValue: 1005,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-08-01",
+    });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-16", amount: 1005 });
+
+    const gaps = await getPaymentGaps(db, plan.id, "2026-04-28");
+    expect(gaps).toContain("2026-04-15");
+  });
+});
+
+describe("getActualLastPayment", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("retorna a data do pagamento mais recente em plan_payments", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "MaxPgto",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-15", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-15", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-15", amount: 500 });
+
+    const result = await getActualLastPayment(db, plan.id);
+    expect(result).toBe("2026-04-15");
+  });
+
+  it("retorna null quando o plano não tem pagamentos", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "SemPgto",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    const result = await getActualLastPayment(db, plan.id);
+    expect(result).toBeNull();
+  });
+
+  it("ignora registros com skipped=true (mês congelado não conta como pagamento real)", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "ComSkip",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-15", amount: 500 });
+    await skipPaymentMonth(db, plan.id, "2026-04");
+
+    const result = await getActualLastPayment(db, plan.id);
+    expect(result).toBe("2026-02-15");
+  });
+
+  it("detecta inconsistência: pagamento em plan_payments mais recente que subscription_plans.last_payment_date", async () => {
+    // Cenário Fernanda: pagamento de abril foi inserido direto em plan_payments
+    // sem atualizar last_payment_date do plano.
+    const { plan } = await createPlan(db, {
+      clientName: "Inconsistente",
+      planType: "Personalizado",
+      planValue: 1005,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2025-08-01",
+    });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-16", amount: 1005 });
+
+    // Inserir pagamento direto na tabela (simulando inserção via SQL/Studio,
+    // sem passar pelo recordPayment que atualiza o plano)
+    await db
+      .insert(schema.planPayments)
+      .values({
+        planId: plan.id,
+        clientId: plan.clientId,
+        paymentDate: "2026-04-17",
+        amount: 345,
+        status: "pago",
+        skipped: false,
+        notes: "Inter",
+      })
+      .run();
+
+    // last_payment_date do plano segue 2026-03-16 (não foi atualizado)
+    const planRow = await db
+      .select({ lastPaymentDate: schema.subscriptionPlans.lastPaymentDate })
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(planRow?.lastPaymentDate).toBe("2026-03-16");
+
+    // Mas getActualLastPayment vê o pagamento real
+    const result = await getActualLastPayment(db, plan.id);
+    expect(result).toBe("2026-04-17");
+  });
+});
+
+describe("updatePayment", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  async function setupPlanWithThreePayments() {
+    const { plan } = await createPlan(db, {
+      clientName: "Edit Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+    const p1 = await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-15", amount: 500 });
+    const p2 = await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-15", amount: 500 });
+    const p3 = await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-15", amount: 500 });
+    return { plan, p1, p2, p3 };
+  }
+
+  it("atualiza data, valor, status e notes do pagamento", async () => {
+    const { plan, p2 } = await setupPlanWithThreePayments();
+
+    await updatePayment(db, plan.id, p2.id, {
+      paymentDate: "2026-03-20",
+      amount: 600,
+      status: "pago",
+      notes: "Ajuste manual",
+    });
+
+    const updated = await db
+      .select()
+      .from(schema.planPayments)
+      .where(eq(schema.planPayments.id, p2.id))
+      .get();
+    expect(updated?.paymentDate).toBe("2026-03-20");
+    expect(updated?.amount).toBe(600);
+    expect(updated?.status).toBe("pago");
+    expect(updated?.notes).toBe("Ajuste manual");
+  });
+
+  it("após update, last_payment_date do plano = MAX(payment_date) dos pagamentos restantes", async () => {
+    const { plan, p3 } = await setupPlanWithThreePayments();
+
+    // Editar o pagamento mais recente (15/04 → 20/04)
+    await updatePayment(db, plan.id, p3.id, {
+      paymentDate: "2026-04-20",
+      amount: 500,
+      status: "pago",
+    });
+
+    const planRow = await db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(planRow?.lastPaymentDate).toBe("2026-04-20");
+  });
+
+  it("após update, next_payment_date é recalculado a partir do novo last_payment_date", async () => {
+    const { plan, p3 } = await setupPlanWithThreePayments();
+
+    await updatePayment(db, plan.id, p3.id, {
+      paymentDate: "2026-04-20",
+      amount: 500,
+      status: "pago",
+    });
+
+    const planRow = await db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    // billing dia 15, paid em 20/04 → próximo é 15/05
+    expect(planRow?.nextPaymentDate).toBe("2026-05-15");
+  });
+
+  it("editar pagamento mais recente para data antiga: last volta para o que agora é o mais recente", async () => {
+    const { plan, p3 } = await setupPlanWithThreePayments();
+
+    // Mover p3 (15/04) para janeiro/2026 (antes de p1 e p2)
+    await updatePayment(db, plan.id, p3.id, {
+      paymentDate: "2026-01-15",
+      amount: 500,
+      status: "pago",
+    });
+
+    const planRow = await db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    // Mais recente agora é p2 (15/03)
+    expect(planRow?.lastPaymentDate).toBe("2026-03-15");
+    expect(planRow?.nextPaymentDate).toBe("2026-04-15");
+  });
+
+  it("erro: data anterior ao start_date do plano", async () => {
+    const { plan, p2 } = await setupPlanWithThreePayments();
+
+    await expect(
+      updatePayment(db, plan.id, p2.id, {
+        paymentDate: "2025-12-01", // antes de 2026-01-01 (start)
+        amount: 500,
+        status: "pago",
+      })
+    ).rejects.toThrow(/anterior/i);
+  });
+
+  it("erro: tentar editar pagamento com skipped=true", async () => {
+    const { plan } = await setupPlanWithThreePayments();
+    await skipPaymentMonth(db, plan.id, "2026-05");
+    const skipped = await db
+      .select()
+      .from(schema.planPayments)
+      .where(eq(schema.planPayments.planId, plan.id))
+      .all();
+    const skippedRow = skipped.find((p: { skipped: boolean }) => p.skipped);
+
+    await expect(
+      updatePayment(db, plan.id, skippedRow!.id, {
+        paymentDate: "2026-05-15",
+        amount: 500,
+        status: "pago",
+      })
+    ).rejects.toThrow(/descongelar/i);
+  });
+
+  it("erro: paymentId inexistente", async () => {
+    const { plan } = await setupPlanWithThreePayments();
+
+    await expect(
+      updatePayment(db, plan.id, 99999, {
+        paymentDate: "2026-03-20",
+        amount: 500,
+        status: "pago",
+      })
+    ).rejects.toThrow(/não encontrado/i);
+  });
+
+  it("erro: novo paymentDate cai em mês que já tem outro pagamento não-skipped", async () => {
+    const { plan, p2 } = await setupPlanWithThreePayments();
+
+    // Tentar mover p2 (15/03) para 17/04, mas já existe pagamento em 15/04
+    await expect(
+      updatePayment(db, plan.id, p2.id, {
+        paymentDate: "2026-04-17",
+        amount: 500,
+        status: "pago",
+      })
+    ).rejects.toThrow(/já existe pagamento neste mês/i);
+  });
+
+  it("permite mover pagamento para outra data dentro do mesmo mês (não conflita consigo mesmo)", async () => {
+    const { plan, p2 } = await setupPlanWithThreePayments();
+
+    // p2 está em 15/03; mover para 20/03 (mesmo mês, sem conflito com outro)
+    await updatePayment(db, plan.id, p2.id, {
+      paymentDate: "2026-03-20",
+      amount: 500,
+      status: "pago",
+    });
+
+    const updated = await db
+      .select()
+      .from(schema.planPayments)
+      .where(eq(schema.planPayments.id, p2.id))
+      .get();
+    expect(updated?.paymentDate).toBe("2026-03-20");
+  });
+});
+
+describe("deletePayment", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  async function setupPlanWithThreePayments() {
+    const { plan } = await createPlan(db, {
+      clientName: "Delete Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+    const p1 = await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-15", amount: 500 });
+    const p2 = await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-15", amount: 500 });
+    const p3 = await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-15", amount: 500 });
+    return { plan, p1, p2, p3 };
+  }
+
+  it("remove o registro de plan_payments", async () => {
+    const { plan, p2 } = await setupPlanWithThreePayments();
+
+    await deletePayment(db, plan.id, p2.id);
+
+    const remaining = await db
+      .select()
+      .from(schema.planPayments)
+      .where(eq(schema.planPayments.planId, plan.id))
+      .all();
+    expect(remaining.length).toBe(2);
+    expect(remaining.find((p: { id: number }) => p.id === p2.id)).toBeUndefined();
+  });
+
+  it("após delete, last_payment_date é recalculado para o pagamento restante mais recente", async () => {
+    const { plan, p3 } = await setupPlanWithThreePayments();
+
+    await deletePayment(db, plan.id, p3.id);
+
+    const planRow = await db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(planRow?.lastPaymentDate).toBe("2026-03-15"); // p2 agora é o mais recente
+    expect(planRow?.nextPaymentDate).toBe("2026-04-15");
+  });
+
+  it("excluir único pagamento: last_payment_date vira null e next_payment_date deriva de start_date", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Single Pgto",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 15,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+    const p1 = await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-15", amount: 500 });
+
+    await deletePayment(db, plan.id, p1.id);
+
+    const planRow = await db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(planRow?.lastPaymentDate).toBeNull();
+    // next derivado de startDate (2026-01-01) com billing 15 → 15/02 (próximo dia 15 ≥ start)
+    expect(planRow?.nextPaymentDate).toBe("2026-02-15");
+  });
+
+  it("excluir pagamento intermediário: last_payment_date permanece igual (mais recente não foi tocado)", async () => {
+    const { plan, p2 } = await setupPlanWithThreePayments();
+
+    await deletePayment(db, plan.id, p2.id);
+
+    const planRow = await db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(planRow?.lastPaymentDate).toBe("2026-04-15"); // p3 segue sendo o mais recente
+  });
+
+  it("erro: paymentId inexistente", async () => {
+    const { plan } = await setupPlanWithThreePayments();
+
+    await expect(deletePayment(db, plan.id, 99999)).rejects.toThrow(/não encontrado/i);
+  });
+
+  it("permite excluir pagamento skipped (descongelar)", async () => {
+    const { plan } = await setupPlanWithThreePayments();
+    await skipPaymentMonth(db, plan.id, "2026-05");
+    const skipped = await db
+      .select()
+      .from(schema.planPayments)
+      .where(eq(schema.planPayments.planId, plan.id))
+      .all();
+    const skippedRow = skipped.find((p: { skipped: boolean }) => p.skipped);
+
+    await deletePayment(db, plan.id, skippedRow!.id);
+
+    const after = await db
+      .select()
+      .from(schema.planPayments)
+      .where(eq(schema.planPayments.id, skippedRow!.id))
+      .get();
+    expect(after).toBeUndefined();
   });
 });
 

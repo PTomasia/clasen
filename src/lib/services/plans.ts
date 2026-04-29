@@ -225,6 +225,7 @@ export interface UpdateClientInput {
   clientSince?: string;
   birthday?: string;
   whatsapp?: string;
+  email?: string;
   // ICP / Demográficos
   city?: string;
   state?: string;
@@ -257,6 +258,7 @@ export async function updateClient(db: any, input: UpdateClientInput) {
       clientSince: input.clientSince?.trim() || null,
       birthday: input.birthday?.trim() || null,
       whatsapp: input.whatsapp?.trim() || null,
+      email: input.email?.trim() || null,
       city: input.city?.trim() || null,
       state: input.state?.trim() || null,
       niche: input.niche?.trim() || null,
@@ -551,6 +553,184 @@ export async function getPaymentHistory(db: any, planId: number) {
     payments,
     gaps,
   };
+}
+
+// ─── updatePayment ────────────────────────────────────────────────────────────
+// Atualiza um registro de plan_payments (data, valor, status, notes).
+// Após atualizar, recalcula last_payment_date e next_payment_date do plano
+// usando getActualLastPayment como fonte da verdade.
+
+export interface UpdatePaymentInput {
+  paymentDate: string;
+  amount: number;
+  status?: string;
+  notes?: string | null;
+}
+
+export async function updatePayment(
+  db: any,
+  planId: number,
+  paymentId: number,
+  input: UpdatePaymentInput
+) {
+  const plan = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+  if (!plan) throw new Error("plano não encontrado");
+
+  const payment = await db
+    .select()
+    .from(schema.planPayments)
+    .where(eq(schema.planPayments.id, paymentId))
+    .get();
+  if (!payment || payment.planId !== planId) {
+    throw new Error("pagamento não encontrado");
+  }
+
+  if (payment.skipped) {
+    throw new Error(
+      "não é possível editar mês congelado — use 'descongelar' para reverter"
+    );
+  }
+
+  if (input.paymentDate < plan.startDate) {
+    throw new Error("data não pode ser anterior ao início do plano");
+  }
+
+  // Validar conflito de mês: outro pagamento não-skipped no mesmo YYYY-MM
+  const newMonthKey = input.paymentDate.slice(0, 7);
+  const sameMonthPayments = await db
+    .select()
+    .from(schema.planPayments)
+    .where(eq(schema.planPayments.planId, planId))
+    .all();
+
+  const conflict = sameMonthPayments.find(
+    (p: { id: number; skipped: boolean; paymentDate: string }) =>
+      p.id !== paymentId && !p.skipped && p.paymentDate.slice(0, 7) === newMonthKey
+  );
+  if (conflict) {
+    throw new Error("já existe pagamento neste mês");
+  }
+
+  await db
+    .update(schema.planPayments)
+    .set({
+      paymentDate: input.paymentDate,
+      amount: input.amount,
+      status: input.status ?? "pago",
+      notes: input.notes ?? null,
+    })
+    .where(eq(schema.planPayments.id, paymentId))
+    .run();
+
+  // Recalcular last/next a partir do novo estado real
+  const newLast = await getActualLastPayment(db, planId);
+  const newNext =
+    newLast && plan.billingCycleDays
+      ? calcularProximoVencimento(
+          newLast,
+          plan.billingCycleDays,
+          plan.billingCycleDays2
+        )
+      : plan.nextPaymentDate;
+
+  await db
+    .update(schema.subscriptionPlans)
+    .set({
+      lastPaymentDate: newLast,
+      nextPaymentDate: newNext,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .run();
+}
+
+// ─── deletePayment ────────────────────────────────────────────────────────────
+// Remove um registro de plan_payments e recalcula last/next do plano.
+// Se era o único pagamento, last vira null e next deriva de startDate.
+
+export async function deletePayment(db: any, planId: number, paymentId: number) {
+  const plan = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+  if (!plan) throw new Error("plano não encontrado");
+
+  const payment = await db
+    .select()
+    .from(schema.planPayments)
+    .where(eq(schema.planPayments.id, paymentId))
+    .get();
+  if (!payment || payment.planId !== planId) {
+    throw new Error("pagamento não encontrado");
+  }
+
+  await db
+    .delete(schema.planPayments)
+    .where(eq(schema.planPayments.id, paymentId))
+    .run();
+
+  // Recalcular last/next
+  const newLast = await getActualLastPayment(db, planId);
+
+  let newNext: string | null;
+  if (newLast && plan.billingCycleDays) {
+    newNext = calcularProximoVencimento(
+      newLast,
+      plan.billingCycleDays,
+      plan.billingCycleDays2
+    );
+  } else if (!newLast && plan.billingCycleDays) {
+    // Sem pagamentos: derivar de startDate como faz o createPlan
+    newNext = calcularProximoVencimento(
+      plan.startDate,
+      plan.billingCycleDays,
+      plan.billingCycleDays2
+    );
+  } else {
+    newNext = plan.nextPaymentDate;
+  }
+
+  await db
+    .update(schema.subscriptionPlans)
+    .set({
+      lastPaymentDate: newLast,
+      nextPaymentDate: newNext,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .run();
+}
+
+// ─── getActualLastPayment ────────────────────────────────────────────────────
+// Retorna a data do pagamento real mais recente em plan_payments, ignorando
+// registros skipped=true. É a fonte da verdade — subscription_plans.last_payment_date
+// pode estar dessincronizado se pagamentos forem inseridos sem passar por recordPayment.
+
+export async function getActualLastPayment(
+  db: any,
+  planId: number
+): Promise<string | null> {
+  const payments = await db
+    .select({
+      paymentDate: schema.planPayments.paymentDate,
+      skipped: schema.planPayments.skipped,
+    })
+    .from(schema.planPayments)
+    .where(eq(schema.planPayments.planId, planId))
+    .all();
+
+  const realPayments = payments.filter((p: { skipped: boolean }) => !p.skipped);
+  if (realPayments.length === 0) return null;
+
+  realPayments.sort((a: { paymentDate: string }, b: { paymentDate: string }) =>
+    a.paymentDate < b.paymentDate ? 1 : -1
+  );
+  return realPayments[0].paymentDate;
 }
 
 // ─── getPaymentGaps ───────────────────────────────────────────────────────────

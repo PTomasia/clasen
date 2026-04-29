@@ -11,6 +11,7 @@ export const clients = sqliteTable("clients", {
   clientSince: text("client_since"), // ISO date override: se preenchido, usa para permanência
   birthday: text("birthday"), // ISO date (MM-DD ou YYYY-MM-DD) - aniversário
   whatsapp: text("whatsapp"), // número de WhatsApp
+  email: text("email"),
   // Demográficos (ICP)
   city: text("city"),
   state: text("state"),

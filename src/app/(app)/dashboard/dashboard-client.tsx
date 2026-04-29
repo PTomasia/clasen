@@ -13,11 +13,16 @@ import {
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import { Button } from "@/components/ui/button";
 import { Calendar, AlertTriangle, CreditCard, SkipForward } from "lucide-react";
-import type { DashboardData } from "@/lib/queries/dashboard";
+import type {
+  DashboardData,
+  OperationalMonth,
+  PostsPorClienteResult,
+} from "@/lib/queries/dashboard";
 import type { PnLData } from "@/lib/queries/profit-and-loss";
 import { PaymentDialog } from "@/app/(app)/planos/payment-dialog";
 import { skipBillingCycleAction } from "@/lib/actions/plans";
 import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
+import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
 function KPICard({
   label,
@@ -84,9 +89,14 @@ function MRRChart({ data }: { data: DashboardData["mrr"] }) {
 export function DashboardClient({
   data,
   pnl,
+  operational,
 }: {
   data: DashboardData;
   pnl: PnLData;
+  operational: {
+    postsPorCliente: PostsPorClienteResult;
+    evolution: OperationalMonth[];
+  };
 }) {
   const [paymentPlan, setPaymentPlan] = useState<{
     id: number;
@@ -108,9 +118,18 @@ export function DashboardClient({
     <>
     <div className="space-y-6">
       {/* KPIs principais */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <KPICard label="Clientes ativos" value={String(data.clientesAtivos)} />
         <KPICard label="Posts ativos" value={String(data.postsAtivos)} />
+        <KPICard
+          label="Posts/cliente"
+          value={
+            operational.postsPorCliente.ratio !== null
+              ? operational.postsPorCliente.ratio.toFixed(1)
+              : "—"
+          }
+          sub={`${operational.postsPorCliente.clientes} clientes · ${operational.postsPorCliente.posts} posts/mês`}
+        />
         <KPICard label="Receita bruta" value={formatBRL(data.receitaBruta)} />
         <KPICard label="Ticket médio" value={formatBRL(data.ticketMedio)} sub="por cliente" />
         <KPICard label="Ticket médio/post" value={formatBRL(data.ticketMedioPorPost)} sub="$/post médio" />
@@ -134,6 +153,9 @@ export function DashboardClient({
 
       {/* Evolução mensal: receita, despesa, lucro */}
       <MonthlyEvolutionChart pnl={pnl} />
+
+      {/* Evolução operacional: clientes, posts, ticket/post */}
+      <OperationalEvolutionChart data={operational.evolution} />
 
       {/* Duas colunas: Atrasados + Próximos */}
       <div className="grid md:grid-cols-2 gap-6">

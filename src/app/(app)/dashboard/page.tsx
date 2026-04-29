@@ -1,13 +1,17 @@
-import { getDashboardData } from "@/lib/queries/dashboard";
+import {
+  getDashboardData,
+  getOperationalDashboard,
+} from "@/lib/queries/dashboard";
 import { getProfitAndLossData } from "@/lib/queries/profit-and-loss";
 import { DashboardClient } from "./dashboard-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [data, pnl] = await Promise.all([
+  const [data, pnl, operational] = await Promise.all([
     getDashboardData(),
     getProfitAndLossData(),
+    getOperationalDashboard(),
   ]);
 
   return (
@@ -17,7 +21,7 @@ export default async function DashboardPage() {
         <p className="text-muted-foreground mt-1">Visão geral da agência</p>
       </div>
 
-      <DashboardClient data={data} pnl={pnl} />
+      <DashboardClient data={data} pnl={pnl} operational={operational} />
     </div>
   );
 }

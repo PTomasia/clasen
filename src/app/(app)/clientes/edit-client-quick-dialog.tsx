@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { updateClientAction } from "@/lib/actions/plans";
+import { createClientAction } from "@/lib/actions/clients";
 import { ORIGINS, NICHES } from "@/lib/constants";
 
 export interface EditClientQuickData {
@@ -29,6 +30,7 @@ export interface EditClientQuickData {
   clientSince: string | null;
   birthday: string | null;
   whatsapp: string | null;
+  email: string | null;
   city: string | null;
   state: string | null;
   niche: string | null;
@@ -40,69 +42,97 @@ export interface EditClientQuickData {
   notes: string | null;
 }
 
+const EMPTY_DATA: EditClientQuickData = {
+  clientId: 0,
+  name: "",
+  contactOrigin: null,
+  clientSince: null,
+  birthday: null,
+  whatsapp: null,
+  email: null,
+  city: null,
+  state: null,
+  niche: null,
+  yearsInPractice: null,
+  consultaTicket: null,
+  hasPhysicalOffice: null,
+  birthYear: null,
+  targetAudience: null,
+  notes: null,
+};
+
 export function EditClientQuickDialog({
   open,
   onClose,
   data,
+  mode = "edit",
 }: {
   open: boolean;
   onClose: () => void;
-  data: EditClientQuickData;
+  data?: EditClientQuickData;
+  mode?: "edit" | "create";
 }) {
+  const effectiveData = data ?? EMPTY_DATA;
   const { isPending, error, run } = useDialogAction(onClose);
 
-  const [name, setName] = useState(data.name);
-  const [contactOrigin, setContactOrigin] = useState(data.contactOrigin ?? "");
-  const [clientSince, setClientSince] = useState(data.clientSince ?? "");
-  const [birthday, setBirthday] = useState(data.birthday ?? "");
-  const [whatsapp, setWhatsapp] = useState(data.whatsapp ?? "");
+  const [name, setName] = useState(effectiveData.name);
+  const [contactOrigin, setContactOrigin] = useState(effectiveData.contactOrigin ?? "");
+  const [clientSince, setClientSince] = useState(effectiveData.clientSince ?? "");
+  const [birthday, setBirthday] = useState(effectiveData.birthday ?? "");
+  const [whatsapp, setWhatsapp] = useState(effectiveData.whatsapp ?? "");
+  const [email, setEmail] = useState(effectiveData.email ?? "");
   // ICP
-  const [city, setCity] = useState(data.city ?? "");
-  const [state, setState] = useState(data.state ?? "");
-  const [niche, setNiche] = useState(data.niche ?? "");
+  const [city, setCity] = useState(effectiveData.city ?? "");
+  const [state, setState] = useState(effectiveData.state ?? "");
+  const [niche, setNiche] = useState(effectiveData.niche ?? "");
   const [yearsInPractice, setYearsInPractice] = useState(
-    data.yearsInPractice != null ? String(data.yearsInPractice) : ""
+    effectiveData.yearsInPractice != null ? String(effectiveData.yearsInPractice) : ""
   );
   const [consultaTicket, setConsultaTicket] = useState(
-    data.consultaTicket != null ? String(data.consultaTicket) : ""
+    effectiveData.consultaTicket != null ? String(effectiveData.consultaTicket) : ""
   );
   const [hasPhysicalOffice, setHasPhysicalOffice] = useState(
-    data.hasPhysicalOffice != null ? (data.hasPhysicalOffice ? "sim" : "nao") : ""
+    effectiveData.hasPhysicalOffice != null ? (effectiveData.hasPhysicalOffice ? "sim" : "nao") : ""
   );
   const [birthYear, setBirthYear] = useState(
-    data.birthYear != null ? String(data.birthYear) : ""
+    effectiveData.birthYear != null ? String(effectiveData.birthYear) : ""
   );
-  const [targetAudience, setTargetAudience] = useState(data.targetAudience ?? "");
-  const [notes, setNotes] = useState(data.notes ?? "");
+  const [targetAudience, setTargetAudience] = useState(effectiveData.targetAudience ?? "");
+  const [notes, setNotes] = useState(effectiveData.notes ?? "");
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    run(() =>
-      updateClientAction({
-        clientId: data.clientId,
-        name,
-        contactOrigin: contactOrigin || undefined,
-        clientSince: clientSince || undefined,
-        birthday: birthday || undefined,
-        whatsapp: whatsapp || undefined,
-        city: city || undefined,
-        state: state || undefined,
-        niche: niche || undefined,
-        yearsInPractice: yearsInPractice ? Number(yearsInPractice) : undefined,
-        consultaTicket: consultaTicket ? Number(consultaTicket) : undefined,
-        hasPhysicalOffice: hasPhysicalOffice === "sim" ? true : hasPhysicalOffice === "nao" ? false : undefined,
-        birthYear: birthYear ? Number(birthYear) : undefined,
-        targetAudience: targetAudience || undefined,
-        notes: notes || undefined,
-      })
-    );
+    const payload = {
+      name,
+      contactOrigin: contactOrigin || undefined,
+      clientSince: clientSince || undefined,
+      birthday: birthday || undefined,
+      whatsapp: whatsapp || undefined,
+      email: email || undefined,
+      city: city || undefined,
+      state: state || undefined,
+      niche: niche || undefined,
+      yearsInPractice: yearsInPractice ? Number(yearsInPractice) : undefined,
+      consultaTicket: consultaTicket ? Number(consultaTicket) : undefined,
+      hasPhysicalOffice:
+        hasPhysicalOffice === "sim" ? true : hasPhysicalOffice === "nao" ? false : undefined,
+      birthYear: birthYear ? Number(birthYear) : undefined,
+      targetAudience: targetAudience || undefined,
+      notes: notes || undefined,
+    };
+
+    if (mode === "create") {
+      run(() => createClientAction(payload));
+    } else {
+      run(() => updateClientAction({ clientId: effectiveData.clientId, ...payload }));
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar cliente</DialogTitle>
+          <DialogTitle>{mode === "create" ? "Cadastrar cliente" : "Editar cliente"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -162,6 +192,16 @@ export function EditClientQuickDialog({
                 placeholder="(11) 98888-7777"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>E-mail</Label>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="cliente@exemplo.com"
+            />
           </div>
 
           {/* ─── Perfil profissional (ICP) ─── */}

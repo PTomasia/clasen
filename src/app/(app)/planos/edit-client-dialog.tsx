@@ -223,7 +223,7 @@ export function EditClientDialog({
           {/* ── Plano ── */}
           <fieldset className="space-y-3">
             <legend className="text-sm font-semibold text-muted-foreground">Plano</legend>
-            <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr] gap-3">
+            <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr] gap-3 items-end">
               <div className="space-y-1">
                 <Label>Tipo</Label>
                 <Select value={planType} onValueChange={(v) => v && setPlanType(v)}>
@@ -249,7 +249,7 @@ export function EditClientDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Venc. (dia)</Label>
+                <Label title="Dia do mês em que o plano vence">Venc.</Label>
                 <Input
                   type="number"
                   min="1"
@@ -260,7 +260,9 @@ export function EditClientDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label>2º venc. (dia)</Label>
+                <Label title="2º dia de vencimento (planos com 2 cobranças por mês)">
+                  2º venc.
+                </Label>
                 <Input
                   type="number"
                   min="1"

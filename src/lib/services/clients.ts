@@ -33,6 +33,66 @@ export async function findOrCreateClient(
     .get();
 }
 
+// ─── createClient ─────────────────────────────────────────────────────────────
+// Cadastro standalone (sem plano). Usado pelos botões "Cadastrar cliente"
+// em /clientes e /receitas-avulsas. Recusa nomes duplicados (case-insensitive).
+
+export interface CreateClientInput {
+  name: string;
+  contactOrigin?: string;
+  clientSince?: string;
+  birthday?: string;
+  whatsapp?: string;
+  email?: string;
+  city?: string;
+  state?: string;
+  niche?: string;
+  yearsInPractice?: number;
+  consultaTicket?: number;
+  hasPhysicalOffice?: boolean;
+  birthYear?: number;
+  targetAudience?: string;
+  notes?: string;
+}
+
+export async function createClient(
+  db: any,
+  input: CreateClientInput
+): Promise<typeof schema.clients.$inferSelect> {
+  const normalized = input.name.trim();
+  if (!normalized) throw new Error("nome do cliente é obrigatório");
+
+  const existing = await db
+    .select()
+    .from(schema.clients)
+    .where(sql`lower(trim(${schema.clients.name})) = ${normalized.toLowerCase()}`)
+    .get();
+
+  if (existing) throw new Error("já existe um cliente com esse nome");
+
+  return await db
+    .insert(schema.clients)
+    .values({
+      name: normalized,
+      contactOrigin: input.contactOrigin?.trim() || null,
+      clientSince: input.clientSince || null,
+      birthday: input.birthday || null,
+      whatsapp: input.whatsapp?.trim() || null,
+      email: input.email?.trim() || null,
+      city: input.city?.trim() || null,
+      state: input.state?.trim() || null,
+      niche: input.niche?.trim() || null,
+      yearsInPractice: input.yearsInPractice ?? null,
+      consultaTicket: input.consultaTicket ?? null,
+      hasPhysicalOffice: input.hasPhysicalOffice ?? null,
+      birthYear: input.birthYear ?? null,
+      targetAudience: input.targetAudience?.trim() || null,
+      notes: input.notes?.trim() || null,
+    })
+    .returning()
+    .get();
+}
+
 // ─── Helpers internos ──────────────────────────────────────────────────────────
 
 type ClientRecord = typeof schema.clients.$inferSelect;
@@ -101,6 +161,7 @@ export interface ClientRow {
   clientSince: string | null;
   birthday: string | null;
   whatsapp: string | null;
+  email: string | null;
   // ICP / Demográficos
   city: string | null;
   state: string | null;
@@ -162,6 +223,7 @@ export async function getClientsList(
       clientSince: client.clientSince,
       birthday: client.birthday,
       whatsapp: client.whatsapp,
+      email: client.email,
       city: client.city,
       state: client.state,
       niche: client.niche,

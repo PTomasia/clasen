@@ -251,7 +251,7 @@ export function PlanFormDialog({
           </div>
 
           {/* Datas e ciclo */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-4 items-end">
             <div className="space-y-2">
               <Label>Data início</Label>
               <Input
@@ -262,7 +262,7 @@ export function PlanFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Vencimento (dia) *</Label>
+              <Label title="Dia do mês em que o plano vence">Venc. *</Label>
               <Input
                 type="number"
                 min="1"
@@ -274,7 +274,9 @@ export function PlanFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>2º venc. (dia)</Label>
+              <Label title="2º dia de vencimento (planos com 2 cobranças por mês)">
+                2º venc.
+              </Label>
               <Input
                 type="number"
                 min="1"

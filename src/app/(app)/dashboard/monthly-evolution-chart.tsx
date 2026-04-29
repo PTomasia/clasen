@@ -151,7 +151,15 @@ export function MonthlyEvolutionChart({ pnl }: { pnl: PnLData }) {
 
       {/* Gráfico de barras agrupadas */}
       <div className="bg-card border rounded-lg p-5">
-        <h2 className="font-semibold mb-4">Evolução mensal — Últimos 12 meses</h2>
+        <h2 className="font-semibold mb-4 flex items-center gap-1.5">
+          Evolução mensal — Últimos 12 meses
+          <span
+            className="text-muted-foreground text-xs cursor-help"
+            title="Regime de caixa: receitas e despesas são contabilizadas na data do pagamento real (paymentDate), não na data da cobrança/contrato. Apenas registros com status 'pago' entram no gráfico."
+          >
+            ⓘ
+          </span>
+        </h2>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart
             data={chartData}
@@ -183,7 +191,7 @@ export function MonthlyEvolutionChart({ pnl }: { pnl: PnLData }) {
             <Bar
               dataKey="Rec. avulsa"
               stackId="receita"
-              fill="var(--success, #22c55e)"
+              fill="#a3b545"
               radius={[4, 4, 0, 0]}
             />
             <Bar
@@ -194,7 +202,7 @@ export function MonthlyEvolutionChart({ pnl }: { pnl: PnLData }) {
             />
             <Bar
               dataKey="Lucro"
-              fill="var(--accent, #f59e0b)"
+              fill="#15803d"
               radius={[4, 4, 0, 0]}
               opacity={0.9}
             />

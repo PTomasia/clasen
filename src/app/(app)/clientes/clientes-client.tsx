@@ -26,6 +26,7 @@ import {
   ArrowUpDown,
   Search,
   Pencil,
+  Plus,
 } from "lucide-react";
 import { formatBRL } from "@/lib/utils/formatting";
 import { ClientDetailDialog } from "./client-detail-dialog";
@@ -44,6 +45,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
   const [sortDir, setSortDir] = useState<SortDirection>(null);
   const [detailClientId, setDetailClientId] = useState<{ id: number; name: string } | null>(null);
   const [editData, setEditData] = useState<EditClientQuickData | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [updatingOriginId, setUpdatingOriginId] = useState<number | null>(null);
   const [, startOriginTransition] = useTransition();
 
@@ -60,6 +62,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
           clientSince: client.clientSince ?? undefined,
           birthday: client.birthday ?? undefined,
           whatsapp: client.whatsapp ?? undefined,
+          email: client.email ?? undefined,
           city: client.city ?? undefined,
           state: client.state ?? undefined,
           niche: client.niche ?? undefined,
@@ -230,6 +233,11 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
         <span className="text-sm text-muted-foreground ml-auto">
           {filtered.length} de {clients.length}
         </span>
+
+        <Button size="sm" onClick={() => setShowCreate(true)}>
+          <Plus size={14} className="mr-1" />
+          Cadastrar cliente
+        </Button>
       </div>
 
       {/* Table */}
@@ -339,6 +347,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                         clientSince: client.clientSince,
                         birthday: client.birthday,
                         whatsapp: client.whatsapp,
+                        email: client.email,
                         city: client.city,
                         state: client.state,
                         niche: client.niche,
@@ -375,6 +384,14 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
           open={!!editData}
           onClose={() => setEditData(null)}
           data={editData}
+        />
+      )}
+
+      {showCreate && (
+        <EditClientQuickDialog
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          mode="create"
         />
       )}
     </>

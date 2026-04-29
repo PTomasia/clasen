@@ -24,6 +24,7 @@ import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import type { RevenueRow, RevenuesSummary } from "@/lib/services/revenues";
 import { RevenueDialog } from "./revenue-dialog";
 import { DeleteRevenueDialog } from "./delete-revenue-dialog";
+import { EditClientQuickDialog } from "../clientes/edit-client-quick-dialog";
 
 interface Props {
   revenues: RevenueRow[];
@@ -38,6 +39,7 @@ export function RevenuesClient({ revenues, summary, clients }: Props) {
   const [productFilter, setProductFilter] = useState<string>("todos");
 
   const [newOpen, setNewOpen] = useState(false);
+  const [newClientOpen, setNewClientOpen] = useState(false);
   const [editing, setEditing] = useState<RevenueRow | null>(null);
   const [deleting, setDeleting] = useState<RevenueRow | null>(null);
 
@@ -151,7 +153,10 @@ export function RevenuesClient({ revenues, summary, clients }: Props) {
           </Select>
         )}
 
-        <Button onClick={() => setNewOpen(true)} className="ml-auto">
+        <Button variant="outline" onClick={() => setNewClientOpen(true)} className="ml-auto">
+          <Plus size={16} /> Cadastrar cliente
+        </Button>
+        <Button onClick={() => setNewOpen(true)}>
           <Plus size={16} /> Nova receita
         </Button>
       </div>
@@ -262,6 +267,14 @@ export function RevenuesClient({ revenues, summary, clients }: Props) {
         onClose={() => setDeleting(null)}
         revenue={deleting}
       />
+
+      {newClientOpen && (
+        <EditClientQuickDialog
+          open={newClientOpen}
+          onClose={() => setNewClientOpen(false)}
+          mode="create"
+        />
+      )}
     </>
   );
 }

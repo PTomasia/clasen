@@ -10,7 +10,11 @@ import {
   differenceInMonths,
   startOfMonth,
 } from "date-fns";
-import { calcularCustoPost, calcularMediana } from "../utils/calculations";
+import {
+  calcularCustoPost,
+  calcularMediana,
+  calcularTotalPostsEquivalentes,
+} from "../utils/calculations";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -272,4 +276,149 @@ export async function getUpcomingPayments(days: number = 7) {
   );
 
   return rows;
+}
+
+// ─── Evolução operacional — clientes / posts / ticket-por-post ────────────────
+
+export interface PlanForOperational {
+  id: number;
+  clientId: number;
+  planValue: number;
+  postsCarrossel: number;
+  postsReels: number;
+  postsEstatico: number;
+  postsTrafego: number;
+  startDate: string;
+  endDate: string | null;
+}
+
+export interface OperationalMonth {
+  month: string; // YYYY-MM
+  label: string; // "abr/26"
+  clientesAtivos: number;
+  postsTotal: number;
+  ticketPorPost: number | null;
+}
+
+export interface PostsPorClienteResult {
+  clientes: number;
+  posts: number;
+  ratio: number | null;
+}
+
+const MONTH_LABELS_LOWER = [
+  "jan", "fev", "mar", "abr", "mai", "jun",
+  "jul", "ago", "set", "out", "nov", "dez",
+];
+
+function monthLabelLower(yyyymm: string): string {
+  const [y, m] = yyyymm.split("-");
+  return `${MONTH_LABELS_LOWER[Number(m) - 1]}/${y.slice(2)}`;
+}
+
+function postsPonderados(p: Pick<PlanForOperational,
+  "postsCarrossel" | "postsReels" | "postsEstatico" | "postsTrafego">
+): number {
+  const equivalentes = calcularTotalPostsEquivalentes({
+    carrossel: p.postsCarrossel,
+    reels: p.postsReels,
+    estatico: p.postsEstatico,
+  });
+  return equivalentes + p.postsTrafego;
+}
+
+// ─── Aggregator: posts por cliente (instante presente) ────────────────────────
+// Considera apenas planos ativos (endDate=null). Cliente com 2 planos = 1.
+
+export function aggregatePostsPorCliente(
+  plans: PlanForOperational[]
+): PostsPorClienteResult {
+  const ativos = plans.filter((p) => p.endDate === null);
+  const clientesSet = new Set(ativos.map((p) => p.clientId));
+  const clientes = clientesSet.size;
+  const posts = ativos.reduce((sum, p) => sum + postsPonderados(p), 0);
+  const ratio = clientes > 0 ? Math.round((posts / clientes) * 10) / 10 : null;
+  return { clientes, posts, ratio };
+}
+
+// ─── Aggregator: evolução operacional 12 meses ────────────────────────────────
+// Plano "ativo no mês" se: startDate ≤ último dia do mês AND
+//                          (endDate IS NULL OR endDate ≥ primeiro dia do mês).
+
+export function aggregateOperationalEvolution(input: {
+  plans: PlanForOperational[];
+  today: Date;
+  monthsBack?: number;
+}): OperationalMonth[] {
+  const { plans, today, monthsBack = 12 } = input;
+  const result: OperationalMonth[] = [];
+
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const monthStart = startOfMonth(subMonths(today, i));
+    const yyyymm = format(monthStart, "yyyy-MM");
+    const firstDay = format(monthStart, "yyyy-MM-dd");
+    // Último dia do mês
+    const lastDayDate = new Date(
+      monthStart.getFullYear(),
+      monthStart.getMonth() + 1,
+      0
+    );
+    const lastDay = format(lastDayDate, "yyyy-MM-dd");
+
+    const activeInMonth = plans.filter(
+      (p) =>
+        p.startDate <= lastDay &&
+        (p.endDate === null || p.endDate >= firstDay)
+    );
+
+    const clientesSet = new Set(activeInMonth.map((p) => p.clientId));
+    const clientesAtivos = clientesSet.size;
+
+    const postsTotal = activeInMonth.reduce(
+      (sum, p) => sum + postsPonderados(p),
+      0
+    );
+
+    const mrrMonth = activeInMonth.reduce((sum, p) => sum + p.planValue, 0);
+    const ticketPorPost =
+      postsTotal > 0 ? Math.round((mrrMonth / postsTotal) * 100) / 100 : null;
+
+    result.push({
+      month: yyyymm,
+      label: monthLabelLower(yyyymm),
+      clientesAtivos,
+      postsTotal,
+      ticketPorPost,
+    });
+  }
+
+  return result;
+}
+
+// ─── Caller que busca dados e chama os agregadores ────────────────────────────
+
+export async function getOperationalDashboard(): Promise<{
+  postsPorCliente: PostsPorClienteResult;
+  evolution: OperationalMonth[];
+}> {
+  const allPlans = await db.select().from(schema.subscriptionPlans).all();
+  const plansForOp: PlanForOperational[] = allPlans.map((p) => ({
+    id: p.id,
+    clientId: p.clientId,
+    planValue: p.planValue,
+    postsCarrossel: p.postsCarrossel,
+    postsReels: p.postsReels,
+    postsEstatico: p.postsEstatico,
+    postsTrafego: p.postsTrafego,
+    startDate: p.startDate,
+    endDate: p.endDate,
+  }));
+
+  return {
+    postsPorCliente: aggregatePostsPorCliente(plansForOp),
+    evolution: aggregateOperationalEvolution({
+      plans: plansForOp,
+      today: new Date(),
+    }),
+  };
 }
