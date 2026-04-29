@@ -26,7 +26,7 @@ const navigation: NavGroup[] = [
     items: [
       { name: "Planos", href: "/planos", icon: FileText, sprint: 1 },
       { name: "Clientes", href: "/clientes", icon: Users, sprint: 2 },
-      { name: "Conciliação", href: "/conciliacao", icon: GitMerge, sprint: 6 },
+      { name: "Conciliação", href: "/conciliacao", icon: GitMerge, sprint: 7 },
     ],
   },
   {
