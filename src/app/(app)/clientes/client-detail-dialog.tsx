@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/status-badge";
 import {
   Table,
   TableBody,
@@ -111,9 +112,7 @@ export function ClientDetailDialog({
         {data && (
           <>
             <div className="flex flex-wrap gap-3 text-sm">
-              <Badge variant={data.status === "ativo" ? "default" : "secondary"}>
-                {data.status === "ativo" ? "Ativo" : "Inativo"}
-              </Badge>
+              <StatusBadge status={data.status === "ativo" ? "ativo" : "inativo"} />
               <span className="text-muted-foreground">
                 {data.permanencia} meses de permanência
               </span>
@@ -240,7 +239,7 @@ export function ClientDetailDialog({
                     <TableCell className="text-sm">{formatDate(plan.startDate)}</TableCell>
                     <TableCell className="text-sm">
                       {plan.endDate ? formatDate(plan.endDate) : (
-                        <Badge variant="outline" className="text-xs">Ativo</Badge>
+                        <StatusBadge status="ativo" className="text-[10px]" />
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
