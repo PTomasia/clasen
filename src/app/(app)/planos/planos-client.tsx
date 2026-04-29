@@ -28,7 +28,7 @@ import {
   SkipForward,
 } from "lucide-react";
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
-import type { StatusPagamento } from "@/lib/utils/calculations";
+import { isDataPassada, type StatusPagamento } from "@/lib/utils/calculations";
 import {
   sortPlans,
   filterPlans,
@@ -115,8 +115,7 @@ function AdjustmentCell({
   nextDate: string;
   suggestion: { suggestedValue: number | null; percentChange: number; capped: boolean };
 }) {
-  const today = new Date().toISOString().split("T")[0];
-  const isOverdue = nextDate <= today;
+  const isOverdue = isDataPassada(nextDate);
 
   if (!suggestion.suggestedValue) {
     // Já acima do alvo ou sem posts

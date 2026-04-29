@@ -103,6 +103,45 @@ export function calcularProximoVencimento(
   );
 }
 
+// ─── Comparação de data ISO vs hoje ───────────────────────────────────────────
+// Comparação lexicográfica YYYY-MM-DD (mesmo padrão de calcularStatusPagamento).
+// Hoje não conta como atrasado.
+
+export function isDataPassada(
+  dateStr: string,
+  referenceDate?: string
+): boolean {
+  const today = referenceDate ?? format(new Date(), "yyyy-MM-dd");
+  return dateStr < today;
+}
+
+// ─── Validação de dia(s) de vencimento ────────────────────────────────────────
+// billingCycleDays = dia do mês (1-31), NÃO intervalo. Suporta 1 ou 2 dias
+// diferentes. Garante consistência entre createPlan, updatePlan, updateBillingDays.
+
+export function assertBillingDays(
+  day1: number | null | undefined,
+  day2: number | null | undefined
+): void {
+  if (day1 == null) {
+    if (day2 != null) {
+      throw new Error("segundo dia de vencimento informado sem o primeiro");
+    }
+    return;
+  }
+  if (!Number.isInteger(day1) || day1 < 1 || day1 > 31) {
+    throw new Error("dia de vencimento deve ser inteiro entre 1 e 31");
+  }
+  if (day2 != null) {
+    if (!Number.isInteger(day2) || day2 < 1 || day2 > 31) {
+      throw new Error("segundo dia de vencimento deve ser inteiro entre 1 e 31");
+    }
+    if (day2 === day1) {
+      throw new Error("os dois dias de vencimento devem ser diferentes");
+    }
+  }
+}
+
 // ─── Mediana ───────────────────────────────────────────────────────────────────
 // SQLite não tem MEDIAN — calculamos em TypeScript
 
