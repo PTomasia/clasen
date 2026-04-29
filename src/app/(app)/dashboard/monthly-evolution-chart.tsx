@@ -7,11 +7,22 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 import { formatBRL } from "@/lib/utils/formatting";
+import { useSeriesToggle } from "@/lib/hooks/use-series-toggle";
+import { cn } from "@/lib/utils";
+import type { TimeRange } from "@/components/shared/time-range-control";
 import type { PnLData, PnLRow } from "@/lib/queries/profit-and-loss";
+
+// ─── Series config ────────────────────────────────────────────────────────────
+const SERIES = [
+  { name: "Rec. recorrente", color: "var(--primary)" },
+  { name: "Rec. avulsa", color: "#a3b545" },
+  { name: "Despesa", color: "var(--destructive)" },
+  { name: "Lucro", color: "#15803d" },
+];
+const SERIES_NAMES = SERIES.map((s) => s.name);
 
 // ─── Cards comparativos ───────────────────────────────────────────────────────
 
@@ -90,8 +101,47 @@ function CustomTooltip({
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function MonthlyEvolutionChart({ pnl }: { pnl: PnLData }) {
-  const rows = pnl.rows;
+// ─── Custom Legend ────────────────────────────────────────────────────────────
+
+function InteractiveLegend({
+  isVisible,
+  onToggle,
+}: {
+  isVisible: (name: string) => boolean;
+  onToggle: (name: string, multi: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3 mt-2 pt-2 text-xs select-none">
+      {SERIES.map((s) => {
+        const active = isVisible(s.name);
+        return (
+          <button
+            key={s.name}
+            type="button"
+            data-series={s.name}
+            onClick={(e) => onToggle(s.name, e.ctrlKey || e.metaKey)}
+            style={{ opacity: active ? 1 : 0.3 }}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-1 rounded transition-opacity hover:bg-muted/40 cursor-pointer"
+            )}
+            title="Clique para isolar · Ctrl+clique para alternar"
+          >
+            <span
+              className="inline-block w-3 h-3 rounded-sm"
+              style={{ backgroundColor: s.color }}
+            />
+            <span className="text-foreground">{s.name}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: TimeRange }) {
+  const rows = range
+    ? pnl.rows.slice(range.fromIdx, range.toIdx + 1)
+    : pnl.rows;
   const isEmpty = rows.every(
     (r) => r.receitaTotal === 0 && r.despesaTotal === 0
   );
@@ -107,6 +157,8 @@ export function MonthlyEvolutionChart({ pnl }: { pnl: PnLData }) {
       </div>
     );
   }
+
+  const { isVisible, toggle } = useSeriesToggle(SERIES_NAMES);
 
   // Dois últimos meses com dados para os cards comparativos
   const withData = rows.filter(
@@ -152,7 +204,7 @@ export function MonthlyEvolutionChart({ pnl }: { pnl: PnLData }) {
       {/* Gráfico de barras agrupadas */}
       <div className="bg-card border rounded-lg p-5">
         <h2 className="font-semibold mb-4 flex items-center gap-1.5">
-          Evolução mensal — Últimos 12 meses
+          Evolução mensal
           <span
             className="text-muted-foreground text-xs cursor-help"
             title="Regime de caixa: receitas e despesas são contabilizadas na data do pagamento real (paymentDate), não na data da cobrança/contrato. Apenas registros com status 'pago' entram no gráfico."
@@ -179,35 +231,41 @@ export function MonthlyEvolutionChart({ pnl }: { pnl: PnLData }) {
               }
             />
             <Tooltip content={<CustomTooltip />} />
-            <Legend
-              wrapperStyle={{ fontSize: "12px", paddingTop: "8px" }}
-            />
-            <Bar
-              dataKey="Rec. recorrente"
-              stackId="receita"
-              fill="var(--primary)"
-              radius={[0, 0, 0, 0]}
-            />
-            <Bar
-              dataKey="Rec. avulsa"
-              stackId="receita"
-              fill="#a3b545"
-              radius={[4, 4, 0, 0]}
-            />
-            <Bar
-              dataKey="Despesa"
-              fill="var(--destructive)"
-              radius={[4, 4, 0, 0]}
-              opacity={0.75}
-            />
-            <Bar
-              dataKey="Lucro"
-              fill="#15803d"
-              radius={[4, 4, 0, 0]}
-              opacity={0.9}
-            />
+            {isVisible("Rec. recorrente") && (
+              <Bar
+                dataKey="Rec. recorrente"
+                stackId="receita"
+                fill="var(--primary)"
+                radius={[0, 0, 0, 0]}
+              />
+            )}
+            {isVisible("Rec. avulsa") && (
+              <Bar
+                dataKey="Rec. avulsa"
+                stackId="receita"
+                fill="#a3b545"
+                radius={[4, 4, 0, 0]}
+              />
+            )}
+            {isVisible("Despesa") && (
+              <Bar
+                dataKey="Despesa"
+                fill="var(--destructive)"
+                radius={[4, 4, 0, 0]}
+                opacity={0.75}
+              />
+            )}
+            {isVisible("Lucro") && (
+              <Bar
+                dataKey="Lucro"
+                fill="#15803d"
+                radius={[4, 4, 0, 0]}
+                opacity={0.9}
+              />
+            )}
           </BarChart>
         </ResponsiveContainer>
+        <InteractiveLegend isVisible={isVisible} onToggle={toggle} />
         <p className="text-xs text-muted-foreground mt-2">
           Receita recorrente + avulsa empilhadas. Despesa e Lucro líquido (≥ 0)
           em barras separadas. Dados a partir de jan/2026.

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { TimeRangeControl, type TimeRange } from "@/components/shared/time-range-control";
 import {
   BarChart,
   Bar,
@@ -117,8 +118,11 @@ function PermanenciaStat({ label, value, sub }: { label: string; value: string; 
   );
 }
 
-function MRRChart({ data }: { data: DashboardData["mrr"] }) {
-  if (data.every((d) => d.value === 0)) {
+function MRRChart({ data, range }: { data: DashboardData["mrr"]; range?: TimeRange }) {
+  const sliced = range
+    ? data.slice(range.fromIdx, range.toIdx + 1)
+    : data;
+  if (sliced.every((d) => d.value === 0)) {
     return (
       <div className="bg-card border rounded-lg p-5">
         <h2 className="font-semibold mb-4">MRR — Últimos 12 meses</h2>
@@ -131,12 +135,12 @@ function MRRChart({ data }: { data: DashboardData["mrr"] }) {
     );
   }
 
-  const total = data.reduce((s, p) => s + p.value, 0);
+  const total = sliced.reduce((s, p) => s + p.value, 0);
 
   return (
     <div className="bg-card border rounded-lg p-5">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="font-semibold">MRR — Últimos 12 meses</h2>
+        <h2 className="font-semibold">MRR</h2>
         <span
           className="text-lg text-muted-foreground tabular-nums"
           style={{ fontFamily: "var(--font-heading), serif" }}
@@ -145,7 +149,7 @@ function MRRChart({ data }: { data: DashboardData["mrr"] }) {
         </span>
       </div>
       <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+        <BarChart data={sliced} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
           <defs>
             <linearGradient id="mrrFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--primary)" stopOpacity={1} />
@@ -211,6 +215,11 @@ export function DashboardClient({
   } | null>(null);
   const [skipping, setSkipping] = useState<number | null>(null);
 
+  // Filtro de período compartilhado entre os 3 gráficos
+  const months = pnl.rows.map((r) => r.label);
+  const lastIdx = Math.max(0, months.length - 1);
+  const [chartRange, setChartRange] = useState<TimeRange>({ fromIdx: 0, toIdx: lastIdx });
+
   async function handleSkip(planId: number) {
     setSkipping(planId);
     try {
@@ -267,14 +276,25 @@ export function DashboardClient({
         </div>
       </div>
 
+      {/* Filtro de período compartilhado pelos 3 gráficos abaixo */}
+      {months.length > 1 && (
+        <div className="bg-card border rounded-lg px-5 py-3">
+          <TimeRangeControl
+            months={months}
+            range={chartRange}
+            onChange={setChartRange}
+          />
+        </div>
+      )}
+
       {/* MRR Chart */}
-      <MRRChart data={data.mrr} />
+      <MRRChart data={data.mrr} range={chartRange} />
 
       {/* Evolução mensal: receita, despesa, lucro */}
-      <MonthlyEvolutionChart pnl={pnl} />
+      <MonthlyEvolutionChart pnl={pnl} range={chartRange} />
 
       {/* Evolução operacional: clientes, posts, ticket/post */}
-      <OperationalEvolutionChart data={operational.evolution} />
+      <OperationalEvolutionChart data={operational.evolution} range={chartRange} />
 
       {/* Duas colunas: Atrasados + Próximos */}
       <div className="grid md:grid-cols-2 gap-6">
