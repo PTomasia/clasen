@@ -48,6 +48,8 @@ import { TargetPriceDialog } from "./target-price-dialog";
 import { skipBillingCycleAction } from "@/lib/actions/plans";
 import { BillingDayCell } from "./billing-day-cell";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { EditAdjustmentTemplateDialog } from "./edit-adjustment-template-dialog";
+import { renderAdjustmentMessage } from "@/lib/utils/adjustment-message";
 
 interface Plan {
   id: number;
@@ -192,14 +194,15 @@ function PlanStatusBadge({ status }: { status: string }) {
 function AdjustmentCell({
   nextDate,
   suggestion,
+  onOpenMessage,
 }: {
   nextDate: string;
   suggestion: { suggestedValue: number | null; percentChange: number; capped: boolean };
+  onOpenMessage?: (anchor: { x: number; y: number }) => void;
 }) {
   const isOverdue = isDataPassada(nextDate);
 
   if (!suggestion.suggestedValue) {
-    // Já acima do alvo ou sem posts
     return (
       <div className="text-xs">
         <span className={isOverdue ? "text-muted-foreground" : "text-success"}>
@@ -211,8 +214,26 @@ function AdjustmentCell({
     );
   }
 
+  const clickable = !!onOpenMessage;
+
   return (
-    <div className="text-xs">
+    <button
+      type="button"
+      onClick={
+        clickable
+          ? (e) => {
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              onOpenMessage!({ x: r.left, y: r.bottom + 6 });
+            }
+          : undefined
+      }
+      disabled={!clickable}
+      className={cn(
+        "text-xs text-left",
+        clickable && "hover:bg-muted/50 -mx-1 px-1 py-0.5 rounded transition-colors cursor-pointer"
+      )}
+      title={clickable ? "Clique para copiar mensagem do reajuste" : undefined}
+    >
       <span className={isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}>
         {formatDate(nextDate)} {isOverdue && "⚠"}
       </span>
@@ -223,7 +244,7 @@ function AdjustmentCell({
       <span className={`ml-1 ${isOverdue ? "text-destructive/80" : "text-muted-foreground"}`}>
         (+{suggestion.percentChange.toFixed(0)}%{suggestion.capped ? " max" : ""})
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -270,10 +291,12 @@ export function PlanosClient({
   plans,
   clients,
   targetCostPerPost,
+  adjustmentTemplate,
 }: {
   plans: Plan[];
   clients: Client[];
   targetCostPerPost: number | null;
+  adjustmentTemplate: string;
 }) {
   // Status filter (existing)
   const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "cancelado">("ativo");
@@ -296,6 +319,12 @@ export function PlanosClient({
   const [historyPlan, setHistoryPlan] = useState<{ planId: number; clientName: string } | null>(null);
   const [focusedPlanId, setFocusedPlanId] = useState<number | null>(null);
   const [showTargetPriceDialog, setShowTargetPriceDialog] = useState(false);
+  const [showEditTemplateDialog, setShowEditTemplateDialog] = useState(false);
+  const [adjustmentMessagePopover, setAdjustmentMessagePopover] = useState<{
+    planId: number;
+    text: string;
+    anchor: { x: number; y: number };
+  } | null>(null);
 
   // UX-1.4 — Pular cobrança
   const [, startSkipTransition] = useTransition();
@@ -557,6 +586,17 @@ export function PlanosClient({
             {targetCostPerPost ? formatBRL(targetCostPerPost) : "Configurar"}
           </p>
         </button>
+        <button
+          onClick={() => setShowEditTemplateDialog(true)}
+          className="bg-card border rounded-lg px-4 py-3 min-w-[160px] text-left hover:border-primary/50 transition-colors"
+        >
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            Mensagem reajuste <Pencil size={10} />
+          </p>
+          <p className="text-sm text-muted-foreground line-clamp-1 mt-1">
+            Editar template
+          </p>
+        </button>
       </div>
 
       {/* Filtros e ação */}
@@ -741,6 +781,30 @@ export function PlanosClient({
                         <AdjustmentCell
                           nextDate={plan.nextAdjustmentDate}
                           suggestion={plan.adjustmentSuggestion}
+                          onOpenMessage={
+                            plan.adjustmentSuggestion.suggestedValue != null
+                              ? (anchor) =>
+                                  setAdjustmentMessagePopover({
+                                    planId: plan.id,
+                                    text: renderAdjustmentMessage(adjustmentTemplate, {
+                                      cliente: plan.clientName,
+                                      valorAtual: plan.planValue,
+                                      valorNovo: plan.adjustmentSuggestion!.suggestedValue!,
+                                      percentual: plan.adjustmentSuggestion!.percentChange,
+                                      custoPostAtual: plan.custoPost,
+                                      custoPostNovo:
+                                        plan.adjustmentSuggestion!.suggestedValue! /
+                                        Math.max(
+                                          1,
+                                          plan.postsCarrossel +
+                                            plan.postsReels +
+                                            plan.postsEstatico * 0.5
+                                        ),
+                                    }),
+                                    anchor,
+                                  })
+                              : undefined
+                          }
                         />
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
@@ -948,6 +1012,105 @@ export function PlanosClient({
         onClose={() => setShowTargetPriceDialog(false)}
         currentValue={targetCostPerPost}
       />
+
+      <EditAdjustmentTemplateDialog
+        open={showEditTemplateDialog}
+        onClose={() => setShowEditTemplateDialog(false)}
+        currentTemplate={adjustmentTemplate}
+      />
+
+      {adjustmentMessagePopover && (
+        <AdjustmentMessagePopover
+          x={adjustmentMessagePopover.anchor.x}
+          y={adjustmentMessagePopover.anchor.y}
+          text={adjustmentMessagePopover.text}
+          onClose={() => setAdjustmentMessagePopover(null)}
+        />
+      )}
     </>
+  );
+}
+
+// ─── Popover de mensagem de reajuste ──────────────────────────────────────────
+
+function AdjustmentMessagePopover({
+  x,
+  y,
+  text,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  text: string;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [onClose]);
+
+  const popoverWidth = 360;
+  const adjustedX = Math.min(x, window.innerWidth - popoverWidth - 8);
+  const adjustedY = Math.min(y, window.innerHeight - 200);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        onClose();
+      }, 1200);
+    } catch {
+      // fallback para browsers sem clipboard API
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+        onClose();
+      }, 1200);
+    }
+  }
+
+  return (
+    <div
+      ref={ref}
+      style={{ top: adjustedY, left: adjustedX, width: popoverWidth }}
+      className="fixed z-50 rounded-lg border bg-popover shadow-xl p-3"
+      role="dialog"
+    >
+      <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground mb-2">
+        Mensagem de reajuste
+      </p>
+      <div className="text-sm whitespace-pre-wrap leading-relaxed bg-muted/40 rounded px-3 py-2 max-h-[260px] overflow-y-auto">
+        {text}
+      </div>
+      <div className="flex gap-2 mt-3 justify-end">
+        <Button size="sm" variant="outline" onClick={onClose}>
+          Fechar
+        </Button>
+        <Button size="sm" onClick={handleCopy} disabled={copied}>
+          {copied ? "✓ Copiado" : "Copiar"}
+        </Button>
+      </div>
+    </div>
   );
 }

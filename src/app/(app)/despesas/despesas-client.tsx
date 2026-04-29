@@ -38,13 +38,15 @@ interface Props {
   recurringPendingCount: number;
   currentMonth: string;
   nextMonth: string;
+  previewsByMonth: Record<string, ExpenseRow[]>;
 }
 
-export function DespesasClient({ expenses, summary, pnl, recurringPendingCount, currentMonth, nextMonth }: Props) {
+export function DespesasClient({ expenses, summary, pnl, recurringPendingCount, currentMonth, nextMonth, previewsByMonth }: Props) {
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState("todos");
   const [categoryFilter, setCategoryFilter] = useState("todos");
   const [statusFilter, setStatusFilter] = useState<"todos" | "pago" | "pendente">("todos");
+  const [includePreview, setIncludePreview] = useState(false);
 
   const [newOpen, setNewOpen] = useState(false);
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
@@ -52,13 +54,24 @@ export function DespesasClient({ expenses, summary, pnl, recurringPendingCount, 
   const [launching, setLaunching] = useState(false);
   const [toggling, setToggling] = useState<number | null>(null);
 
-  // Meses únicos para o filtro — inclui sempre o mês seguinte (5.2)
+  // Meses únicos para o filtro — inclui sempre os próximos 3 meses
+  // (vêm de previewsByMonth) + meses presentes nas despesas reais.
   const months = useMemo(() => {
     const set = new Set<string>();
     set.add(nextMonth);
+    Object.keys(previewsByMonth).forEach((m) => set.add(m));
     for (const e of expenses) set.add(e.month);
     return Array.from(set).sort().reverse();
-  }, [expenses, nextMonth]);
+  }, [expenses, nextMonth, previewsByMonth]);
+
+  // Previews aplicáveis ao filtro atual (só quando filtra um mês específico futuro)
+  const activePreviews = useMemo(() => {
+    if (monthFilter === "todos" || !includePreview) return [];
+    return previewsByMonth[monthFilter] ?? [];
+  }, [monthFilter, includePreview, previewsByMonth]);
+
+  const hasPreviewsForCurrentFilter =
+    monthFilter !== "todos" && (previewsByMonth[monthFilter]?.length ?? 0) > 0;
 
   async function handleTogglePaid(id: number) {
     setToggling(id);
@@ -178,6 +191,26 @@ export function DespesasClient({ expenses, summary, pnl, recurringPendingCount, 
           </Select>
         )}
 
+        {hasPreviewsForCurrentFilter && (
+          <label
+            className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none"
+            title="Mostrar despesas recorrentes que ainda não foram lançadas neste mês"
+          >
+            <input
+              type="checkbox"
+              checked={includePreview}
+              onChange={(e) => setIncludePreview(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span>
+              Incluir previsão
+              <span className="ml-1 text-[10px] text-muted-foreground/70">
+                ({previewsByMonth[monthFilter]?.length ?? 0})
+              </span>
+            </span>
+          </label>
+        )}
+
         <Select value={categoryFilter} onValueChange={(v) => v && setCategoryFilter(v)}>
           <SelectTrigger className="w-[130px]">
             <SelectValue />
@@ -218,14 +251,15 @@ export function DespesasClient({ expenses, summary, pnl, recurringPendingCount, 
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && activePreviews.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                   Nenhuma despesa encontrada.
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((e) => (
+              <>
+              {filtered.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="font-mono text-xs">{e.month}</TableCell>
                   <TableCell className="font-medium">
@@ -299,17 +333,49 @@ export function DespesasClient({ expenses, summary, pnl, recurringPendingCount, 
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
+              ))}
+              {activePreviews.map((e) => (
+                <TableRow key={`preview-${e.month}-${e.description}`} className="bg-muted/20">
+                  <TableCell className="font-mono text-xs italic text-muted-foreground">{e.month}</TableCell>
+                  <TableCell className="italic text-muted-foreground">
+                    {e.description}
+                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-muted text-muted-foreground border">
+                      preview
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground italic">
+                      {e.category === "fixo" ? "Fixo" : "Variável"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-mono italic text-muted-foreground">
+                    {formatBRL(e.amount)}
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-xs italic text-muted-foreground">a lançar</span>
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              ))}
+              </>
             )}
           </TableBody>
         </Table>
-        {filtered.length > 0 && (
-          <div className="px-4 py-2.5 border-t text-xs text-muted-foreground flex justify-between">
+        {(filtered.length > 0 || activePreviews.length > 0) && (
+          <div className="px-4 py-2.5 border-t text-xs text-muted-foreground flex justify-between flex-wrap gap-2">
             <span>
               {filtered.length} despesa{filtered.length === 1 ? "" : "s"}
+              {activePreviews.length > 0 && (
+                <span className="ml-2">+ {activePreviews.length} preview{activePreviews.length === 1 ? "" : "s"}</span>
+              )}
             </span>
             <span>
               Total (pagas): <strong>{formatBRL(totalFiltrado)}</strong>
+              {activePreviews.length > 0 && (
+                <span className="ml-3">
+                  + previsto: <strong>{formatBRL(activePreviews.reduce((s, e) => s + e.amount, 0))}</strong>
+                </span>
+              )}
             </span>
           </div>
         )}

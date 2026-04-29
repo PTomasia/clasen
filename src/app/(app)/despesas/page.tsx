@@ -11,12 +11,27 @@ export default async function DespesasPage() {
   const currentMonth = format(today, "yyyy-MM");
   const nextMonth = format(addMonths(today, 1), "yyyy-MM");
 
-  const [expenses, summary, pnl, recurringPending] = await Promise.all([
+  // Previews de recorrentes para os próximos 3 meses (nextMonth, +2, +3).
+  // Cada preview = recorrente do mês anterior que ainda não foi lançada
+  // naquele mês alvo.
+  const futureMonths: string[] = [];
+  for (let i = 1; i <= 3; i++) {
+    futureMonths.push(format(addMonths(today, i), "yyyy-MM"));
+  }
+
+  const [expenses, summary, pnl, recurringPending, ...futurePreviews] = await Promise.all([
     getExpenses(db as any),
     getExpensesSummary(db as any),
     getProfitAndLossData(),
     getRecurringToLaunch(db as any, currentMonth),
+    ...futureMonths.map((m) => getRecurringToLaunch(db as any, m)),
   ]);
+
+  // Empacota previews por mês
+  const previewsByMonth: Record<string, typeof recurringPending> = {};
+  futureMonths.forEach((m, i) => {
+    previewsByMonth[m] = futurePreviews[i].map((row) => ({ ...row, month: m }));
+  });
 
   return (
     <div className="space-y-6">
@@ -34,6 +49,7 @@ export default async function DespesasPage() {
         recurringPendingCount={recurringPending.length}
         currentMonth={currentMonth}
         nextMonth={nextMonth}
+        previewsByMonth={previewsByMonth}
       />
     </div>
   );
