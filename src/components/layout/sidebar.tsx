@@ -79,12 +79,35 @@ export function Sidebar() {
       >
         {/* Logo */}
         <div className="p-6 border-b border-sidebar-border">
-          <h1 className="text-xl font-bold tracking-tight font-[var(--font-heading)]">
-            Clasen ADM
-          </h1>
-          <p className="text-sm text-sidebar-foreground/70 mt-1">
-            Gestão da agência
-          </p>
+          <div className="flex items-center gap-3">
+            <svg
+              aria-hidden
+              viewBox="0 0 36 36"
+              className="size-8 shrink-0"
+              fill="none"
+            >
+              <circle cx="18" cy="18" r="17" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1" />
+              <path
+                d="M24.5 13.4a8 8 0 1 0 0 9.2"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                fill="none"
+              />
+              <circle cx="18" cy="18" r="1.6" fill="currentColor" />
+            </svg>
+            <div>
+              <h1
+                className="text-xl tracking-tight leading-none"
+                style={{ fontFamily: "var(--font-heading), serif" }}
+              >
+                Clasen ADM
+              </h1>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-sidebar-foreground/60 mt-1.5">
+                Gestão da agência
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Navigation */}
@@ -139,9 +162,18 @@ export function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-sidebar-border">
-          <p className="text-xs text-sidebar-foreground/50">
-            Clasen Studio &copy; {new Date().getFullYear()}
+        <div className="p-4 border-t border-sidebar-border space-y-2">
+          <a
+            href="mailto:pedro.tomasia@gmail.com?subject=Clasen ADM — feedback"
+            className="flex items-center justify-between text-xs text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
+          >
+            <span>Enviar feedback</span>
+            <svg viewBox="0 0 16 16" className="size-3" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+              <path d="M5 11l6-6M11 5H6.5M11 5v4.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </a>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/40">
+            Clasen Studio · {new Date().getFullYear()}
           </p>
         </div>
       </aside>

@@ -338,6 +338,20 @@ export function PlanosClient({
     return values.reduce((s, v) => s + v, 0) / values.length;
   }, [activePlans]);
 
+  // Receita potencial: se todos os reajustes sugeridos forem aceitos.
+  // Para planos sem sugestão (já acima do alvo, sem posts), mantém o valor atual.
+  const potentialTotal = useMemo(
+    () =>
+      activePlans.reduce(
+        (sum, p) => sum + (p.adjustmentSuggestion?.suggestedValue ?? p.planValue),
+        0
+      ),
+    [activePlans]
+  );
+  const potentialDelta = potentialTotal - activeTotal;
+  const potentialDeltaPct =
+    activeTotal > 0 ? (potentialDelta / activeTotal) * 100 : 0;
+
   return (
     <>
       {/* Resumo */}
@@ -354,6 +368,23 @@ export function PlanosClient({
           <p className="text-xs text-muted-foreground">Receita mensal</p>
           <p className="text-lg font-semibold font-mono">{formatBRL(activeTotal)}</p>
         </div>
+        {targetCostPerPost && potentialDelta > 0 && (
+          <div
+            className="rounded-lg px-4 py-3 min-w-[180px] border bg-primary/5 border-primary/30"
+            title={`Soma do valor sugerido (com teto de +25%) para todos os planos ativos. Planos já no/acima do alvo mantêm o valor atual.`}
+          >
+            <p className="text-xs text-primary/80 flex items-center gap-1">
+              Receita c/ reajustes
+              <span className="text-[10px] text-muted-foreground/70">100%</span>
+            </p>
+            <p className="text-lg font-semibold font-mono text-primary">
+              {formatBRL(potentialTotal)}
+            </p>
+            <p className="text-[10px] text-primary/70 mt-0.5 tabular-nums">
+              +{formatBRL(potentialDelta)} (+{potentialDeltaPct.toFixed(1)}%)
+            </p>
+          </div>
+        )}
         <div className="bg-card border rounded-lg px-4 py-3 min-w-[160px]">
           <p className="text-xs text-muted-foreground">$/post médio</p>
           <p className="text-lg font-semibold font-mono">
