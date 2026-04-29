@@ -2,6 +2,13 @@ import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 
 export const TARGET_COST_PER_POST_KEY = "target_cost_per_post";
+export const ADJUSTMENT_MESSAGE_TEMPLATE_KEY = "adjustment_message_template";
+
+export const DEFAULT_ADJUSTMENT_MESSAGE_TEMPLATE = `Oi {cliente}! Passando pra conversar sobre o reajuste do plano.
+
+Hoje o valor é {valorAtual}/mês e a sugestão é passar para {valorNovo}/mês a partir do próximo ciclo (+{percentual}%).
+
+Esse ajuste mantém o nosso valor por post dentro do parâmetro de qualidade que a gente trabalha. Como você vê?`;
 
 // ─── getSetting ───────────────────────────────────────────────────────────────
 

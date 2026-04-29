@@ -1,14 +1,18 @@
 import { getAllPlans, getClientsList } from "@/lib/queries/plans";
-import { getTargetCostPerPost } from "@/lib/actions/settings";
+import {
+  getTargetCostPerPost,
+  getAdjustmentMessageTemplate,
+} from "@/lib/actions/settings";
 import { PlanosClient } from "./planos-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlanosPage() {
-  const [plans, clients, targetCostPerPost] = await Promise.all([
+  const [plans, clients, targetCostPerPost, adjustmentTemplate] = await Promise.all([
     getAllPlans(),
     getClientsList(),
     getTargetCostPerPost(),
+    getAdjustmentMessageTemplate(),
   ]);
 
   return (
@@ -26,6 +30,7 @@ export default async function PlanosPage() {
         plans={plans}
         clients={clients}
         targetCostPerPost={targetCostPerPost}
+        adjustmentTemplate={adjustmentTemplate}
       />
     </div>
   );
