@@ -45,6 +45,7 @@ import { PaymentHistoryDialog } from "./payment-history-dialog";
 import { TargetPriceDialog } from "./target-price-dialog";
 import { skipBillingCycleAction } from "@/lib/actions/plans";
 import { BillingDayCell } from "./billing-day-cell";
+import { StatusBadge } from "@/components/shared/status-badge";
 
 interface Plan {
   id: number;
@@ -88,7 +89,7 @@ interface Client {
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: StatusPagamento }) {
+function PaymentStatusBadge({ status }: { status: StatusPagamento }) {
   const config = {
     em_dia: { label: "Em dia", className: "bg-success text-success-foreground" },
     atrasado: { label: "Atrasado", className: "bg-accent text-accent-foreground" },
@@ -99,11 +100,7 @@ function StatusBadge({ status }: { status: StatusPagamento }) {
 }
 
 function PlanStatusBadge({ status }: { status: string }) {
-  return status === "ativo" ? (
-    <Badge className="bg-success text-success-foreground">Ativo</Badge>
-  ) : (
-    <Badge variant="secondary">Inativo</Badge>
-  );
+  return <StatusBadge status={status === "ativo" ? "ativo" : "inativo"} />;
 }
 
 // ─── Adjustment Cell ─────────────────────────────────────────────────────────
@@ -451,7 +448,7 @@ export function PlanosClient({
       {/* Tabela */}
       <div className="bg-card rounded-lg border shadow-sm overflow-x-auto">
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_var(--border)]">
             <TableRow>
               <SortableHead label="Cliente" sortKey="clientName" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
               <SortableHead label="Vencimento" sortKey="billingCycleDays" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
@@ -491,7 +488,7 @@ export function PlanosClient({
                   data-focused={focusedPlanId === plan.id || undefined}
                   className="outline-none data-[focused]:bg-primary/5 data-[focused]:ring-1 data-[focused]:ring-primary/30"
                 >
-                  <TableCell className="font-medium">
+                  <TableCell className="font-semibold">
                     <button
                       className="hover:underline hover:text-primary transition-colors text-left"
                       onClick={() => setHistoryPlan({ planId: plan.id, clientName: plan.clientName })}
@@ -536,7 +533,7 @@ export function PlanosClient({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <StatusBadge status={plan.statusPagamento} />
+                      <PaymentStatusBadge status={plan.statusPagamento} />
                       {plan.gapsCount > 0 && (
                         <Badge
                           variant="outline"

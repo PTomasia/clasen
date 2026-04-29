@@ -101,32 +101,61 @@ function MRRChart({ data }: { data: DashboardData["mrr"] }) {
     );
   }
 
+  const total = data.reduce((s, p) => s + p.value, 0);
+
   return (
     <div className="bg-card border rounded-lg p-5">
-      <h2 className="font-semibold mb-4">MRR — Últimos 12 meses</h2>
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="font-semibold">MRR — Últimos 12 meses</h2>
+        <span
+          className="text-lg text-muted-foreground tabular-nums"
+          style={{ fontFamily: "var(--font-heading), serif" }}
+        >
+          {formatBRL(total)}
+        </span>
+      </div>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <defs>
+            <linearGradient id="mrrFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--primary)" stopOpacity={1} />
+              <stop offset="100%" stopColor="var(--primary)" stopOpacity={0.4} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis
             dataKey="label"
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            axisLine={{ stroke: "var(--border)" }}
+            tickLine={false}
           />
           <YAxis
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            axisLine={false}
+            tickLine={false}
             tickFormatter={(v: number) =>
               v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
             }
           />
           <Tooltip
+            cursor={{ fill: "var(--muted)", opacity: 0.4 }}
             formatter={(value) => [formatBRL(Number(value)), "MRR"]}
             contentStyle={{
               backgroundColor: "var(--card)",
               border: "1px solid var(--border)",
-              borderRadius: "8px",
+              borderRadius: "10px",
               fontSize: "13px",
+              padding: "10px 14px",
+              boxShadow: "0 8px 24px -8px rgba(0,0,0,0.18)",
             }}
+            labelStyle={{ color: "var(--muted-foreground)", fontSize: "11px", marginBottom: "4px" }}
           />
-          <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+          <Bar
+            dataKey="value"
+            fill="url(#mrrFill)"
+            radius={[6, 6, 0, 0]}
+            activeBar={{ fill: "var(--accent)" }}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>

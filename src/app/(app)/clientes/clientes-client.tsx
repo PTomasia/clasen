@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/status-badge";
 import {
   Select,
   SelectContent,
@@ -320,9 +320,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={client.status === "ativo" ? "default" : "secondary"}>
-                      {client.status === "ativo" ? "Ativo" : "Inativo"}
-                    </Badge>
+                    <StatusBadge status={client.status === "ativo" ? "ativo" : "inativo"} />
                   </TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {client.permanencia}m
