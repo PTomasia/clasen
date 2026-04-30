@@ -16,25 +16,15 @@ const UNAUTHORIZED_HEADERS = {
 } as const;
 
 export function middleware(req: NextRequest) {
-  const expectedUser = process.env.APP_USERNAME;
-  const expectedPass = process.env.APP_PASSWORD;
+  const expectedUser = process.env.BASIC_USER;
+  const expectedPass = process.env.BASIC_PASS;
 
   // Defesa em profundidade: em produção, falta de env vars = bloqueio total.
   // Em dev local, libera (permite desenvolvimento sem precisar setar credenciais).
   if (!expectedUser || !expectedPass) {
     if (process.env.NODE_ENV !== "development") {
-      // Diagnóstico: confirma se TURSO_* existe neste contexto. Se sim, é só typo
-      // ou problema com APP_*. Se TURSO_* tb não aparece, é problema de runtime
-      // (middleware em sandbox isolado).
-      const turso = Object.keys(process.env)
-        .filter((k) => k.startsWith("TURSO_"))
-        .sort()
-        .map((k) => `"${k}"`)
-        .join(", ");
-      const total = Object.keys(process.env).length;
-      const sample = Object.keys(process.env).sort().slice(0, 30).join(", ");
       return new NextResponse(
-        `Server misconfigured: APP_USERNAME=${expectedUser ? "set" : "missing"} APP_PASSWORD=${expectedPass ? "set" : "missing"}. Total: ${total}. TURSO_* visíveis: [${turso || "none"}]. Primeiras 30 keys: ${sample}`,
+        "Server misconfigured: BASIC_USER / BASIC_PASS ausentes. Configure no Vercel Dashboard.",
         { status: 500 }
       );
     }
