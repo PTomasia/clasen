@@ -24,6 +24,21 @@ export function formatDate(
   return `${day}/${month}/${year}`;
 }
 
+// ─── Formatação de Mês (YYYY-MM → "Abr/2026") ─────────────────────────────────
+
+const MONTH_PT = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+];
+
+export function formatMonth(yyyymm: string | null | undefined): string {
+  if (!yyyymm) return "";
+  const [y, m] = yyyymm.split("-");
+  const idx = Number(m) - 1;
+  if (idx < 0 || idx > 11 || !y) return yyyymm;
+  return `${MONTH_PT[idx]}/${y}`;
+}
+
 // ─── Formatação de Percentual ──────────────────────────────────────────────────
 
 const percentFormatter = new Intl.NumberFormat("pt-BR", {

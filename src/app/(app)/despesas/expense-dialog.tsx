@@ -32,10 +32,14 @@ export function ExpenseDialog({
   open,
   onClose,
   editing,
+  defaultMode = "avista",
+  defaultIsRecurring = false,
 }: {
   open: boolean;
   onClose: () => void;
   editing?: ExpenseRow | null;
+  defaultMode?: PaymentMode;
+  defaultIsRecurring?: boolean;
 }) {
   const { isPending, error, run } = useDialogAction(onClose);
 
@@ -69,12 +73,12 @@ export function ExpenseDialog({
       setCategory("fixo");
       setAmount("");
       setIsPaid(true);
-      setIsRecurring(false);
+      setIsRecurring(defaultIsRecurring);
       setNotes("");
-      setPaymentMode("avista");
+      setPaymentMode(defaultMode);
       setInstallmentsTotal("2");
     }
-  }, [open, editing]);
+  }, [open, editing, defaultMode, defaultIsRecurring]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
