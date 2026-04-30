@@ -101,6 +101,17 @@ function CustomTooltip({
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
+// ─── Compact value formatter ──────────────────────────────────────────────────
+// 10300 → "10,3k" · 950 → "950" · 0 → ""
+
+function formatCompactBRL(v: number): string {
+  if (!v || v === 0) return "";
+  if (Math.abs(v) >= 1000) {
+    return `${(v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}k`;
+  }
+  return v.toFixed(0);
+}
+
 // ─── Custom Legend ────────────────────────────────────────────────────────────
 
 function InteractiveLegend({
@@ -215,7 +226,7 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
         <ResponsiveContainer width="100%" height={300}>
           <BarChart
             data={chartData}
-            margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
+            margin={{ top: 18, right: 10, left: 10, bottom: 5 }}
             barCategoryGap="20%"
             barGap={2}
           >
@@ -237,6 +248,18 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 stackId="receita"
                 fill="var(--primary)"
                 radius={[0, 0, 0, 0]}
+                label={
+                  !isVisible("Rec. avulsa")
+                    ? {
+                        position: "top",
+                        fontSize: 10,
+                        fontWeight: 600,
+                        fill: "var(--primary)",
+                        formatter: (v: unknown) =>
+                          formatCompactBRL(typeof v === "number" ? v : 0),
+                      }
+                    : false
+                }
               />
             )}
             {isVisible("Rec. avulsa") && (
@@ -245,6 +268,21 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 stackId="receita"
                 fill="#a3b545"
                 radius={[4, 4, 0, 0]}
+                label={{
+                  position: "top",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  fill: "var(--primary)",
+                  valueAccessor: (entry: unknown) => {
+                    const e = entry as {
+                      "Rec. recorrente"?: number;
+                      "Rec. avulsa"?: number;
+                    };
+                    return formatCompactBRL(
+                      (e["Rec. recorrente"] ?? 0) + (e["Rec. avulsa"] ?? 0)
+                    );
+                  },
+                }}
               />
             )}
             {isVisible("Despesa") && (
@@ -253,6 +291,14 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 fill="var(--destructive)"
                 radius={[4, 4, 0, 0]}
                 opacity={0.75}
+                label={{
+                  position: "top",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  fill: "var(--destructive)",
+                  formatter: (v: unknown) =>
+                    formatCompactBRL(typeof v === "number" ? v : 0),
+                }}
               />
             )}
             {isVisible("Lucro") && (
@@ -261,6 +307,14 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 fill="#15803d"
                 radius={[4, 4, 0, 0]}
                 opacity={0.9}
+                label={{
+                  position: "top",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  fill: "#15803d",
+                  formatter: (v: unknown) =>
+                    formatCompactBRL(typeof v === "number" ? v : 0),
+                }}
               />
             )}
           </BarChart>
