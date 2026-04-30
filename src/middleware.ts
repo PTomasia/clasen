@@ -70,8 +70,11 @@ export function middleware(req: NextRequest) {
 }
 
 // Aplica em todas as rotas exceto assets estáticos do Next e arquivos da raiz public.
+// Roda em Node runtime (não Edge) pra ter acesso ao mesmo conjunto de env vars
+// que Server Actions/Components — Edge runtime tinha env vars não chegando.
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
   ],
+  runtime: "nodejs",
 };
