@@ -508,89 +508,27 @@ export function PlanosClient({
     <>
       {/* Resumo */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Esquerda: KPIs */}
-        <div className="lg:col-span-2 flex gap-4 flex-wrap content-start">
-        <div className="bg-card border rounded-lg px-4 py-3 min-w-[140px]">
-          <p className="text-xs text-muted-foreground">Planos ativos</p>
-          <p className="text-lg font-semibold">{activePlans.length}</p>
-        </div>
-        <div className="bg-card border rounded-lg px-4 py-3 min-w-[140px]">
-          <p className="text-xs text-muted-foreground">Posts atuais</p>
-          <p className="text-lg font-semibold tabular-nums">
-            {postsAtuais.conteudo}
-            <span className="text-xs text-muted-foreground font-normal"> conteúdo</span>
-          </p>
-          <p className="text-[11px] text-muted-foreground tabular-nums -mt-0.5">
-            · {postsAtuais.trafego} tráfego
-          </p>
-        </div>
-        <div className="bg-card border rounded-lg px-4 py-3 min-w-[160px]">
-          <p className="text-xs text-muted-foreground">Receita mensal</p>
-          <p className="text-lg font-semibold font-mono">{formatBRL(activeTotal)}</p>
-        </div>
-        {targetCostPerPost && overdueAdjustments.length > 0 && (
-          <div
-            className="rounded-lg px-4 py-3 min-w-[180px] border bg-accent/10 border-accent/40"
-            title={`Soma considerando apenas os ${overdueAdjustments.length} ${overdueAdjustments.length === 1 ? "reajuste vencido" : "reajustes vencidos"} (planos com ≥6 meses ainda abaixo do $/post alvo). Demais mantêm valor atual.`}
-          >
-            <p className="text-xs text-accent flex items-center gap-1">
-              Reajustes vencidos
-              <span className="text-[10px] text-muted-foreground/70">
-                {overdueAdjustments.length}
-              </span>
-            </p>
-            <p className="text-lg font-semibold font-mono text-accent">
-              {formatBRL(overdueTotal)}
-            </p>
-            <p className="text-[10px] text-accent/80 mt-0.5 tabular-nums">
-              +{formatBRL(overdueDelta)} (+{overdueDeltaPct.toFixed(1)}%)
-            </p>
-          </div>
-        )}
-        {targetCostPerPost && potentialDelta > 0 && (
-          <div
-            className="rounded-lg px-4 py-3 min-w-[180px] border bg-primary/5 border-primary/30"
-            title={`Soma do valor sugerido (com teto de +25%) para todos os planos ativos. Planos já no/acima do alvo mantêm o valor atual.`}
-          >
-            <p className="text-xs text-primary/80 flex items-center gap-1">
-              Receita c/ reajustes
-              <span className="text-[10px] text-muted-foreground/70">100%</span>
-            </p>
-            <p className="text-lg font-semibold font-mono text-primary">
-              {formatBRL(potentialTotal)}
-            </p>
-            <p className="text-[10px] text-primary/70 mt-0.5 tabular-nums">
-              +{formatBRL(potentialDelta)} (+{potentialDeltaPct.toFixed(1)}%)
-            </p>
-          </div>
-        )}
-        <div className="bg-card border rounded-lg px-4 py-3 min-w-[160px]">
-          <p className="text-xs text-muted-foreground">$/post médio</p>
-          <p className="text-lg font-semibold font-mono">
-            {custoPostMedio !== null ? formatBRL(custoPostMedio) : "—"}
-          </p>
-          {custoPostMedio !== null && targetCostPerPost && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              Alvo: {formatBRL(targetCostPerPost)}
-              {" "}
-              <span className={custoPostMedio < targetCostPerPost ? "text-accent-foreground" : "text-success"}>
-                ({custoPostMedio < targetCostPerPost ? "−" : "+"}
-                {Math.abs(((custoPostMedio - targetCostPerPost) / targetCostPerPost) * 100).toFixed(0)}%)
-              </span>
-            </p>
-          )}
-        </div>
-        <button
-          onClick={() => setShowTargetPriceDialog(true)}
-          className="bg-card border rounded-lg px-4 py-3 min-w-[160px] text-left hover:border-primary/50 transition-colors"
-        >
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            $/post alvo <Settings size={10} />
-          </p>
-          <p className="text-lg font-semibold font-mono">
-            {targetCostPerPost ? formatBRL(targetCostPerPost) : "Configurar"}
-          </p>
-        </button>
+        {/* Esquerda: Hero KPI */}
+        <div className="lg:col-span-2">
+          <PlanosHeroCard
+            receitaMensal={activeTotal}
+            totalPlanos={activePlans.length}
+            postsConteudo={postsAtuais.conteudo}
+            postsTrafego={postsAtuais.trafego}
+            potencial={
+              targetCostPerPost && potentialDelta > 0
+                ? { total: potentialTotal, deltaPct: potentialDeltaPct }
+                : null
+            }
+            vencidos={
+              targetCostPerPost && overdueAdjustments.length > 0
+                ? { count: overdueAdjustments.length, total: overdueTotal }
+                : null
+            }
+            custoPostMedio={custoPostMedio}
+            targetCostPerPost={targetCostPerPost}
+            onEditTarget={() => setShowTargetPriceDialog(true)}
+          />
         </div>
 
         {/* Direita: Pagamentos atrasados */}
@@ -1043,6 +981,192 @@ export function PlanosClient({
   );
 }
 
+// ─── Header: Hero card com KPIs hierárquicos ─────────────────────────────────
+
+function StatColumn({
+  label,
+  value,
+  sub,
+  tone = "default",
+  icon,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "default" | "primary" | "accent";
+  icon?: React.ReactNode;
+  onClick?: () => void;
+}) {
+  const valueColor =
+    tone === "primary"
+      ? "text-primary"
+      : tone === "accent"
+        ? "text-accent"
+        : "";
+
+  const inner = (
+    <div className="flex flex-col gap-1 text-left">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1">
+        {label}
+        {icon}
+      </p>
+      <p
+        className={cn(
+          "text-xl leading-none tracking-tight font-medium tabular-nums",
+          valueColor
+        )}
+        style={{ fontFamily: "var(--font-heading), serif" }}
+      >
+        {value}
+      </p>
+      {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
+    </div>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        onClick={onClick}
+        className="w-full -m-1 p-1 rounded hover:bg-muted/40 transition-colors"
+      >
+        {inner}
+      </button>
+    );
+  }
+  return inner;
+}
+
+function PlanosHeroCard({
+  receitaMensal,
+  totalPlanos,
+  postsConteudo,
+  postsTrafego,
+  potencial,
+  vencidos,
+  custoPostMedio,
+  targetCostPerPost,
+  onEditTarget,
+}: {
+  receitaMensal: number;
+  totalPlanos: number;
+  postsConteudo: number;
+  postsTrafego: number;
+  potencial: { total: number; deltaPct: number } | null;
+  vencidos: { count: number; total: number } | null;
+  custoPostMedio: number | null;
+  targetCostPerPost: number | null;
+  onEditTarget: () => void;
+}) {
+  const stats: Array<{ key: string; node: React.ReactNode }> = [];
+
+  if (potencial) {
+    stats.push({
+      key: "potencial",
+      node: (
+        <StatColumn
+          label="c/ reajustes"
+          value={formatBRL(potencial.total)}
+          sub={`+${potencial.deltaPct.toFixed(1)}%`}
+          tone="primary"
+        />
+      ),
+    });
+  }
+  if (vencidos) {
+    stats.push({
+      key: "vencidos",
+      node: (
+        <StatColumn
+          label="vencidos"
+          value={String(vencidos.count)}
+          sub={formatBRL(vencidos.total)}
+          tone="accent"
+        />
+      ),
+    });
+  }
+  stats.push({
+    key: "custoMedio",
+    node: (
+      <StatColumn
+        label="$/post médio"
+        value={custoPostMedio !== null ? formatBRL(custoPostMedio) : "—"}
+        sub={
+          custoPostMedio !== null && targetCostPerPost
+            ? `Alvo ${formatBRL(targetCostPerPost)} (${
+                custoPostMedio < targetCostPerPost ? "−" : "+"
+              }${Math.abs(
+                ((custoPostMedio - targetCostPerPost) / targetCostPerPost) * 100
+              ).toFixed(0)}%)`
+            : undefined
+        }
+      />
+    ),
+  });
+  stats.push({
+    key: "alvo",
+    node: (
+      <StatColumn
+        label="$/post alvo"
+        value={targetCostPerPost ? formatBRL(targetCostPerPost) : "Configurar"}
+        sub="Editar"
+        icon={<Settings size={11} />}
+        onClick={onEditTarget}
+      />
+    ),
+  });
+
+  const colsClass =
+    stats.length === 4
+      ? "grid-cols-2 md:grid-cols-4"
+      : stats.length === 3
+        ? "grid-cols-3"
+        : "grid-cols-2";
+
+  return (
+    <div className="bg-card border rounded-xl p-7 md:p-8 h-full flex flex-col">
+      {/* Hero */}
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Receita mensal
+        </p>
+        <p
+          className="mt-2 text-5xl md:text-6xl font-medium leading-none tracking-tight tabular-nums"
+          style={{ fontFamily: "var(--font-heading), serif" }}
+        >
+          {formatBRL(receitaMensal)}
+        </p>
+        <p className="text-xs text-muted-foreground mt-3">
+          <span className="tabular-nums">{totalPlanos}</span>{" "}
+          {totalPlanos === 1 ? "plano" : "planos"}
+          {" · "}
+          <span className="tabular-nums">{postsConteudo}</span> conteúdo
+          {" · "}
+          <span className="tabular-nums">{postsTrafego}</span> tráfego
+        </p>
+      </div>
+
+      {/* Stats row */}
+      <div className="mt-6 pt-5 border-t flex-1 flex items-end">
+        <div className={cn("grid w-full divide-x", colsClass)}>
+          {stats.map((s, i) => (
+            <div
+              key={s.key}
+              className={cn(
+                i === 0 ? "pr-4" : "px-4",
+                i === stats.length - 1 && "pr-0"
+              )}
+            >
+              {s.node}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Painel: Pagamentos atrasados ─────────────────────────────────────────────
 
 function OverduePaymentsPanel({
@@ -1079,7 +1203,7 @@ function OverduePaymentsPanel({
   }, [plans]);
 
   return (
-    <div className="bg-card border rounded-lg p-5">
+    <div className="bg-card border rounded-xl p-6 h-full">
       <div className="flex items-center gap-2 mb-4">
         <AlertTriangle size={18} className="text-accent" />
         <h2 className="font-semibold">Pagamentos atrasados</h2>
@@ -1098,11 +1222,11 @@ function OverduePaymentsPanel({
           className="py-6"
         />
       ) : (
-        <ul className="divide-y max-h-[300px] overflow-y-auto -mx-5">
+        <ul className="divide-y max-h-[300px] overflow-y-auto -mx-6">
           {overdueRows.map((row) => (
             <li
               key={row.planId}
-              className="relative flex items-center gap-3 py-2.5 px-5 pl-[18px]"
+              className="relative flex items-center gap-3 py-2.5 px-6 pl-[22px]"
             >
               <span
                 aria-hidden
