@@ -23,14 +23,19 @@ export function middleware(req: NextRequest) {
   // Em dev local, libera (permite desenvolvimento sem precisar setar credenciais).
   if (!expectedUser || !expectedPass) {
     if (process.env.NODE_ENV !== "development") {
-      // Diagnóstico: lista nomes de env vars começando com APP_ que estão
-      // visíveis pro middleware. NÃO expõe valores, só nomes.
-      const visibleAppKeys = Object.keys(process.env)
-        .filter((k) => k.startsWith("APP_"))
+      // Diagnóstico: lista nomes de env vars com possíveis prefixos relacionados
+      // à auth (sem expor valores). Pega quem começa com A, P, U pra detectar
+      // typos como ADD_, AP_, PASSWORD_, USERNAME_, etc.
+      const candidates = Object.keys(process.env)
+        .filter((k) => /^[APUL]/i.test(k) && k.length >= 3 && k.length <= 40)
+        .filter((k) => !/^(API_|AWS_|AUTH0|ANTHROPIC|ANALYTICS)/i.test(k))
         .sort()
+        .map((k) => `"${k}"`)
         .join(", ");
+      // Total de env vars visíveis pra confirmar que process.env tem conteúdo
+      const total = Object.keys(process.env).length;
       return new NextResponse(
-        `Server misconfigured: APP_USERNAME=${expectedUser ? "set" : "missing"} APP_PASSWORD=${expectedPass ? "set" : "missing"}. Visible APP_* keys: [${visibleAppKeys || "none"}]`,
+        `Server misconfigured: APP_USERNAME=${expectedUser ? "set" : "missing"} APP_PASSWORD=${expectedPass ? "set" : "missing"}. Total env vars: ${total}. Candidatas com nome começando A/P/U/L: [${candidates || "none"}]`,
         { status: 500 }
       );
     }
