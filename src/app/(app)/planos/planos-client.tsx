@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useTransition } from "react";
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, useTransition } from "react";
 import {
   Table,
   TableBody,
@@ -27,7 +27,10 @@ import {
   Settings,
   SkipForward,
   MoreHorizontal,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { isDataPassada, type StatusPagamento } from "@/lib/utils/calculations";
@@ -504,7 +507,9 @@ export function PlanosClient({
   return (
     <>
       {/* Resumo */}
-      <div className="flex gap-4 flex-wrap">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Esquerda: KPIs */}
+        <div className="lg:col-span-2 flex gap-4 flex-wrap content-start">
         <div className="bg-card border rounded-lg px-4 py-3 min-w-[140px]">
           <p className="text-xs text-muted-foreground">Planos ativos</p>
           <p className="text-lg font-semibold">{activePlans.length}</p>
@@ -586,17 +591,14 @@ export function PlanosClient({
             {targetCostPerPost ? formatBRL(targetCostPerPost) : "Configurar"}
           </p>
         </button>
-        <button
-          onClick={() => setShowEditTemplateDialog(true)}
-          className="bg-card border rounded-lg px-4 py-3 min-w-[160px] text-left hover:border-primary/50 transition-colors"
-        >
-          <p className="text-xs text-muted-foreground flex items-center gap-1">
-            Mensagem reajuste <Pencil size={10} />
-          </p>
-          <p className="text-sm text-muted-foreground line-clamp-1 mt-1">
-            Editar template
-          </p>
-        </button>
+        </div>
+
+        {/* Direita: Pagamentos atrasados */}
+        <OverduePaymentsPanel
+          plans={activePlans}
+          onPay={(planId) => setPaymentPlanId(planId)}
+          onSkip={handleSkipBilling}
+        />
       </div>
 
       {/* Filtros e ação */}
@@ -658,6 +660,16 @@ export function PlanosClient({
               Limpar filtros
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto gap-1.5"
+            onClick={() => setShowEditTemplateDialog(true)}
+            title="Editar template da mensagem de reajuste"
+          >
+            <Pencil size={14} />
+            Mensagem reajuste
+          </Button>
         </div>
       </div>
 
@@ -1031,6 +1043,118 @@ export function PlanosClient({
   );
 }
 
+// ─── Painel: Pagamentos atrasados ─────────────────────────────────────────────
+
+function OverduePaymentsPanel({
+  plans,
+  onPay,
+  onSkip,
+}: {
+  plans: Plan[];
+  onPay: (planId: number) => void;
+  onSkip: (planId: number) => void;
+}) {
+  const overdueRows = useMemo(() => {
+    const today = new Date();
+    return plans
+      .filter(
+        (p) =>
+          p.nextPaymentDate &&
+          isDataPassada(p.nextPaymentDate) &&
+          (!p.lastPaymentDate ||
+            new Date(p.lastPaymentDate) < new Date(p.nextPaymentDate))
+      )
+      .map((p) => ({
+        planId: p.id,
+        clientName: p.clientName,
+        planType: p.planType,
+        planValue: p.planValue,
+        nextPaymentDate: p.nextPaymentDate!,
+        diasAtraso: Math.floor(
+          (today.getTime() - new Date(p.nextPaymentDate!).getTime()) / 86_400_000
+        ),
+        billingCycleDays: p.billingCycleDays,
+      }))
+      .sort((a, b) => b.diasAtraso - a.diasAtraso);
+  }, [plans]);
+
+  return (
+    <div className="bg-card border rounded-lg p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <AlertTriangle size={18} className="text-accent" />
+        <h2 className="font-semibold">Pagamentos atrasados</h2>
+        {overdueRows.length > 0 && (
+          <span className="ml-auto text-sm font-mono font-semibold text-accent">
+            {overdueRows.length}
+          </span>
+        )}
+      </div>
+
+      {overdueRows.length === 0 ? (
+        <EmptyState
+          icon={CheckCircle2}
+          title="Em dia esta semana"
+          tone="success"
+          className="py-6"
+        />
+      ) : (
+        <ul className="divide-y max-h-[300px] overflow-y-auto -mx-5">
+          {overdueRows.map((row) => (
+            <li
+              key={row.planId}
+              className="relative flex items-center gap-3 py-2.5 px-5 pl-[18px]"
+            >
+              <span
+                aria-hidden
+                className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate">{row.clientName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {row.planType} · venceu {formatDate(row.nextPaymentDate)}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  "shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-accent/10 text-accent tabular-nums",
+                  row.diasAtraso >= 30 && "animate-pulse"
+                )}
+                title={`${row.diasAtraso} dias em atraso`}
+              >
+                {row.diasAtraso}d
+              </span>
+              <p className="text-sm font-mono font-semibold shrink-0 tabular-nums">
+                {formatBRL(row.planValue)}
+              </p>
+              {row.billingCycleDays && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 shrink-0 gap-1 text-muted-foreground"
+                  onClick={() => onSkip(row.planId)}
+                  title="Pular cobrança deste mês"
+                >
+                  <SkipForward size={12} />
+                  <span className="text-xs">Pular</span>
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 shrink-0 gap-1"
+                onClick={() => onPay(row.planId)}
+              >
+                <CreditCard size={12} />
+                <span className="text-xs">Pagar</span>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ─── Popover de mensagem de reajuste ──────────────────────────────────────────
 
 function AdjustmentMessagePopover({
@@ -1046,6 +1170,7 @@ function AdjustmentMessagePopover({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -1063,8 +1188,29 @@ function AdjustmentMessagePopover({
   }, [onClose]);
 
   const popoverWidth = 360;
-  const adjustedX = Math.min(x, window.innerWidth - popoverWidth - 8);
-  const adjustedY = Math.min(y, window.innerHeight - 200);
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.min(x, window.innerWidth - popoverWidth - margin);
+
+    // y vem como `trigger.bottom + 6` — tenta abrir abaixo; se não couber, flipa para cima.
+    const spaceBelow = window.innerHeight - y - margin;
+    const fitsBelow = rect.height <= spaceBelow;
+
+    let top: number;
+    if (fitsBelow) {
+      top = y;
+    } else {
+      // Flip: posicionar acima do trigger.
+      // Topo do trigger ≈ y - 6 (pois y = trigger.bottom + 6); deixa 6px de gap.
+      const flippedTop = y - rect.height - 12;
+      top = Math.max(margin, flippedTop);
+    }
+
+    setPos({ top, left });
+  }, [x, y]);
 
   async function handleCopy() {
     try {
@@ -1093,7 +1239,11 @@ function AdjustmentMessagePopover({
   return (
     <div
       ref={ref}
-      style={{ top: adjustedY, left: adjustedX, width: popoverWidth }}
+      style={
+        pos
+          ? { top: pos.top, left: pos.left, width: popoverWidth }
+          : { top: -9999, left: -9999, width: popoverWidth, visibility: "hidden" }
+      }
       className="fixed z-50 rounded-lg border bg-popover shadow-xl p-3"
       role="dialog"
     >

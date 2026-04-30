@@ -15,7 +15,7 @@ import {
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Calendar, AlertTriangle, CreditCard, SkipForward, CheckCircle2, BarChart3 } from "lucide-react";
+import { Calendar, BarChart3 } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import type {
   DashboardData,
@@ -23,8 +23,6 @@ import type {
   PostsPorClienteResult,
 } from "@/lib/queries/dashboard";
 import type { PnLData } from "@/lib/queries/profit-and-loss";
-import { PaymentDialog } from "@/app/(app)/planos/payment-dialog";
-import { skipBillingCycleAction } from "@/lib/actions/plans";
 import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
@@ -210,30 +208,12 @@ export function DashboardClient({
   };
   unit: import("@/lib/queries/unit-economics").UnitEconomicsData;
 }) {
-  const [paymentPlan, setPaymentPlan] = useState<{
-    id: number;
-    clientName: string;
-    planValue: number;
-    paymentDate?: string;
-  } | null>(null);
-  const [skipping, setSkipping] = useState<number | null>(null);
-
   // Filtro de período compartilhado entre os 3 gráficos
   const months = pnl.rows.map((r) => r.label);
   const lastIdx = Math.max(0, months.length - 1);
   const [chartRange, setChartRange] = useState<TimeRange>({ fromIdx: 0, toIdx: lastIdx });
 
-  async function handleSkip(planId: number) {
-    setSkipping(planId);
-    try {
-      await skipBillingCycleAction(planId);
-    } finally {
-      setSkipping(null);
-    }
-  }
-
   return (
-    <>
     <div className="space-y-6">
       {/* Hero + 3 primários */}
       <div className="grid lg:grid-cols-3 gap-4">
@@ -312,92 +292,8 @@ export function DashboardClient({
       {/* Evolução operacional: clientes, posts, ticket/post */}
       <OperationalEvolutionChart data={operational.evolution} range={chartRange} />
 
-      {/* Duas colunas: Atrasados + Próximos */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Atrasados */}
-        <div className="bg-card border rounded-lg p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={18} className="text-accent" />
-            <h2 className="font-semibold">Pagamentos atrasados</h2>
-            {data.atrasados.length > 0 && (
-              <span className="ml-auto text-sm font-mono font-semibold text-accent">
-                {data.atrasados.length}
-              </span>
-            )}
-          </div>
-
-          {data.atrasados.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle2}
-              title="Em dia esta semana"
-              tone="success"
-              className="py-6"
-            />
-          ) : (
-            <ul className="divide-y max-h-[300px] overflow-y-auto -mx-5">
-              {data.atrasados.map((row) => (
-                <li
-                  key={row.planId}
-                  className="relative flex items-center gap-3 py-2.5 px-5 pl-[18px]"
-                >
-                  <span
-                    aria-hidden
-                    className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{row.clientName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {row.planType} · venceu {formatDate(row.nextPaymentDate)}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-accent/10 text-accent tabular-nums",
-                      row.diasAtraso >= 30 && "animate-pulse"
-                    )}
-                    title={`${row.diasAtraso} dias em atraso`}
-                  >
-                    {row.diasAtraso}d
-                  </span>
-                  <p className="text-sm font-mono font-semibold shrink-0 tabular-nums">
-                    {formatBRL(row.planValue)}
-                  </p>
-                  {row.billingCycleDays && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 shrink-0 gap-1 text-muted-foreground"
-                      disabled={skipping === row.planId}
-                      onClick={() => handleSkip(row.planId)}
-                      title="Pular cobrança deste mês"
-                    >
-                      <SkipForward size={12} />
-                      <span className="text-xs">Pular</span>
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 shrink-0 gap-1"
-                    onClick={() =>
-                      setPaymentPlan({
-                        id: row.planId,
-                        clientName: row.clientName,
-                        planValue: row.planValue,
-                        paymentDate: row.nextPaymentDate,
-                      })
-                    }
-                  >
-                    <CreditCard size={12} />
-                    <span className="text-xs">Pagar</span>
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Próximos 7 dias */}
+      {/* Próximos 7 dias */}
+      <div>
         <div className="bg-card border rounded-lg p-5">
           <div className="flex items-center gap-2 mb-4">
             <Calendar size={18} className="text-primary" />
@@ -446,15 +342,5 @@ export function DashboardClient({
         </div>
       </div>
     </div>
-
-      {paymentPlan && (
-        <PaymentDialog
-          open={!!paymentPlan}
-          onClose={() => setPaymentPlan(null)}
-          plan={paymentPlan}
-          defaultPaymentDate={paymentPlan.paymentDate}
-        />
-      )}
-    </>
   );
 }
