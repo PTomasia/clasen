@@ -23,8 +23,14 @@ export function middleware(req: NextRequest) {
   // Em dev local, libera (permite desenvolvimento sem precisar setar credenciais).
   if (!expectedUser || !expectedPass) {
     if (process.env.NODE_ENV !== "development") {
+      // Diagnóstico: lista nomes de env vars começando com APP_ que estão
+      // visíveis pro middleware. NÃO expõe valores, só nomes.
+      const visibleAppKeys = Object.keys(process.env)
+        .filter((k) => k.startsWith("APP_"))
+        .sort()
+        .join(", ");
       return new NextResponse(
-        "Server misconfigured: APP_USERNAME / APP_PASSWORD ausentes.",
+        `Server misconfigured: APP_USERNAME=${expectedUser ? "set" : "missing"} APP_PASSWORD=${expectedPass ? "set" : "missing"}. Visible APP_* keys: [${visibleAppKeys || "none"}]`,
         { status: 500 }
       );
     }
