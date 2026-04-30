@@ -65,6 +65,129 @@ function HeroKPI({
   return <div className={baseClass}>{inner}</div>;
 }
 
+function DashboardHeroCard({
+  receitaBruta,
+  clientesAtivos,
+  postsAtivos,
+  closedRow,
+}: {
+  receitaBruta: number;
+  clientesAtivos: number;
+  postsAtivos: number;
+  closedRow: import("@/lib/queries/profit-and-loss").PnLRow | null;
+}) {
+  const margem =
+    closedRow?.margemLiquida != null ? closedRow.margemLiquida * 100 : null;
+  const isProfit = closedRow ? closedRow.lucroLiquido >= 0 : true;
+
+  return (
+    <Link
+      href="/planos"
+      className="block bg-card border rounded-xl p-7 md:p-8 h-full transition-colors hover:bg-muted/40 hover:border-primary/30"
+    >
+      <div className="flex h-full flex-col">
+        {/* Hero */}
+        <div className="flex-1 flex flex-col justify-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Receita bruta mensal
+          </p>
+          <p
+            className="mt-2 text-5xl md:text-6xl font-medium leading-none tracking-tight tabular-nums"
+            style={{ fontFamily: "var(--font-heading), serif" }}
+          >
+            {formatBRL(receitaBruta)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-3">
+            <span className="tabular-nums">{clientesAtivos}</span> clientes ativos ·{" "}
+            <span className="tabular-nums">{postsAtivos}</span> posts/mês
+          </p>
+        </div>
+
+        {/* Stats row — mês fechado */}
+        <div className="mt-6 pt-5 border-t">
+          {closedRow ? (
+            <>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 mb-2">
+                Mês fechado · {closedRow.label}
+              </p>
+              <div className="grid grid-cols-3 divide-x">
+                <DashStat
+                  label="Despesa"
+                  value={formatBRL(closedRow.despesaTotal)}
+                  position="first"
+                />
+                <DashStat
+                  label="Lucro líquido"
+                  value={formatBRL(closedRow.lucroLiquido)}
+                  tone={isProfit ? "success" : "destructive"}
+                  position="middle"
+                />
+                <DashStat
+                  label="Margem"
+                  value={margem != null ? `${margem.toFixed(0)}%` : "—"}
+                  tone={
+                    margem == null
+                      ? "default"
+                      : margem >= 20
+                        ? "primary"
+                        : margem < 0
+                          ? "destructive"
+                          : "default"
+                  }
+                  position="last"
+                />
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Sem mês fechado para exibir resultado.
+            </p>
+          )}
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function DashStat({
+  label,
+  value,
+  tone = "default",
+  position = "middle",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "primary" | "success" | "destructive";
+  position?: "first" | "middle" | "last";
+}) {
+  const valueColor =
+    tone === "primary"
+      ? "text-primary"
+      : tone === "success"
+        ? "text-success"
+        : tone === "destructive"
+          ? "text-destructive"
+          : "";
+  const padding =
+    position === "first" ? "pr-4" : position === "last" ? "pl-4" : "px-4";
+  return (
+    <div className={cn("flex flex-col gap-1 text-left", padding)}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "text-xl leading-none tracking-tight font-medium tabular-nums",
+          valueColor
+        )}
+        style={{ fontFamily: "var(--font-heading), serif" }}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function KPICard({
   label,
   value,
@@ -215,17 +338,19 @@ export function DashboardClient({
 
   return (
     <div className="space-y-6">
-      {/* Hero + 3 primários */}
+      {/* Hero + KPIs secundários */}
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <HeroKPI
-            label="Receita bruta mensal"
-            value={formatBRL(data.receitaBruta)}
-            sub={`${data.clientesAtivos} clientes ativos · ${data.postsAtivos} posts/mês`}
-            href="/planos"
+          <DashboardHeroCard
+            receitaBruta={data.receitaBruta}
+            clientesAtivos={data.clientesAtivos}
+            postsAtivos={data.postsAtivos}
+            closedRow={
+              pnl.rows.length >= 2 ? pnl.rows[pnl.rows.length - 2] : null
+            }
           />
         </div>
-        <div className="grid grid-cols-3 lg:grid-cols-1 gap-4 lg:h-full auto-rows-fr">
+        <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 lg:h-full auto-rows-fr">
           <KPICard
             label="LTV médio"
             value={formatBRL(unit.totals.ltvMedio)}
@@ -236,19 +361,6 @@ export function DashboardClient({
             }
             href="/clientes"
           />
-          {(() => {
-            const last = pnl.rows[pnl.rows.length - 1];
-            const prev = pnl.rows.length >= 2 ? pnl.rows[pnl.rows.length - 2] : null;
-            const margem = prev?.margemLiquida ?? null;
-            return (
-              <KPICard
-                label="Margem líquida"
-                value={margem != null ? `${(margem * 100).toFixed(1)}%` : "—"}
-                sub={prev ? `${prev.label} (mês fechado)` : last?.label}
-                href="/despesas"
-              />
-            );
-          })()}
           <KPICard
             label="Clientes ativos"
             value={String(data.clientesAtivos)}
