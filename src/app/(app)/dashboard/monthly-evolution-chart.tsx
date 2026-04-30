@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
 import { formatBRL } from "@/lib/utils/formatting";
 import { useSeriesToggle } from "@/lib/hooks/use-series-toggle";
@@ -112,6 +113,59 @@ function formatCompactBRL(v: number): string {
   return v.toFixed(0);
 }
 
+// Recharts 3 LabelList content props para barras stackeadas
+type StackLabelProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  index?: number;
+  value?: number;
+};
+
+type ChartRow = {
+  label: string;
+  "Rec. recorrente": number;
+  "Rec. avulsa": number;
+  Despesa: number;
+  Lucro: number;
+  lucroRaw: number;
+  receitaTotal: number;
+};
+
+// Renderer custom para o total de receita acima de uma barra do stack.
+// Decide por linha (via `shouldRender`) se a label aparece nesta barra ou
+// na sibling. Posiciona o texto acima do segmento usando os props de
+// geometria que o Recharts injeta.
+function renderStackTotalLabel(
+  props: StackLabelProps,
+  chartData: ChartRow[],
+  shouldRender: (row: ChartRow) => boolean,
+  fill: string
+) {
+  const idx = props.index ?? -1;
+  const row = chartData[idx];
+  if (!row) return null;
+  if (!shouldRender(row)) return null;
+  const total = row.receitaTotal ?? 0;
+  const text = formatCompactBRL(total);
+  if (!text) return null;
+  const x = (props.x ?? 0) + (props.width ?? 0) / 2;
+  const y = (props.y ?? 0) - 4;
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="middle"
+      fontSize={10}
+      fontWeight={600}
+      fill={fill}
+    >
+      {text}
+    </text>
+  );
+}
+
 // ─── Custom Legend ────────────────────────────────────────────────────────────
 
 function InteractiveLegend({
@@ -186,6 +240,7 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
     "Despesa": r.despesaTotal,
     "Lucro": Math.max(r.lucroLiquido, 0), // barra positiva apenas; prejuízo fica em zero
     lucroRaw: r.lucroLiquido,
+    receitaTotal: r.receitaTotal,
   }));
 
   return (
@@ -248,19 +303,25 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 stackId="receita"
                 fill="var(--primary)"
                 radius={[0, 0, 0, 0]}
-                label={
-                  !isVisible("Rec. avulsa")
-                    ? {
-                        position: "top",
-                        fontSize: 10,
-                        fontWeight: 600,
-                        fill: "var(--primary)",
-                        formatter: (v: unknown) =>
-                          formatCompactBRL(typeof v === "number" ? v : 0),
-                      }
-                    : false
-                }
-              />
+              >
+                {/* Receita total (recorrente + avulsa) renderiza nesta barra
+                    quando avulsa = 0 ou está oculta — caso contrário o label
+                    fica na barra avulsa (topo do stack). Recharts 3 removeu
+                    label.valueAccessor; LabelList com content é a API canônica. */}
+                <LabelList
+                  dataKey="receitaTotal"
+                  content={(props: object) =>
+                    renderStackTotalLabel(
+                      props as StackLabelProps,
+                      chartData,
+                      (row) =>
+                        !isVisible("Rec. avulsa") ||
+                        (row["Rec. avulsa"] ?? 0) === 0,
+                      "var(--primary)"
+                    )
+                  }
+                />
+              </Bar>
             )}
             {isVisible("Rec. avulsa") && (
               <Bar
@@ -268,22 +329,19 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 stackId="receita"
                 fill="#a3b545"
                 radius={[4, 4, 0, 0]}
-                label={{
-                  position: "top",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  fill: "var(--primary)",
-                  valueAccessor: (entry: unknown) => {
-                    const e = entry as {
-                      "Rec. recorrente"?: number;
-                      "Rec. avulsa"?: number;
-                    };
-                    return formatCompactBRL(
-                      (e["Rec. recorrente"] ?? 0) + (e["Rec. avulsa"] ?? 0)
-                    );
-                  },
-                }}
-              />
+              >
+                <LabelList
+                  dataKey="receitaTotal"
+                  content={(props: object) =>
+                    renderStackTotalLabel(
+                      props as StackLabelProps,
+                      chartData,
+                      (row) => (row["Rec. avulsa"] ?? 0) > 0,
+                      "var(--primary)"
+                    )
+                  }
+                />
+              </Bar>
             )}
             {isVisible("Despesa") && (
               <Bar
@@ -291,15 +349,18 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 fill="var(--destructive)"
                 radius={[4, 4, 0, 0]}
                 opacity={0.75}
-                label={{
-                  position: "top",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  fill: "var(--destructive)",
-                  formatter: (v: unknown) =>
-                    formatCompactBRL(typeof v === "number" ? v : 0),
-                }}
-              />
+              >
+                <LabelList
+                  dataKey="Despesa"
+                  position="top"
+                  fontSize={10}
+                  fontWeight={600}
+                  fill="var(--destructive)"
+                  formatter={(v: unknown) =>
+                    formatCompactBRL(typeof v === "number" ? v : 0)
+                  }
+                />
+              </Bar>
             )}
             {isVisible("Lucro") && (
               <Bar
@@ -307,15 +368,18 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 fill="#15803d"
                 radius={[4, 4, 0, 0]}
                 opacity={0.9}
-                label={{
-                  position: "top",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  fill: "#15803d",
-                  formatter: (v: unknown) =>
-                    formatCompactBRL(typeof v === "number" ? v : 0),
-                }}
-              />
+              >
+                <LabelList
+                  dataKey="Lucro"
+                  position="top"
+                  fontSize={10}
+                  fontWeight={600}
+                  fill="#15803d"
+                  formatter={(v: unknown) =>
+                    formatCompactBRL(typeof v === "number" ? v : 0)
+                  }
+                />
+              </Bar>
             )}
           </BarChart>
         </ResponsiveContainer>
