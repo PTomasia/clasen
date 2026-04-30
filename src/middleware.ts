@@ -23,19 +23,18 @@ export function middleware(req: NextRequest) {
   // Em dev local, libera (permite desenvolvimento sem precisar setar credenciais).
   if (!expectedUser || !expectedPass) {
     if (process.env.NODE_ENV !== "development") {
-      // Diagnóstico: lista nomes de env vars com possíveis prefixos relacionados
-      // à auth (sem expor valores). Pega quem começa com A, P, U pra detectar
-      // typos como ADD_, AP_, PASSWORD_, USERNAME_, etc.
-      const candidates = Object.keys(process.env)
-        .filter((k) => /^[APUL]/i.test(k) && k.length >= 3 && k.length <= 40)
-        .filter((k) => !/^(API_|AWS_|AUTH0|ANTHROPIC|ANALYTICS)/i.test(k))
+      // Diagnóstico: confirma se TURSO_* existe neste contexto. Se sim, é só typo
+      // ou problema com APP_*. Se TURSO_* tb não aparece, é problema de runtime
+      // (middleware em sandbox isolado).
+      const turso = Object.keys(process.env)
+        .filter((k) => k.startsWith("TURSO_"))
         .sort()
         .map((k) => `"${k}"`)
         .join(", ");
-      // Total de env vars visíveis pra confirmar que process.env tem conteúdo
       const total = Object.keys(process.env).length;
+      const sample = Object.keys(process.env).sort().slice(0, 30).join(", ");
       return new NextResponse(
-        `Server misconfigured: APP_USERNAME=${expectedUser ? "set" : "missing"} APP_PASSWORD=${expectedPass ? "set" : "missing"}. Total env vars: ${total}. Candidatas com nome começando A/P/U/L: [${candidates || "none"}]`,
+        `Server misconfigured: APP_USERNAME=${expectedUser ? "set" : "missing"} APP_PASSWORD=${expectedPass ? "set" : "missing"}. Total: ${total}. TURSO_* visíveis: [${turso || "none"}]. Primeiras 30 keys: ${sample}`,
         { status: 500 }
       );
     }
