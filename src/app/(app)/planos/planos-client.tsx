@@ -515,14 +515,15 @@ export function PlanosClient({
             totalPlanos={activePlans.length}
             postsConteudo={postsAtuais.conteudo}
             postsTrafego={postsAtuais.trafego}
-            potencial={
-              targetCostPerPost && potentialDelta > 0
-                ? { total: potentialTotal, deltaPct: potentialDeltaPct }
-                : null
-            }
-            vencidos={
+            reajustes={
               targetCostPerPost && overdueAdjustments.length > 0
-                ? { count: overdueAdjustments.length, total: overdueTotal }
+                ? {
+                    count: overdueAdjustments.length,
+                    receitaComVencidos: overdueTotal,
+                    deltaVencidos: overdueDelta,
+                    deltaVencidosPct: overdueDeltaPct,
+                    receitaSeTodos: potentialDelta > 0 ? potentialTotal : null,
+                  }
                 : null
             }
             custoPostMedio={custoPostMedio}
@@ -1042,8 +1043,7 @@ function PlanosHeroCard({
   totalPlanos,
   postsConteudo,
   postsTrafego,
-  potencial,
-  vencidos,
+  reajustes,
   custoPostMedio,
   targetCostPerPost,
   onEditTarget,
@@ -1052,37 +1052,51 @@ function PlanosHeroCard({
   totalPlanos: number;
   postsConteudo: number;
   postsTrafego: number;
-  potencial: { total: number; deltaPct: number } | null;
-  vencidos: { count: number; total: number } | null;
+  reajustes: {
+    count: number;
+    receitaComVencidos: number;
+    deltaVencidos: number;
+    deltaVencidosPct: number;
+    receitaSeTodos: number | null;
+  } | null;
   custoPostMedio: number | null;
   targetCostPerPost: number | null;
   onEditTarget: () => void;
 }) {
   const stats: Array<{ key: string; node: React.ReactNode }> = [];
 
-  if (potencial) {
+  if (reajustes) {
     stats.push({
-      key: "potencial",
+      key: "reajustes",
       node: (
-        <StatColumn
-          label="c/ reajustes"
-          value={formatBRL(potencial.total)}
-          sub={`+${potencial.deltaPct.toFixed(1)}%`}
-          tone="primary"
-        />
-      ),
-    });
-  }
-  if (vencidos) {
-    stats.push({
-      key: "vencidos",
-      node: (
-        <StatColumn
-          label="vencidos"
-          value={String(vencidos.count)}
-          sub={formatBRL(vencidos.total)}
-          tone="accent"
-        />
+        <div className="flex flex-col gap-1 text-left">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground flex items-center gap-1.5">
+            Reajustes vencidos
+            <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 rounded bg-accent/15 text-accent text-[9px] font-mono font-bold tabular-nums">
+              {reajustes.count}
+            </span>
+          </p>
+          <p
+            className="text-xl leading-none tracking-tight font-medium tabular-nums text-accent"
+            style={{ fontFamily: "var(--font-heading), serif" }}
+            title={`Receita mensal se aplicar os ${reajustes.count} reajustes vencidos hoje`}
+          >
+            {formatBRL(reajustes.receitaComVencidos)}
+          </p>
+          <p className="text-[10px] text-accent/80 tabular-nums">
+            +{formatBRL(reajustes.deltaVencidos)} (+
+            {reajustes.deltaVencidosPct.toFixed(1)}%)
+          </p>
+          {reajustes.receitaSeTodos !== null &&
+            reajustes.receitaSeTodos > reajustes.receitaComVencidos && (
+              <p
+                className="text-[10px] text-muted-foreground tabular-nums"
+                title="Receita se aplicar reajuste em todos os planos com sugestão (≥1 mês)"
+              >
+                Todos: {formatBRL(reajustes.receitaSeTodos)}
+              </p>
+            )}
+        </div>
       ),
     });
   }
@@ -1127,7 +1141,7 @@ function PlanosHeroCard({
   return (
     <div className="bg-card border rounded-xl p-7 md:p-8 h-full flex flex-col">
       {/* Hero */}
-      <div>
+      <div className="flex-1 flex flex-col justify-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Receita mensal
         </p>
@@ -1148,7 +1162,7 @@ function PlanosHeroCard({
       </div>
 
       {/* Stats row */}
-      <div className="mt-6 pt-5 border-t flex-1 flex items-end">
+      <div className="mt-6 pt-5 border-t">
         <div className={cn("grid w-full divide-x", colsClass)}>
           {stats.map((s, i) => (
             <div
