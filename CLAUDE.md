@@ -49,9 +49,17 @@ A app está protegida por HTTP Basic Auth no `src/middleware.ts`. Credenciais s�
 
 A senha nunca é versionada — só o hash PBKDF2-SHA256 (100k iterations) e o salt random ficam no código. Senha forte (24 chars random) + PBKDF2 = inviável de quebrar mesmo com repo público.
 
-### Rate limiting
+### Defesa contra brute force
 
-Tentativas erradas são limitadas a 10 por IP em janela de 15 min. Após estourar, IP fica bloqueado por 15 min (resposta `429 Too Many Requests`). Estado em memória — reseta em cold start da função Vercel (aceitável pra 1 usuário; se virar multiusuário, migrar pra Upstash KV).
+**Sem rate limiting explícito** — testamos in-memory Map mas não funciona em serverless multi-instance do Vercel (cada instância tem seu próprio Map, atacante "pula" entre instâncias).
+
+A defesa real vem de duas camadas combinadas:
+
+1. **PBKDF2 100k iterations**: cada verificação de senha custa ~100ms de CPU server-side. Naturalmente limita atacante a ~10 tentativas/seg/instância.
+
+2. **Senha forte (24 chars random, ~144 bits entropia)**: gerada via `crypto.randomBytes(18).toString('base64')`. Mesmo se atacante paralelizar em 1000 instâncias do Vercel (1 milhão tentativas/seg total), brute force levaria ~10^28 segundos (idade do universo é ~10^17 segundos).
+
+Conclusão prática: senha é matematicamente inquebrável. Se um dia a app virar multiusuário, aí sim implementar rate limit via Upstash KV (compartilhado entre instâncias).
 
 **Layer pattern** (strict, no skipping layers):
 ```
