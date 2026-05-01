@@ -29,6 +29,30 @@ npm run db:studio    # Open Drizzle Studio
 
 **Stack**: Next.js App Router (no API routes — Server Actions only) + Turso (SQLite cloud) + Drizzle ORM + Tailwind CSS v4 + shadcn/ui.
 
+## Auth (Basic Auth via middleware)
+
+A app está protegida por HTTP Basic Auth no `src/middleware.ts`. Credenciais são hardcoded no código — env vars do Vercel não chegavam ao runtime do middleware nesse projeto (descoberto via debug em maio/2026; histórico nos comentários do middleware).
+
+### Como trocar a senha
+
+1. Na pasta `clasen-adm/`:
+   ```
+   node scripts/generate-auth-hash.mjs
+   ```
+2. Digite a nova senha quando pedir (vai aparecer na tela).
+3. O script imprime duas linhas:
+   - `const AUTH_SALT_HEX = "..."`
+   - `const AUTH_HASH_HEX = "..."`
+4. Cole substituindo as constantes correspondentes em `src/middleware.ts`.
+5. Limpe o terminal (`cls` no Windows) pra senha não ficar em scrollback.
+6. Commit + push → Vercel deploya automático.
+
+A senha nunca é versionada — só o hash PBKDF2-SHA256 (100k iterations) e o salt random ficam no código. Senha forte (24 chars random) + PBKDF2 = inviável de quebrar mesmo com repo público.
+
+### Rate limiting
+
+Tentativas erradas são limitadas a 10 por IP em janela de 15 min. Após estourar, IP fica bloqueado por 15 min (resposta `429 Too Many Requests`). Estado em memória — reseta em cold start da função Vercel (aceitável pra 1 usuário; se virar multiusuário, migrar pra Upstash KV).
+
 **Layer pattern** (strict, no skipping layers):
 ```
 components (thin UI) → lib/actions/ (validation) → lib/services/ (business logic) → lib/queries/ (aggregation/reports) → lib/db/schema.ts
