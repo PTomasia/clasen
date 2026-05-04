@@ -14,9 +14,9 @@ import { NextRequest, NextResponse } from "next/server";
 //   3. Commit + push (Vercel deploya automático).
 
 const AUTH_USER = "pedro";
-const AUTH_SALT_HEX = "01950d4151fe78fed2ac08754a038d30";
+const AUTH_SALT_HEX = "52a23f9d4728ca989dce4d90919e50fa";
 const AUTH_HASH_HEX =
-  "467c970a7d0b3623f7742a0f63293258b0f00be08692a55c3716349654e7abbf";
+  "f3bf5b273af3a49810c3a73226c540b9a6f42010dfe4cc57811e5bcb4722755b";
 const AUTH_ITERATIONS = 100000;
 
 const UNAUTHORIZED_HEADERS = {
