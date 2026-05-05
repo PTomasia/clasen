@@ -16,6 +16,8 @@ import {
   calcularPermanenciaCliente,
   calcularTotalPostsEquivalentes,
 } from "../utils/calculations";
+import { calculateGapsForPlan } from "../services/plans";
+import { getSetting } from "../services/settings";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,7 @@ export interface AtrasadoRow {
   nextPaymentDate: string;
   diasAtraso: number;
   billingCycleDays: number | null;
+  gapsCount: number; // quantos meses anteriores em aberto
 }
 
 export interface UpcomingRow {
@@ -84,13 +87,24 @@ export async function getDashboardData(): Promise<DashboardData> {
   const now = new Date();
 
   // Buscar tudo de uma vez
-  const [allPlans, allClients, allPayments] = await Promise.all([
+  const [allPlans, allClients, allPayments, earliestTrackedRaw] = await Promise.all([
     db.select().from(schema.subscriptionPlans).all(),
     db.select().from(schema.clients).all(),
     db.select().from(schema.planPayments).all(),
+    getSetting(db, "earliest_tracked_month"),
   ]);
 
   const clientMap = new Map(allClients.map((c) => [c.id, c]));
+  const minDate = earliestTrackedRaw ? `${earliestTrackedRaw}-01` : undefined;
+
+  // Agrupa pagamentos por planId — usado em cálculo de gaps abaixo.
+  const paymentsByPlan = new Map<number, Array<{ paymentDate: string; skipped: boolean }>>();
+  for (const p of allPayments) {
+    const arr = paymentsByPlan.get(p.planId);
+    const entry = { paymentDate: p.paymentDate, skipped: p.skipped };
+    if (arr) arr.push(entry);
+    else paymentsByPlan.set(p.planId, [entry]);
+  }
 
   // ─── Planos ativos ─────────────────────────────────────────────────
   const activePlans = allPlans.filter((p) => p.status === "ativo" && !p.endDate);
@@ -177,22 +191,33 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
 
   // ─── Atrasados ─────────────────────────────────────────────────────
+  // Considera atraso por gap (mês anterior em aberto) OU nextPaymentDate vencido.
+  // Sem isso, registrar pagamento do mês mais recente "limpa" o status mesmo
+  // com meses anteriores ainda em aberto (bug Gabriele).
   const atrasados: AtrasadoRow[] = activePlans
-    .filter((p) => p.nextPaymentDate && p.nextPaymentDate < today)
     .map((p) => {
-      const client = clientMap.get(p.clientId);
-      const diasAtraso = differenceInCalendarDays(
-        now,
-        parseISO(p.nextPaymentDate!)
-      );
+      const planPayments = paymentsByPlan.get(p.id) ?? [];
+      const gaps = calculateGapsForPlan(p, planPayments, today, minDate);
+      return { plan: p, gaps };
+    })
+    .filter(({ plan, gaps }) => {
+      if (gaps.length > 0) return true;
+      return !!plan.nextPaymentDate && plan.nextPaymentDate < today;
+    })
+    .map(({ plan, gaps }) => {
+      const client = clientMap.get(plan.clientId);
+      // Se há gaps, o "atraso" começa no primeiro gap; senão no nextPaymentDate.
+      const referenceDate = gaps[0] ?? plan.nextPaymentDate!;
+      const diasAtraso = differenceInCalendarDays(now, parseISO(referenceDate));
       return {
-        planId: p.id,
+        planId: plan.id,
         clientName: client?.name ?? "—",
-        planType: p.planType,
-        planValue: p.planValue,
-        nextPaymentDate: p.nextPaymentDate!,
+        planType: plan.planType,
+        planValue: plan.planValue,
+        nextPaymentDate: plan.nextPaymentDate ?? referenceDate,
         diasAtraso,
-        billingCycleDays: p.billingCycleDays ?? null,
+        billingCycleDays: plan.billingCycleDays ?? null,
+        gapsCount: gaps.length,
       };
     })
     .sort((a, b) => b.diasAtraso - a.diasAtraso);

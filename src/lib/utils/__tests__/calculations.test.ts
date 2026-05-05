@@ -239,6 +239,24 @@ describe("calcularStatusPagamento", () => {
   it("sem_pagamento quando undefined", () => {
     expect(calcularStatusPagamento(undefined)).toBe("sem_pagamento");
   });
+
+  it("em_dia quando data futura e gapsCount=0", () => {
+    expect(calcularStatusPagamento("2026-04-15", 0)).toBe("em_dia");
+  });
+
+  it("atrasado quando data futura mas gapsCount > 0 (caso Gabriele)", () => {
+    // Pagamento mais recente registrado → next_payment futuro,
+    // mas ainda há gaps de meses anteriores em aberto.
+    expect(calcularStatusPagamento("2026-04-15", 3)).toBe("atrasado");
+  });
+
+  it("atrasado quando data passada e gapsCount > 0", () => {
+    expect(calcularStatusPagamento("2026-03-01", 5)).toBe("atrasado");
+  });
+
+  it("sem_pagamento ignora gapsCount quando next_payment_date é null", () => {
+    expect(calcularStatusPagamento(null, 4)).toBe("sem_pagamento");
+  });
 });
 
 // ─── Mediana ───────────────────────────────────────────────────────────────────

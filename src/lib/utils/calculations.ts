@@ -50,9 +50,16 @@ export function calcularPermanencia(
 export type StatusPagamento = "em_dia" | "atrasado" | "sem_pagamento";
 
 export function calcularStatusPagamento(
-  nextPaymentDate: string | null | undefined
+  nextPaymentDate: string | null | undefined,
+  gapsCount?: number
 ): StatusPagamento {
   if (!nextPaymentDate) return "sem_pagamento";
+
+  // Se há meses anteriores em aberto, o cliente ainda está atrasado mesmo que
+  // o próximo vencimento seja futuro. Sem essa checagem, registrar pagamento
+  // do mês mais recente (sem fechar os anteriores) marcaria como "em_dia"
+  // incorretamente.
+  if (gapsCount && gapsCount > 0) return "atrasado";
 
   // Comparar strings ISO diretamente (YYYY-MM-DD é lexicograficamente ordenável)
   // Evita problemas de timezone com Date objects

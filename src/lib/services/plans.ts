@@ -714,13 +714,24 @@ export async function getActualLastPayment(
     .where(eq(schema.planPayments.planId, planId))
     .all();
 
-  const realPayments = payments.filter((p: { skipped: boolean }) => !p.skipped);
-  if (realPayments.length === 0) return null;
+  return findLastPaymentDate(payments);
+}
 
-  realPayments.sort((a: { paymentDate: string }, b: { paymentDate: string }) =>
-    a.paymentDate < b.paymentDate ? 1 : -1
-  );
-  return realPayments[0].paymentDate;
+// ─── findLastPaymentDate (pura) ───────────────────────────────────────────────
+// Versão pura de getActualLastPayment: recebe os payments já carregados em
+// memória. Usada quando se carrega plan_payments em batch (ex: getAllPlans).
+
+export function findLastPaymentDate(
+  payments: ReadonlyArray<{ paymentDate: string; skipped: boolean }>
+): string | null {
+  let latest: string | null = null;
+  for (const p of payments) {
+    if (p.skipped) continue;
+    if (latest === null || p.paymentDate > latest) {
+      latest = p.paymentDate;
+    }
+  }
+  return latest;
 }
 
 // ─── Helpers privados de getPaymentGaps ───────────────────────────────────────
@@ -825,7 +836,6 @@ export async function getPaymentGaps(
     .get();
 
   if (!plan) throw new Error("plano não encontrado");
-  if (!plan.billingCycleDays) return [];
 
   const payments = await db
     .select()
@@ -833,40 +843,59 @@ export async function getPaymentGaps(
     .where(eq(schema.planPayments.planId, planId))
     .all();
 
-  const start = parseISO(plan.startDate);
-  const effectiveEnd = plan.endDate && plan.endDate < referenceDate
-    ? parseISO(plan.endDate)
-    : parseISO(referenceDate);
+  return calculateGapsForPlan(plan, payments, referenceDate, minDate);
+}
 
-  const gaps: string[] = [];
+// ─── calculateGapsForPlan (pura) ──────────────────────────────────────────────
+// Versão pura de getPaymentGaps: recebe plano + payments já carregados.
+// Permite eliminar N+1 quando se carrega plan_payments em batch.
+
+export interface PlanForGaps {
+  startDate: string;
+  endDate: string | null;
+  billingCycleDays: number | null;
+  billingCycleDays2: number | null;
+}
+
+export function calculateGapsForPlan(
+  plan: PlanForGaps,
+  payments: ReadonlyArray<GapPayment>,
+  referenceDate: string = format(new Date(), "yyyy-MM-dd"),
+  minDate?: string
+): string[] {
+  if (!plan.billingCycleDays) return [];
+
+  const start = parseISO(plan.startDate);
+  const effectiveEnd =
+    plan.endDate && plan.endDate < referenceDate
+      ? parseISO(plan.endDate)
+      : parseISO(referenceDate);
+
   let cursor = addMonths(start, 1);
 
-  // Aplicar cutoff histórico: se minDate for fornecido, começar do mês máximo entre o plano e minDate
+  // Aplicar cutoff histórico: começar do máximo entre o plano e minDate
   if (minDate) {
-    const minDateParsed = parseISO(minDate);
-    const minDateCursor = addMonths(minDateParsed, 0); // mesmo mês que minDate
+    const minDateCursor = parseISO(minDate);
     if (minDateCursor > cursor) {
       cursor = minDateCursor;
     }
   }
 
   if (plan.billingCycleDays2) {
-    gaps.push(
-      ...gapsForDoubleBilling(
-        cursor,
-        effectiveEnd,
-        plan.billingCycleDays,
-        plan.billingCycleDays2,
-        payments
-      )
-    );
-  } else {
-    gaps.push(
-      ...gapsForSingleBilling(cursor, effectiveEnd, plan.billingCycleDays, payments)
+    return gapsForDoubleBilling(
+      cursor,
+      effectiveEnd,
+      plan.billingCycleDays,
+      plan.billingCycleDays2,
+      payments
     );
   }
-
-  return gaps;
+  return gapsForSingleBilling(
+    cursor,
+    effectiveEnd,
+    plan.billingCycleDays,
+    payments
+  );
 }
 
 // ─── skipPaymentMonth ─────────────────────────────────────────────────────────

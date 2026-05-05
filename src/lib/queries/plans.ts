@@ -8,96 +8,115 @@ import {
   calcularStatusPagamento,
 } from "../utils/calculations";
 import { calcularProximoReajuste, calcularSugestaoReajuste } from "../utils/adjustments";
-import { getActualLastPayment, getPaymentGaps } from "../services/plans";
+import {
+  calculateGapsForPlan,
+  findLastPaymentDate,
+} from "../services/plans";
 import { getSetting, TARGET_COST_PER_POST_KEY } from "../services/settings";
 
 // ─── Queries — leitura pura, usáveis em Server Components ──────────────────────
 
 export async function getAllPlans() {
-  const plans = await db
-    .select({
-      plan: schema.subscriptionPlans,
-      clientName: schema.clients.name,
-      clientContactOrigin: schema.clients.contactOrigin,
-      clientNotes: schema.clients.notes,
-      clientSince: schema.clients.clientSince,
-    })
-    .from(schema.subscriptionPlans)
-    .innerJoin(
-      schema.clients,
-      eq(schema.subscriptionPlans.clientId, schema.clients.id)
-    )
-    .orderBy(desc(schema.subscriptionPlans.createdAt));
+  // Carrega tudo em batch (3 queries fixas, em paralelo). Antes do refactor:
+  // por plano fazíamos 2 queries (getPaymentGaps + getActualLastPayment) → com
+  // 29 planos virava ~58 roundtrips ao Turso (~10s do Brasil). Agora: 3.
+  const [plans, allPayments, targetRaw, earliestTrackedRaw] = await Promise.all([
+    db
+      .select({
+        plan: schema.subscriptionPlans,
+        clientName: schema.clients.name,
+        clientContactOrigin: schema.clients.contactOrigin,
+        clientNotes: schema.clients.notes,
+        clientSince: schema.clients.clientSince,
+      })
+      .from(schema.subscriptionPlans)
+      .innerJoin(
+        schema.clients,
+        eq(schema.subscriptionPlans.clientId, schema.clients.id)
+      )
+      .orderBy(desc(schema.subscriptionPlans.createdAt)),
+    db
+      .select({
+        planId: schema.planPayments.planId,
+        paymentDate: schema.planPayments.paymentDate,
+        skipped: schema.planPayments.skipped,
+      })
+      .from(schema.planPayments)
+      .all(),
+    getSetting(db, TARGET_COST_PER_POST_KEY),
+    getSetting(db, "earliest_tracked_month"),
+  ]);
 
-  // Buscar preço-alvo para cálculo de sugestão de reajuste
-  const targetRaw = await getSetting(db as any, TARGET_COST_PER_POST_KEY);
   const targetCostPerPost = targetRaw ? Number(targetRaw) : null;
-
-  // Ler earliest_tracked_month UMA VEZ para aplicar cutoff histórico
-  const earliestTrackedRaw = await getSetting(db as any, "earliest_tracked_month");
   const minDate = earliestTrackedRaw ? `${earliestTrackedRaw}-01` : undefined;
 
-  const enriched = await Promise.all(
-    plans.map(async ({ plan, clientName, clientContactOrigin, clientNotes, clientSince }) => {
-      const gaps = await getPaymentGaps(db as any, plan.id, undefined, minDate);
+  // Agrupa pagamentos por planId — uma só vez, em memória.
+  const paymentsByPlan = new Map<number, Array<{ paymentDate: string; skipped: boolean }>>();
+  for (const p of allPayments) {
+    const arr = paymentsByPlan.get(p.planId);
+    const entry = { paymentDate: p.paymentDate, skipped: p.skipped };
+    if (arr) arr.push(entry);
+    else paymentsByPlan.set(p.planId, [entry]);
+  }
 
-      // Fonte da verdade para datas de pagamento: plan_payments.
-      // subscription_plans.last_payment_date pode estar dessincronizado se houve
-      // inserção direta na tabela (via Drizzle Studio, scripts, etc.).
-      const actualLastPayment = await getActualLastPayment(db as any, plan.id);
-      const effectiveLastPayment = actualLastPayment ?? plan.lastPaymentDate;
-      const effectiveNextPayment =
-        effectiveLastPayment && plan.billingCycleDays
-          ? calcularProximoVencimento(
-              effectiveLastPayment,
-              plan.billingCycleDays,
-              plan.billingCycleDays2
-            )
-          : plan.nextPaymentDate;
+  return plans.map(({ plan, clientName, clientContactOrigin, clientNotes, clientSince }) => {
+    const planPayments = paymentsByPlan.get(plan.id) ?? [];
+    const gaps = calculateGapsForPlan(plan, planPayments, undefined, minDate);
 
-      // Reajuste: só para planos ativos
-      const nextAdjustmentDate =
-        plan.status === "ativo"
-          ? calcularProximoReajuste(plan.startDate, plan.lastAdjustmentDate)
-          : null;
+    // Fonte da verdade para datas de pagamento: plan_payments.
+    // subscription_plans.last_payment_date pode estar dessincronizado se houve
+    // inserção direta na tabela (via Drizzle Studio, scripts, etc.).
+    const actualLastPayment = findLastPaymentDate(planPayments);
+    const effectiveLastPayment = actualLastPayment ?? plan.lastPaymentDate;
+    const effectiveNextPayment =
+      effectiveLastPayment && plan.billingCycleDays
+        ? calcularProximoVencimento(
+            effectiveLastPayment,
+            plan.billingCycleDays,
+            plan.billingCycleDays2
+          )
+        : plan.nextPaymentDate;
 
-      const adjustmentSuggestion =
-        plan.status === "ativo" && targetCostPerPost
-          ? calcularSugestaoReajuste({
-              planValue: plan.planValue,
-              postsCarrossel: plan.postsCarrossel,
-              postsReels: plan.postsReels,
-              postsEstatico: plan.postsEstatico,
-              targetCostPerPost,
-            })
-          : null;
+    // Reajuste: só para planos ativos
+    const nextAdjustmentDate =
+      plan.status === "ativo"
+        ? calcularProximoReajuste(plan.startDate, plan.lastAdjustmentDate)
+        : null;
 
-      return {
-        ...plan,
-        lastPaymentDate: effectiveLastPayment,
-        nextPaymentDate: effectiveNextPayment,
-        clientName,
-        clientContactOrigin,
-        clientNotes,
-        clientSince,
-        custoPost: calcularCustoPost({
-          valor: plan.planValue,
-          carrossel: plan.postsCarrossel,
-          reels: plan.postsReels,
-          estatico: plan.postsEstatico,
-          trafego: plan.postsTrafego,
-        }),
-        permanencia: calcularPermanencia(plan.startDate, plan.endDate),
-        statusPagamento: calcularStatusPagamento(effectiveNextPayment),
-        gapsCount: gaps.length,
-        gapMonths: gaps,
-        nextAdjustmentDate,
-        adjustmentSuggestion,
-      };
-    })
-  );
+    const adjustmentSuggestion =
+      plan.status === "ativo" && targetCostPerPost
+        ? calcularSugestaoReajuste({
+            planValue: plan.planValue,
+            postsCarrossel: plan.postsCarrossel,
+            postsReels: plan.postsReels,
+            postsEstatico: plan.postsEstatico,
+            targetCostPerPost,
+          })
+        : null;
 
-  return enriched;
+    return {
+      ...plan,
+      lastPaymentDate: effectiveLastPayment,
+      nextPaymentDate: effectiveNextPayment,
+      clientName,
+      clientContactOrigin,
+      clientNotes,
+      clientSince,
+      custoPost: calcularCustoPost({
+        valor: plan.planValue,
+        carrossel: plan.postsCarrossel,
+        reels: plan.postsReels,
+        estatico: plan.postsEstatico,
+        trafego: plan.postsTrafego,
+      }),
+      permanencia: calcularPermanencia(plan.startDate, plan.endDate),
+      statusPagamento: calcularStatusPagamento(effectiveNextPayment, gaps.length),
+      gapsCount: gaps.length,
+      gapMonths: gaps,
+      nextAdjustmentDate,
+      adjustmentSuggestion,
+    };
+  });
 }
 
 export async function getClientsList() {
