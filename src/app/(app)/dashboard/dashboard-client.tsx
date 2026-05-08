@@ -352,6 +352,11 @@ export function DashboardClient({
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 lg:h-full auto-rows-fr">
           <KPICard
+            label="Ticket médio"
+            value={formatBRL(data.ticketMedio)}
+            sub="MRR por cliente ativo"
+          />
+          <KPICard
             label="LTV médio"
             value={formatBRL(unit.totals.ltvMedio)}
             sub={
