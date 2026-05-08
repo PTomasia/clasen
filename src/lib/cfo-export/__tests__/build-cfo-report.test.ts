@@ -186,16 +186,18 @@ function buildInput() {
 }
 
 describe("buildCfoReportMarkdown", () => {
-  it("inclui cabeçalho com data formatada e contexto da Clasen", () => {
+  it("inclui cabeçalho com data formatada e contexto da Clasen + competência/caixa", () => {
     const md = buildCfoReportMarkdown(buildInput());
     expect(md).toContain("# Relatório Financeiro — Clasen Studio");
     expect(md).toContain("**Gerado em**: 04/05/2026 14:32");
     expect(md).toContain("agência de marketing digital para psicólogas");
+    expect(md).toContain("competência/MRR");
+    expect(md).toContain("caixa");
   });
 
   it("seção 1: lista apenas planos ativos com reajuste e MRR total", () => {
     const md = buildCfoReportMarkdown(buildInput());
-    expect(md).toContain("## 1. Receita Recorrente Ativa");
+    expect(md).toContain("## 1. Receita Recorrente Ativa (competência)");
     expect(md).toContain("| Ana Souza | Essential | R$ 1.200,00 | R$ 1.500,00 |");
     expect(md).toContain("| Bia Lima | Personalizado | R$ 2.000,00 | — |");
     expect(md).not.toContain("Cris Velha"); // cancelado: não aparece
@@ -211,50 +213,89 @@ describe("buildCfoReportMarkdown", () => {
     expect(md).toContain("| Ana Souza | R$ 1.200,00 | R$ 1.500,00 | R$ 300,00 | 25.00% | sim |");
   });
 
-  it("seção 3: receitas avulsas só dos últimos 3 meses", () => {
+  it("seção 3: receitas avulsas com totais separados competência/caixa", () => {
     const md = buildCfoReportMarkdown(buildInput());
     expect(md).toContain("## 3. Receitas Avulsas");
     expect(md).toContain("Carrossel avulso (Instagram)");
     expect(md).toContain("PDF");
     expect(md).not.toContain("Antigo"); // 2025-12 fora da janela
-    expect(md).toContain("**Total pago (3m)**: R$ 350,00");
+    expect(md).toContain("**Total contratado/competência (3m)**: R$ 950,00");
+    expect(md).toContain("**Recebido/caixa**: R$ 350,00");
     expect(md).toContain("**Pendente**: R$ 600,00");
   });
 
-  it("seção 4: despesas com tipo correto (recorrente / parcela / pontual)", () => {
+  it("seção 4: despesas com tipo correto + totais competência/caixa", () => {
     const md = buildCfoReportMarkdown(buildInput());
     expect(md).toContain("## 4. Despesas");
     expect(md).toContain("| Mai/2026 | fixo | Designer | R$ 2.500,00 | recorrente | sim |");
     expect(md).toContain("| Mai/2026 | variável | Anúncios Google | R$ 800,00 | pontual | não |");
     expect(md).toContain("| Abr/2026 | fixo | Computador novo | R$ 300,00 | parcela 3/12 | sim |");
+    expect(md).toContain("**Total competência (3m)**: R$ 3.600,00");
+    expect(md).toContain("**Pago/caixa**: R$ 2.800,00");
   });
 
-  it("seção 5: DRE 12 meses com tributos a 6% e pró-labore quando há atividade", () => {
+  it("seção 5: DRE últimos 3 meses (caixa, não 12)", () => {
     const md = buildCfoReportMarkdown(buildInput());
-    expect(md).toContain("## 5. DRE Mensal Simples (12 meses)");
+    expect(md).toContain("## 5. DRE Últimos 3 Meses (regime caixa)");
     // Mai/26: receita 3550 (3200 recorr + 350 avulsa), tributos 213, despesas 2500, proLab 15000, resultado -14163
     expect(md).toMatch(/\| Mai\/26 \| R\$ 3\.200,00 \| R\$ 350,00 \| R\$ 3\.550,00 \| R\$ 213,00 \| R\$ 2\.500,00 \| R\$ 15\.000,00 \| -R\$ 14\.163,00 \|/);
+    // Não deve incluir meses anteriores (Jan, Fev) — só os 3 últimos.
+    expect(md).not.toContain("| Jan/26 |");
+    expect(md).not.toContain("| Fev/26 |");
   });
 
-  it("seção 6: respostas-chave com receita, saída, sobra, breakeven e gap", () => {
+  it("seção 6: 3 cenários com Atual / Pós-reajuste / Meta", () => {
     const md = buildCfoReportMarkdown(buildInput());
-    expect(md).toContain("## 6. Respostas-chave");
-    expect(md).toContain("**Receita do mês corrente (Mai/26)**: R$ 3.550,00");
-    expect(md).toContain("**Saída total do mês**: R$ 17.713,00 (despesas R$ 2.500,00 + tributos R$ 213,00 + pró-labore R$ 15.000,00)");
-    expect(md).toContain("(déficit)"); // sobra negativa
-    expect(md).toContain("**Ponto de equilíbrio mensal**:");
-    expect(md).toContain("**Gap até meta de R$ 40.000,00**: faltam R$ 36.450,00");
-    expect(md).toContain("clientes ao ticket médio atual de R$ 1.600,00");
-    expect(md).toContain("**Reserva PJ alvo (2 meses de custo fixo)**:");
+    expect(md).toContain("## 6. DRE — 3 Cenários (regime competência)");
+    expect(md).toContain("| Linha | Atual (MRR) | Pós-reajuste | Meta R$ 40k |");
+    // Receita bruta dos 3 cenários:
+    // Atual MRR = 3200, Pós-reajuste = 3500, Meta = 40000
+    expect(md).toContain("| Receita bruta | R$ 3.200,00 | R$ 3.500,00 | R$ 40.000,00 |");
+    // Tributos: 192, 210, 2400
+    expect(md).toContain("| Tributos (6%) | R$ 192,00 | R$ 210,00 | R$ 2.400,00 |");
+    // Despesas planejadas fixas (5810) iguais nos 3 cenários
+    expect(md).toContain("| Despesas operacionais fixas | R$ 5.810,00 | R$ 5.810,00 | R$ 5.810,00 |");
+    expect(md).toContain("Pró-labore | R$ 15.000,00 | R$ 15.000,00 | R$ 15.000,00 |");
+    // Resultado meta: 40000 - 2400 - 15000 - 5810 = 16790
+    expect(md).toContain("| **Resultado gerencial** | -R$ 17.802,00 | -R$ 17.520,00 | R$ 16.790,00 |");
   });
 
-  it("rodapé inclui parâmetros usados", () => {
+  it("seção 7: resumo executivo com 7 itens estruturados", () => {
+    const md = buildCfoReportMarkdown(buildInput());
+    expect(md).toContain("## 7. Resumo Executivo (gestão)");
+    expect(md).toContain("- **MRR atual**: R$ 3.200,00");
+    expect(md).toContain("- **MRR pós-reajuste**: R$ 3.500,00");
+    expect(md).toContain("- **Diferença dos reajustes**: R$ 300,00");
+    // Breakeven planejado = (5810 + 15000) / 0.94 = 22138.30
+    expect(md).toContain("**Ponto de equilíbrio gerencial**: R$ 22.138,30");
+    // Respiro = 22138.30 × 1.2 = 26565.96
+    expect(md).toContain("**Receita mínima de respiro**: R$ 26.565,96");
+    // Gap atual: 40000 - 3200 = 36800; pós: 40000 - 3500 = 36500
+    expect(md).toContain("Com **MRR atual**: faltam R$ 36.800,00");
+    expect(md).toContain("Com **MRR pós-reajuste**: faltam R$ 36.500,00");
+    // Reserva: (5810 + 15000) × 2 = 41620
+    expect(md).toContain("**Reserva PJ alvo (2 meses de custo fixo)**: R$ 41.620,00");
+  });
+
+  it("seção 8: caixa do mês corrente em regime caixa", () => {
+    const md = buildCfoReportMarkdown(buildInput());
+    expect(md).toContain("## 8. Caixa do Mês Corrente");
+    expect(md).toContain("**Mês**: Mai/26");
+    expect(md).toContain("**Recebido (caixa)**: R$ 3.550,00");
+    expect(md).toContain("(déficit)");
+  });
+
+  it("rodapé inclui parâmetros e lista completa de despesas planejadas", () => {
     const md = buildCfoReportMarkdown(buildInput());
     expect(md).toContain("## Parâmetros usados");
     expect(md).toContain("Pró-labore mensal: R$ 15.000,00");
     expect(md).toContain("Tributo estimado: 6,00% da receita");
     expect(md).toContain("Meta de receita mensal: R$ 40.000,00");
-    expect(md).toContain("Designer R$ 2.500,00");
+    expect(md).toContain("Margem de respiro acima do breakeven: 20%");
+    expect(md).toContain("Despesas operacionais fixas planejadas (total R$ 5.810,00)");
+    expect(md).toContain("Bibo (design) R$ 2.500,00");
+    expect(md).toContain("Claude R$ 550,00");
+    expect(md).toContain("Capcut R$ 65,00");
   });
 
   it("não quebra com listas vazias (zero planos, zero avulsas, zero despesas)", () => {
@@ -275,5 +316,7 @@ describe("buildCfoReportMarkdown", () => {
     expect(md).toContain("_Nenhuma receita avulsa nos últimos 3 meses._");
     expect(md).toContain("_Nenhuma despesa nos últimos 3 meses._");
     expect(md).toContain("**MRR atual**: R$ 0,00");
+    // Mesmo sem planos, cenário Meta (R$ 40k) ainda renderiza no scenario table.
+    expect(md).toContain("| Receita bruta | R$ 0,00 | R$ 0,00 | R$ 40.000,00 |");
   });
 });

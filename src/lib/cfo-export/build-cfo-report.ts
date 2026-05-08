@@ -1,16 +1,25 @@
-import type { PnLData } from "../queries/profit-and-loss";
+import type { PnLData, PnLRow } from "../queries/profit-and-loss";
 import type { ExpenseRow } from "../services/expenses";
 import type { RevenueRow } from "../services/revenues";
 import { formatBRL, formatDate, formatMonth, formatPercentage } from "../utils/formatting";
 import {
-  calcAvgDespesas3m,
-  calcBreakeven,
-  calcDre12m,
+  calcBreakevenPlanejado,
+  calcCenario,
+  calcDreRow,
   calcGapToTarget,
   calcReajusteSummary,
+  calcReservaPj,
+  calcRespiro,
+  type CenarioResult,
   type PlanForReajuste,
+  type ReajusteSummary,
 } from "./calculations";
-import { FINANCIAL_PARAMS, type FinancialParams } from "./financial-params";
+import {
+  FINANCIAL_PARAMS,
+  PLANNED_FIXED_EXPENSES,
+  PLANNED_FIXED_EXPENSES_LABELS,
+  type FinancialParams,
+} from "./financial-params";
 import { formatDateTimeBR, mdHeader, mdTable } from "./format-utils";
 
 // ─── Tipo do plano consumido (subset do getAllPlans) ──────────────────────────
@@ -40,15 +49,19 @@ export interface BuildCfoReportInput {
 
 export function buildCfoReportMarkdown(input: BuildCfoReportInput): string {
   const params = input.params ?? FINANCIAL_PARAMS;
+  const reajustes = calcReajusteSummary(input.plans);
+
   const sections = [
     renderHeader(input.now),
     renderRecorrente(input.plans),
-    renderReajustes(input.plans),
+    renderReajustes(reajustes),
     renderAvulsas(input.revenues, input.now),
     renderDespesas(input.expenses, input.now),
-    renderDre(input.pnl, params),
-    renderRespostas(input, params),
-    renderParametros(input.pnl, params),
+    renderDre3m(input.pnl, params),
+    renderCenarios(reajustes, params),
+    renderResumoExecutivo(reajustes, input.plans, params),
+    renderCaixaMesCorrente(input.pnl, params),
+    renderParametros(params),
   ];
   return sections.filter(Boolean).join("\n\n");
 }
@@ -59,17 +72,20 @@ function renderHeader(now: Date): string {
   return [
     mdHeader(1, "Relatório Financeiro — Clasen Studio"),
     `**Gerado em**: ${formatDateTimeBR(now)}`,
-    "**Contexto**: Clasen Studio é uma agência de marketing digital para psicólogas. Modelo de receita: planos recorrentes mensais + receitas avulsas. A cobrança é mensal por cliente, no dia configurado em `billing_cycle_days`. As perguntas-chave que este relatório responde estão listadas no final.",
+    "**Contexto**: Clasen Studio é uma agência de marketing digital para psicólogas. Modelo de receita: planos recorrentes mensais + receitas avulsas. O relatório separa duas visões: **competência/MRR** (receita contratada, independente do recebimento) e **caixa** (valores efetivamente recebidos/pagos no mês). Use as duas para responder sobre saúde financeira (MRR) e fluxo do mês (caixa).",
   ].join("\n");
 }
 
-// ─── Seção 1: Receita Recorrente Ativa ────────────────────────────────────────
+// ─── Seção 1: Receita Recorrente Ativa (competência) ─────────────────────────
 
 function renderRecorrente(plans: PlanForCfoReport[]): string {
   const ativos = plans.filter((p) => p.status === "ativo" && p.endDate === null);
 
   if (ativos.length === 0) {
-    return [mdHeader(2, "1. Receita Recorrente Ativa"), "_Nenhum plano ativo._"].join("\n");
+    return [
+      mdHeader(2, "1. Receita Recorrente Ativa (competência)"),
+      "_Nenhum plano ativo._",
+    ].join("\n");
   }
 
   const rows: string[][] = [
@@ -106,7 +122,7 @@ function renderRecorrente(plans: PlanForCfoReport[]): string {
   const ticketMedio = mrr / ativos.length;
 
   return [
-    mdHeader(2, "1. Receita Recorrente Ativa"),
+    mdHeader(2, "1. Receita Recorrente Ativa (competência)"),
     mdTable(rows),
     "",
     `**TOTAL MRR (atual)**: ${formatBRL(mrr)} — ${ativos.length} planos ativos, ticket médio ${formatBRL(ticketMedio)}`,
@@ -121,8 +137,7 @@ function statusLabel(s: PlanForCfoReport["statusPagamento"]): string {
 
 // ─── Seção 2: Resumo de Reajustes ─────────────────────────────────────────────
 
-function renderReajustes(plans: PlanForCfoReport[]): string {
-  const summary = calcReajusteSummary(plans);
+function renderReajustes(summary: ReajusteSummary): string {
   const lines = [
     mdHeader(2, "2. Resumo de Reajustes"),
     `- **MRR atual**: ${formatBRL(summary.mrrAtual)}`,
@@ -152,7 +167,7 @@ function renderReajustes(plans: PlanForCfoReport[]): string {
   return lines.join("\n");
 }
 
-// ─── Seção 3: Receitas Avulsas (mês corrente + 2 anteriores) ──────────────────
+// ─── Seção 3: Receitas Avulsas (últimos 3 meses) ──────────────────────────────
 
 function renderAvulsas(revenues: RevenueRow[], now: Date): string {
   const cutoff = monthsAgo(now, 2); // YYYY-MM string
@@ -181,16 +196,17 @@ function renderAvulsas(revenues: RevenueRow[], now: Date): string {
   }
   lines.push(mdTable(rows));
 
-  const totalPago = recent.filter((r) => r.isPaid).reduce((s, r) => s + r.amount, 0);
-  const totalPendente = recent.filter((r) => !r.isPaid).reduce((s, r) => s + r.amount, 0);
+  const totalCompetencia = recent.reduce((s, r) => s + r.amount, 0);
+  const totalCaixa = recent.filter((r) => r.isPaid).reduce((s, r) => s + r.amount, 0);
+  const totalPendente = totalCompetencia - totalCaixa;
   lines.push(
     "",
-    `**Total pago (3m)**: ${formatBRL(totalPago)} • **Pendente**: ${formatBRL(totalPendente)}`
+    `**Total contratado/competência (3m)**: ${formatBRL(totalCompetencia)} • **Recebido/caixa**: ${formatBRL(totalCaixa)} • **Pendente**: ${formatBRL(totalPendente)}`
   );
   return lines.join("\n");
 }
 
-// ─── Seção 4: Despesas (mês corrente + 2 anteriores) ──────────────────────────
+// ─── Seção 4: Despesas (últimos 3 meses) ──────────────────────────────────────
 
 function renderDespesas(expenses: ExpenseRow[], now: Date): string {
   const cutoff = monthsAgo(now, 2);
@@ -223,19 +239,21 @@ function renderDespesas(expenses: ExpenseRow[], now: Date): string {
   }
   lines.push(mdTable(rows));
 
-  const totalPago = recent.filter((e) => e.isPaid).reduce((s, e) => s + e.amount, 0);
-  const totalPendente = recent.filter((e) => !e.isPaid).reduce((s, e) => s + e.amount, 0);
+  const totalCompetencia = recent.reduce((s, e) => s + e.amount, 0);
+  const totalCaixa = recent.filter((e) => e.isPaid).reduce((s, e) => s + e.amount, 0);
+  const totalPendente = totalCompetencia - totalCaixa;
   lines.push(
     "",
-    `**Total pago (3m)**: ${formatBRL(totalPago)} • **Pendente**: ${formatBRL(totalPendente)}`
+    `**Total competência (3m)**: ${formatBRL(totalCompetencia)} • **Pago/caixa**: ${formatBRL(totalCaixa)} • **Pendente**: ${formatBRL(totalPendente)}`
   );
   return lines.join("\n");
 }
 
-// ─── Seção 5: DRE 12 meses ────────────────────────────────────────────────────
+// ─── Seção 5: DRE Últimos 3 Meses (regime caixa) ─────────────────────────────
 
-function renderDre(pnl: PnLData, params: FinancialParams): string {
-  const dre = calcDre12m(pnl, params);
+function renderDre3m(pnl: PnLData, params: FinancialParams): string {
+  const last3 = pnl.rows.slice(-3);
+  const dre = last3.map((row) => calcDreRow(row, params));
   const rows: string[][] = [
     [
       "Mês",
@@ -261,52 +279,111 @@ function renderDre(pnl: PnLData, params: FinancialParams): string {
     ]);
   }
   return [
-    mdHeader(2, "5. DRE Mensal Simples (12 meses)"),
+    mdHeader(2, "5. DRE Últimos 3 Meses (regime caixa)"),
+    "_Receitas e despesas conforme efetivamente recebidas/pagas no mês. Mostra a tendência recente do fluxo._",
     mdTable(rows),
   ].join("\n");
 }
 
-// ─── Seção 6: Respostas-chave ────────────────────────────────────────────────
+// ─── Seção 6: 3 Cenários (regime competência) ────────────────────────────────
 
-function renderRespostas(input: BuildCfoReportInput, params: FinancialParams): string {
-  const currentRow = input.pnl.rows[input.pnl.rows.length - 1];
-  const ativos = input.plans.filter((p) => p.status === "ativo" && p.endDate === null);
-  const mrrAtivo = ativos.reduce((s, p) => s + p.planValue, 0);
-  const ticketMedio = ativos.length > 0 ? mrrAtivo / ativos.length : 0;
+function renderCenarios(
+  reajustes: ReajusteSummary,
+  params: FinancialParams
+): string {
+  const cenarios: CenarioResult[] = [
+    calcCenario("Atual (MRR)", reajustes.mrrAtual, params),
+    calcCenario("Pós-reajuste", reajustes.mrrPrevisto, params),
+    calcCenario("Meta R$ 40k", params.monthlyRevenueTarget, params),
+  ];
+
+  const rows: string[][] = [
+    ["Linha", ...cenarios.map((c) => c.label)],
+    ["Receita bruta", ...cenarios.map((c) => formatBRL(c.receitaBruta))],
+    [`Tributos (${(params.taxRate * 100).toFixed(0)}%)`, ...cenarios.map((c) => formatBRL(c.tributos))],
+    ["Pró-labore", ...cenarios.map((c) => formatBRL(c.proLabore))],
+    ["Despesas operacionais fixas", ...cenarios.map((c) => formatBRL(c.despesasFixas))],
+    ["**Saída total**", ...cenarios.map((c) => formatBRL(c.saidaTotal))],
+    ["**Resultado gerencial**", ...cenarios.map((c) => formatBRL(c.resultado))],
+    ["Margem final", ...cenarios.map((c) => formatPercentage(c.margem * 100))],
+    ["Sobra p/ reserva/reinvestimento", ...cenarios.map((c) => formatBRL(c.sobraReserva))],
+  ];
+
+  return [
+    mdHeader(2, "6. DRE — 3 Cenários (regime competência)"),
+    "_Receita = MRR contratado (independente de já ter sido recebido). Despesas = lista planejada (sem variáveis). Permite comparar saúde da empresa hoje, com reajustes aceitos, e na meta._",
+    mdTable(rows),
+  ].join("\n");
+}
+
+// ─── Seção 7: Resumo Executivo (gestão) ──────────────────────────────────────
+
+function renderResumoExecutivo(
+  reajustes: ReajusteSummary,
+  plans: PlanForCfoReport[],
+  params: FinancialParams
+): string {
+  const ativos = plans.filter((p) => p.status === "ativo" && p.endDate === null);
+  const ticketMedio = ativos.length > 0 ? reajustes.mrrAtual / ativos.length : 0;
+  const breakeven = calcBreakevenPlanejado(params);
+  const respiro = calcRespiro(breakeven, params);
+  const reservaPj = calcReservaPj(params);
+
+  const gapAtual = calcGapToTarget(reajustes.mrrAtual, ticketMedio, params);
+  const gapPosReajuste = calcGapToTarget(reajustes.mrrPrevisto, ticketMedio, params);
+
+  return [
+    mdHeader(2, "7. Resumo Executivo (gestão)"),
+    "_Visão de saúde do negócio em regime de competência. Use estas métricas pra responder \"como estamos?\" e \"quanto precisamos crescer?\"._",
+    "",
+    `- **MRR atual**: ${formatBRL(reajustes.mrrAtual)}`,
+    `- **MRR pós-reajuste**: ${formatBRL(reajustes.mrrPrevisto)}`,
+    `- **Diferença dos reajustes**: ${formatBRL(reajustes.diferenca)}`,
+    `- **Ponto de equilíbrio gerencial**: ${formatBRL(breakeven)} _((despesas fixas ${formatBRL(params.plannedFixedExpensesTotal)} + pró-labore ${formatBRL(params.proLaboreMonthly)}) / (1 - ${(params.taxRate * 100).toFixed(0)}%))_`,
+    `- **Receita mínima de respiro**: ${formatBRL(respiro)} _(breakeven × ${(1 + params.respiroMargin).toFixed(1)} = ${(params.respiroMargin * 100).toFixed(0)}% acima do ponto de equilíbrio)_`,
+    `- **Gap até meta de ${formatBRL(params.monthlyRevenueTarget)}**:`,
+    `  - Com **MRR atual**: faltam ${formatBRL(gapAtual.gap)}${gapAtual.clientesEquivalentes > 0 ? ` ≈ +${gapAtual.clientesEquivalentes} clientes ao ticket médio (${formatBRL(ticketMedio)})` : ""}`,
+    `  - Com **MRR pós-reajuste**: faltam ${formatBRL(gapPosReajuste.gap)}${gapPosReajuste.clientesEquivalentes > 0 ? ` ≈ +${gapPosReajuste.clientesEquivalentes} clientes` : ""}`,
+    `- **Reserva PJ alvo (${params.reserveMonthsTarget} meses de custo fixo)**: ${formatBRL(reservaPj)}`,
+  ].join("\n");
+}
+
+// ─── Seção 8: Caixa do Mês Corrente ──────────────────────────────────────────
+
+function renderCaixaMesCorrente(pnl: PnLData, params: FinancialParams): string {
+  const currentRow: PnLRow | undefined = pnl.rows[pnl.rows.length - 1];
+  if (!currentRow) return "";
 
   const tributosMes = currentRow.receitaTotal * params.taxRate;
   const saidaTotal = currentRow.despesaTotal + tributosMes + params.proLaboreMonthly;
   const sobra = currentRow.receitaTotal - saidaTotal;
 
-  const reajustes = calcReajusteSummary(input.plans);
-  const avgDespesas = calcAvgDespesas3m(input.pnl);
-  const breakeven = calcBreakeven(avgDespesas, params);
-  const gap = calcGapToTarget(currentRow.receitaTotal, ticketMedio, params);
-
-  const reservaPj = (avgDespesas + params.proLaboreMonthly) * params.reserveMonthsTarget;
-
   return [
-    mdHeader(2, "6. Respostas-chave"),
-    `- **Receita do mês corrente (${currentRow.label})**: ${formatBRL(currentRow.receitaTotal)} (recorrente ${formatBRL(currentRow.receitaRecorrente)} + avulsa ${formatBRL(currentRow.receitaAvulsa)})`,
-    `- **Saída total do mês**: ${formatBRL(saidaTotal)} (despesas ${formatBRL(currentRow.despesaTotal)} + tributos ${formatBRL(tributosMes)} + pró-labore ${formatBRL(params.proLaboreMonthly)})`,
-    `- **Sobra/falta após pró-labore**: ${formatBRL(sobra)}${sobra < 0 ? " (déficit)" : ""}`,
-    `- **MRR atual**: ${formatBRL(reajustes.mrrAtual)} • **MRR previsto pós-reajustes**: ${formatBRL(reajustes.mrrPrevisto)} (delta ${formatBRL(reajustes.diferenca)})`,
-    `- **Ponto de equilíbrio mensal**: ${formatBRL(breakeven)} — fórmula: (despesas médias 3m ${formatBRL(avgDespesas)} + pró-labore ${formatBRL(params.proLaboreMonthly)}) / (1 - ${(params.taxRate * 100).toFixed(0)}%)`,
-    `- **Gap até meta de ${formatBRL(params.monthlyRevenueTarget)}**: faltam ${formatBRL(gap.gap)}${gap.clientesEquivalentes > 0 ? ` ≈ +${gap.clientesEquivalentes} clientes ao ticket médio atual de ${formatBRL(ticketMedio)}` : ""}`,
-    `- **Reserva PJ alvo (${params.reserveMonthsTarget} meses de custo fixo)**: ${formatBRL(reservaPj)}`,
+    mdHeader(2, "8. Caixa do Mês Corrente"),
+    "_Visão de fluxo: o que efetivamente entrou e saiu este mês (regime caixa). Diferente do MRR, depende dos pagamentos de fato registrados._",
+    "",
+    `- **Mês**: ${currentRow.label}`,
+    `- **Recebido (caixa)**: ${formatBRL(currentRow.receitaTotal)} (recorrente ${formatBRL(currentRow.receitaRecorrente)} + avulsa ${formatBRL(currentRow.receitaAvulsa)})`,
+    `- **Saída efetiva**: ${formatBRL(saidaTotal)} (despesas pagas ${formatBRL(currentRow.despesaTotal)} + tributos ${formatBRL(tributosMes)} + pró-labore ${formatBRL(params.proLaboreMonthly)})`,
+    `- **Sobra/falta de caixa**: ${formatBRL(sobra)}${sobra < 0 ? " (déficit)" : ""}`,
   ].join("\n");
 }
 
 // ─── Rodapé: Parâmetros ───────────────────────────────────────────────────────
 
-function renderParametros(_pnl: PnLData, params: FinancialParams): string {
+function renderParametros(params: FinancialParams): string {
+  const itens = (Object.keys(PLANNED_FIXED_EXPENSES) as Array<keyof typeof PLANNED_FIXED_EXPENSES>)
+    .map((k) => `${PLANNED_FIXED_EXPENSES_LABELS[k]} ${formatBRL(PLANNED_FIXED_EXPENSES[k])}`)
+    .join(", ");
+
   return [
     mdHeader(2, "Parâmetros usados"),
     `- Pró-labore mensal: ${formatBRL(params.proLaboreMonthly)}`,
     `- Tributo estimado: ${formatPercentage(params.taxRate * 100)} da receita`,
     `- Meta de receita mensal: ${formatBRL(params.monthlyRevenueTarget)}`,
     `- Meta de reserva PJ: ${params.reserveMonthsTarget} meses de custo fixo`,
-    `- Custos planejados de referência: Designer ${formatBRL(params.designerMonthly)}, Copywriter ${formatBRL(params.copywriterPlannedMonthly)}, Claude ${formatBRL(params.claudeMonthly)}, Contador ${formatBRL(params.contadorMonthly)}`,
+    `- Margem de respiro acima do breakeven: ${(params.respiroMargin * 100).toFixed(0)}%`,
+    `- Despesas operacionais fixas planejadas (total ${formatBRL(params.plannedFixedExpensesTotal)}): ${itens}`,
   ].join("\n");
 }
 

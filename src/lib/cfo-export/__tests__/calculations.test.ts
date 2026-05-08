@@ -5,11 +5,15 @@ import {
   calcDre12m,
   calcAvgDespesas3m,
   calcBreakeven,
+  calcBreakevenPlanejado,
+  calcCenario,
   calcGapToTarget,
   calcReajusteSummary,
+  calcRespiro,
+  calcReservaPj,
   type PlanForReajuste,
 } from "../calculations";
-import { FINANCIAL_PARAMS } from "../financial-params";
+import { FINANCIAL_PARAMS, PLANNED_FIXED_EXPENSES_TOTAL } from "../financial-params";
 
 function pnlRow(partial: Partial<PnLRow>): PnLRow {
   return {
@@ -115,6 +119,55 @@ describe("calcBreakeven", () => {
   it("apenas pró-labore quando despesas zeradas", () => {
     // 15000 / 0.94 = 15957.446...
     expect(calcBreakeven(0, FINANCIAL_PARAMS)).toBe(15_957.45);
+  });
+});
+
+describe("calcBreakevenPlanejado", () => {
+  it("usa lista de despesas fixas planejadas (R$ 5.810)", () => {
+    // (5810 + 15000) / 0.94 = 22138.297...
+    expect(calcBreakevenPlanejado(FINANCIAL_PARAMS)).toBe(22_138.3);
+  });
+});
+
+describe("calcRespiro", () => {
+  it("breakeven × 1,2 (margem de 20%)", () => {
+    expect(calcRespiro(20_000, FINANCIAL_PARAMS)).toBe(24_000);
+  });
+});
+
+describe("calcReservaPj", () => {
+  it("(despesas planejadas + pró-labore) × meses alvo", () => {
+    // (5810 + 15000) × 2 = 41620
+    expect(calcReservaPj(FINANCIAL_PARAMS)).toBe(41_620);
+  });
+});
+
+describe("calcCenario", () => {
+  it("cenário Atual com R$ 17.322 (MRR realista)", () => {
+    const c = calcCenario("Atual", 17_322, FINANCIAL_PARAMS);
+    expect(c.label).toBe("Atual");
+    expect(c.receitaBruta).toBe(17_322);
+    expect(c.tributos).toBe(1_039.32); // 17322 × 0.06
+    expect(c.proLabore).toBe(15_000);
+    expect(c.despesasFixas).toBe(PLANNED_FIXED_EXPENSES_TOTAL); // 5810
+    expect(c.saidaTotal).toBe(21_849.32);
+    expect(c.resultado).toBe(-4_527.32);
+    expect(c.sobraReserva).toBe(0); // resultado negativo → sobra zerada
+  });
+
+  it("cenário Meta com R$ 40.000 gera resultado positivo", () => {
+    const c = calcCenario("Meta", 40_000, FINANCIAL_PARAMS);
+    expect(c.tributos).toBe(2_400);
+    expect(c.saidaTotal).toBe(23_210);
+    expect(c.resultado).toBe(16_790);
+    expect(c.margem).toBeCloseTo(0.4198, 3); // ~42% de margem
+    expect(c.sobraReserva).toBe(16_790);
+  });
+
+  it("margem 0 quando receita 0", () => {
+    const c = calcCenario("Vazio", 0, FINANCIAL_PARAMS);
+    expect(c.margem).toBe(0);
+    expect(c.sobraReserva).toBe(0);
   });
 });
 

@@ -138,8 +138,71 @@ export function calcReajusteSummary(plans: PlanForReajuste[]): ReajusteSummary {
   };
 }
 
+// ─── Cenário (DRE projetiva, regime competência) ──────────────────────────────
+// Usa apenas a lista de despesas fixas planejadas (sem variáveis e sem mistura
+// com histórico). Ideal para responder "se a receita for X, qual o resultado?"
+
+export interface CenarioResult {
+  label: string;
+  receitaBruta: number;
+  tributos: number;
+  proLabore: number;
+  despesasFixas: number;
+  saidaTotal: number;
+  resultado: number;
+  margem: number; // 0..1
+  sobraReserva: number; // == resultado (positivo): quanto sobra para reserva/reinvestimento
+}
+
+export function calcCenario(
+  label: string,
+  receitaBruta: number,
+  params: FinancialParams
+): CenarioResult {
+  const tributos = round2(receitaBruta * params.taxRate);
+  const proLabore = params.proLaboreMonthly;
+  const despesasFixas = params.plannedFixedExpensesTotal;
+  const saidaTotal = round2(tributos + proLabore + despesasFixas);
+  const resultado = round2(receitaBruta - saidaTotal);
+  const margem = receitaBruta > 0 ? round4(resultado / receitaBruta) : 0;
+  const sobraReserva = Math.max(0, resultado);
+  return {
+    label,
+    receitaBruta: round2(receitaBruta),
+    tributos,
+    proLabore,
+    despesasFixas,
+    saidaTotal,
+    resultado,
+    margem,
+    sobraReserva: round2(sobraReserva),
+  };
+}
+
+// Ponto de equilíbrio gerencial usando despesas planejadas.
+// breakeven = (despesasFixas + proLabore) / (1 - taxRate)
+export function calcBreakevenPlanejado(params: FinancialParams): number {
+  const fixo = params.plannedFixedExpensesTotal + params.proLaboreMonthly;
+  return round2(fixo / (1 - params.taxRate));
+}
+
+// Receita mínima de respiro: breakeven com margem de folga (20% por padrão).
+export function calcRespiro(breakeven: number, params: FinancialParams): number {
+  return round2(breakeven * (1 + params.respiroMargin));
+}
+
+// Reserva PJ alvo: N meses de custo fixo (despesas + pró-labore).
+export function calcReservaPj(params: FinancialParams): number {
+  const custoFixo = params.plannedFixedExpensesTotal + params.proLaboreMonthly;
+  return round2(custoFixo * params.reserveMonthsTarget);
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
 }
