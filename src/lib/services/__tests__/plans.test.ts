@@ -858,6 +858,111 @@ describe("recordPayment", () => {
   });
 });
 
+describe("recordPayment retroativo", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("não regride lastPaymentDate/nextPaymentDate ao registrar pagamento de mês anterior", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Retroativo A",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    // Cliente pagou abr (vencimento corrente avança para mai/10)
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-10", amount: 500 });
+    let updated = await getPlanById(db, plan.id);
+    expect(updated!.lastPaymentDate).toBe("2026-04-10");
+    expect(updated!.nextPaymentDate).toBe("2026-05-10");
+
+    // Agora registra retroativamente jan (gap antigo)
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-01-10", amount: 500 });
+
+    // Campos do plano NÃO devem regredir
+    updated = await getPlanById(db, plan.id);
+    expect(updated!.lastPaymentDate).toBe("2026-04-10");
+    expect(updated!.nextPaymentDate).toBe("2026-05-10");
+
+    // Mas o registro em plan_payments deve estar lá (fonte da verdade)
+    const payments = await getPaymentsByPlan(db, plan.id);
+    expect(payments).toHaveLength(2);
+    expect(payments.map((p: { paymentDate: string }) => p.paymentDate).sort()).toEqual([
+      "2026-01-10",
+      "2026-04-10",
+    ]);
+  });
+
+  it("atualiza normalmente quando paymentDate >= lastPaymentDate atual", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Retroativo B",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-03-10", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-10", amount: 500 });
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.lastPaymentDate).toBe("2026-04-10");
+    expect(updated!.nextPaymentDate).toBe("2026-05-10");
+  });
+
+  it("atualiza quando lastPaymentDate é null (primeiro pagamento)", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Retroativo C",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-10", amount: 500 });
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.lastPaymentDate).toBe("2026-02-10");
+    expect(updated!.nextPaymentDate).toBe("2026-03-10");
+  });
+
+  it("insere registro em plan_payments mesmo quando o pagamento é retroativo", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Retroativo D",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-01-01",
+    });
+
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-04-10", amount: 500 });
+    await recordPayment(db, { planId: plan.id, paymentDate: "2026-02-10", amount: 500 });
+
+    const payments = await getPaymentsByPlan(db, plan.id);
+    expect(payments).toHaveLength(2);
+  });
+});
+
 describe("getActivePlans", () => {
   let db: ReturnType<typeof createTestDb>;
 

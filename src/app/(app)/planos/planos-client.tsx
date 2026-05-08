@@ -31,9 +31,10 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
-import { formatBRL, formatDate } from "@/lib/utils/formatting";
+import { formatBRL, formatDate, formatMonth } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { isDataPassada, type StatusPagamento } from "@/lib/utils/calculations";
+import { buildOverdueRows } from "@/lib/utils/overdue";
 import {
   sortPlans,
   filterPlans,
@@ -48,7 +49,7 @@ import { EditClientDialog, type EditDialogData } from "./edit-client-dialog";
 import { ChangePlanDialog, type ChangePlanData } from "./change-plan-dialog";
 import { PaymentHistoryDialog } from "./payment-history-dialog";
 import { TargetPriceDialog } from "./target-price-dialog";
-import { skipBillingCycleAction } from "@/lib/actions/plans";
+import { skipBillingCycleAction, skipPaymentMonthAction } from "@/lib/actions/plans";
 import { BillingDayCell } from "./billing-day-cell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EditAdjustmentTemplateDialog } from "./edit-adjustment-template-dialog";
@@ -314,7 +315,10 @@ export function PlanosClient({
 
   // Dialogs
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [paymentPlanId, setPaymentPlanId] = useState<number | null>(null);
+  const [paymentTarget, setPaymentTarget] = useState<{
+    planId: number;
+    defaultDate?: string;
+  } | null>(null);
   const [closePlanId, setClosePlanId] = useState<number | null>(null);
   const [deletePlanId, setDeletePlanId] = useState<number | null>(null);
   const [editData, setEditData] = useState<EditDialogData | null>(null);
@@ -335,6 +339,19 @@ export function PlanosClient({
     if (!confirm("Pular cobrança deste mês? O próximo vencimento será avançado em 1 ciclo.")) return;
     startSkipTransition(async () => {
       await skipBillingCycleAction(planId);
+    });
+  }
+
+  // Pular um mês específico (gap histórico) — fecha aquele mês com skipped=true
+  function handleSkipMonth(planId: number, month: string) {
+    if (
+      !confirm(
+        `Pular cobrança de ${formatMonth(month)}? O mês ficará fechado sem pagamento.`
+      )
+    )
+      return;
+    startSkipTransition(async () => {
+      await skipPaymentMonthAction(planId, month);
     });
   }
 
@@ -380,7 +397,7 @@ export function PlanosClient({
         const plan = plans.find((p) => p.id === focusedPlanId);
         if (plan && plan.status === "ativo") {
           e.preventDefault();
-          setPaymentPlanId(focusedPlanId);
+          setPaymentTarget({ planId: focusedPlanId });
         }
       }
     }
@@ -430,7 +447,7 @@ export function PlanosClient({
     }
   }
 
-  const paymentPlan = plans.find((p) => p.id === paymentPlanId);
+  const paymentPlan = plans.find((p) => p.id === paymentTarget?.planId);
   const closePlan = plans.find((p) => p.id === closePlanId);
   const deletePlan = plans.find((p) => p.id === deletePlanId);
 
@@ -535,8 +552,10 @@ export function PlanosClient({
         {/* Direita: Pagamentos atrasados */}
         <OverduePaymentsPanel
           plans={activePlans}
-          onPay={(planId) => setPaymentPlanId(planId)}
-          onSkip={handleSkipBilling}
+          onPay={(planId, dueDate) =>
+            setPaymentTarget({ planId, defaultDate: dueDate })
+          }
+          onSkip={handleSkipMonth}
         />
       </div>
 
@@ -769,7 +788,7 @@ export function PlanosClient({
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setPaymentPlanId(plan.id)}
+                            onClick={() => setPaymentTarget({ planId: plan.id })}
                             title="Registrar pagamento pendente"
                             className="h-8 gap-1"
                           >
@@ -782,7 +801,7 @@ export function PlanosClient({
                           <Button
                             variant="default"
                             size="sm"
-                            onClick={() => setPaymentPlanId(plan.id)}
+                            onClick={() => setPaymentTarget({ planId: plan.id })}
                             title="Registrar pagamento (atalho: P)"
                             className="h-8 gap-1"
                           >
@@ -907,9 +926,11 @@ export function PlanosClient({
 
       {paymentPlan && (
         <PaymentDialog
-          open={!!paymentPlanId}
-          onClose={() => setPaymentPlanId(null)}
+          key={`${paymentTarget?.planId}-${paymentTarget?.defaultDate ?? "today"}`}
+          open={!!paymentTarget}
+          onClose={() => setPaymentTarget(null)}
           plan={paymentPlan}
+          defaultPaymentDate={paymentTarget?.defaultDate}
         />
       )}
 
@@ -1189,32 +1210,10 @@ function OverduePaymentsPanel({
   onSkip,
 }: {
   plans: Plan[];
-  onPay: (planId: number) => void;
-  onSkip: (planId: number) => void;
+  onPay: (planId: number, dueDate: string) => void;
+  onSkip: (planId: number, month: string) => void;
 }) {
-  const overdueRows = useMemo(() => {
-    const today = new Date();
-    return plans
-      .filter(
-        (p) =>
-          p.nextPaymentDate &&
-          isDataPassada(p.nextPaymentDate) &&
-          (!p.lastPaymentDate ||
-            new Date(p.lastPaymentDate) < new Date(p.nextPaymentDate))
-      )
-      .map((p) => ({
-        planId: p.id,
-        clientName: p.clientName,
-        planType: p.planType,
-        planValue: p.planValue,
-        nextPaymentDate: p.nextPaymentDate!,
-        diasAtraso: Math.floor(
-          (today.getTime() - new Date(p.nextPaymentDate!).getTime()) / 86_400_000
-        ),
-        billingCycleDays: p.billingCycleDays,
-      }))
-      .sort((a, b) => b.diasAtraso - a.diasAtraso);
-  }, [plans]);
+  const overdueRows = useMemo(() => buildOverdueRows(plans), [plans]);
 
   return (
     <div className="bg-card border rounded-xl p-6 h-full">
@@ -1239,7 +1238,7 @@ function OverduePaymentsPanel({
         <ul className="divide-y max-h-[300px] overflow-y-auto -mx-6">
           {overdueRows.map((row) => (
             <li
-              key={row.planId}
+              key={`${row.planId}-${row.dueDate}`}
               className="relative flex items-center gap-3 py-2.5 px-6 pl-[22px]"
             >
               <span
@@ -1249,7 +1248,7 @@ function OverduePaymentsPanel({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{row.clientName}</p>
                 <p className="text-xs text-muted-foreground">
-                  {row.planType} · venceu {formatDate(row.nextPaymentDate)}
+                  {row.planType} · venceu {formatDate(row.dueDate)}
                 </p>
               </div>
               <span
@@ -1262,15 +1261,15 @@ function OverduePaymentsPanel({
                 {row.diasAtraso}d
               </span>
               <p className="text-sm font-mono font-semibold shrink-0 tabular-nums">
-                {formatBRL(row.planValue)}
+                {formatBRL(row.rowValue)}
               </p>
-              {row.billingCycleDays && (
+              {row.hasBillingCycle && (
                 <Button
                   size="sm"
                   variant="ghost"
                   className="h-7 shrink-0 gap-1 text-muted-foreground"
-                  onClick={() => onSkip(row.planId)}
-                  title="Pular cobrança deste mês"
+                  onClick={() => onSkip(row.planId, row.dueDate.slice(0, 7))}
+                  title={`Pular cobrança de ${formatMonth(row.dueDate.slice(0, 7))}`}
                 >
                   <SkipForward size={12} />
                   <span className="text-xs">Pular</span>
@@ -1280,7 +1279,7 @@ function OverduePaymentsPanel({
                 size="sm"
                 variant="outline"
                 className="h-7 shrink-0 gap-1"
-                onClick={() => onPay(row.planId)}
+                onClick={() => onPay(row.planId, row.dueDate)}
               >
                 <CreditCard size={12} />
                 <span className="text-xs">Pagar</span>

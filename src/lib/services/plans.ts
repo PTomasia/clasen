@@ -179,24 +179,31 @@ export async function recordPayment(db: any, input: RecordPaymentInput) {
     .returning()
     .get();
 
-  // Atualizar last_payment_date e next_payment_date no plano
+  // Atualizar last_payment_date e next_payment_date no plano apenas se o
+  // pagamento NÃO for retroativo. Retroativo (paymentDate < lastPaymentDate)
+  // só registra em plan_payments — fonte da verdade da leitura.
   // billingCycleDays = dia de vencimento no mês (ex: 10 = vence dia 10)
-  const nextPaymentDate = plan.billingCycleDays
-    ? calcularProximoVencimento(
-        input.paymentDate,
-        plan.billingCycleDays,
-        plan.billingCycleDays2
-      )
-    : null;
+  const isRetroactive =
+    plan.lastPaymentDate != null && input.paymentDate < plan.lastPaymentDate;
 
-  await db.update(schema.subscriptionPlans)
-    .set({
-      lastPaymentDate: input.paymentDate,
-      nextPaymentDate,
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(schema.subscriptionPlans.id, input.planId))
-    .run();
+  if (!isRetroactive) {
+    const nextPaymentDate = plan.billingCycleDays
+      ? calcularProximoVencimento(
+          input.paymentDate,
+          plan.billingCycleDays,
+          plan.billingCycleDays2
+        )
+      : null;
+
+    await db.update(schema.subscriptionPlans)
+      .set({
+        lastPaymentDate: input.paymentDate,
+        nextPaymentDate,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(schema.subscriptionPlans.id, input.planId))
+      .run();
+  }
 
   return payment;
 }
