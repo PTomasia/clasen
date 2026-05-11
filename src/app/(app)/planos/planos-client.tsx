@@ -55,6 +55,7 @@ import { BillingDayCell } from "./billing-day-cell";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EditAdjustmentTemplateDialog } from "./edit-adjustment-template-dialog";
 import { renderAdjustmentMessage } from "@/lib/utils/adjustment-message";
+import { PlanNotesIndicator } from "./plan-notes-indicator";
 
 interface Plan {
   id: number;
@@ -727,12 +728,19 @@ export function PlanosClient({
                   className="outline-none data-[focused]:bg-primary/5 data-[focused]:ring-1 data-[focused]:ring-primary/30"
                 >
                   <TableCell className="font-semibold">
-                    <button
-                      className="hover:underline hover:text-primary transition-colors text-left"
-                      onClick={() => setHistoryPlan({ planId: plan.id, clientName: plan.clientName })}
-                    >
-                      {plan.clientName}
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        className="hover:underline hover:text-primary transition-colors text-left"
+                        onClick={() => setHistoryPlan({ planId: plan.id, clientName: plan.clientName })}
+                      >
+                        {plan.clientName}
+                      </button>
+                      <PlanNotesIndicator
+                        planId={plan.id}
+                        clientName={plan.clientName}
+                        notes={plan.notes}
+                      />
+                    </div>
                   </TableCell>
                   <TableCell className="text-center">
                     <BillingDayCell

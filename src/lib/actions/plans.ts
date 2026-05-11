@@ -10,6 +10,7 @@ import {
   deletePayment as deletePaymentService,
   updateClient as updateClientService,
   updatePlan as updatePlanService,
+  updatePlanNotes as updatePlanNotesService,
   updateBillingDays as updateBillingDaysService,
   deletePlan as deletePlanService,
   changePlan as changePlanService,
@@ -81,6 +82,11 @@ export async function updateClientAction(input: UpdateClientInput) {
 
 export async function updatePlanAction(input: UpdatePlanInput) {
   await updatePlanService(db as any, input);
+  revalidateAll();
+}
+
+export async function updatePlanNotesAction(planId: number, notes: string | null) {
+  await updatePlanNotesService(db as any, planId, notes);
   revalidateAll();
 }
 

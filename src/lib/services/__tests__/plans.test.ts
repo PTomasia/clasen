@@ -94,6 +94,7 @@ import {
   deletePayment,
   updateClient,
   updatePlan,
+  updatePlanNotes,
   updateBillingDays,
   deletePlan,
   changePlan,
@@ -1627,6 +1628,160 @@ describe("updatePlan", () => {
     const after = await getPlanById(db, plan.id);
     // Recalculou após mudança de billing — agora 22 do mesmo mês
     expect(after!.nextPaymentDate).toBe("2026-04-22");
+  });
+});
+
+describe("updatePlanNotes", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("salva nova observação em plano sem notes prévia", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Rhael",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updatePlanNotes(db, plan.id, "adiar reajuste — motivos estratégicos");
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.notes).toBe("adiar reajuste — motivos estratégicos");
+  });
+
+  it("substitui observação existente", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Isa",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+      notes: "cliente social",
+    });
+
+    await updatePlanNotes(db, plan.id, "cliente social — desconto vitalício");
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.notes).toBe("cliente social — desconto vitalício");
+  });
+
+  it("grava NULL quando recebe string vazia", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Thauane",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+      notes: "cliente estratégica",
+    });
+
+    await updatePlanNotes(db, plan.id, "");
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.notes).toBeNull();
+  });
+
+  it("grava NULL quando recebe apenas whitespace", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Rousseau",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+      notes: "obs antiga",
+    });
+
+    await updatePlanNotes(db, plan.id, "   \n\t  ");
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.notes).toBeNull();
+  });
+
+  it("grava NULL quando recebe null", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Null Test",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+      notes: "removível",
+    });
+
+    await updatePlanNotes(db, plan.id, null);
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.notes).toBeNull();
+  });
+
+  it("preserva trim das pontas mas mantém quebras internas", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Trim Test",
+      planType: "Personalizado",
+      planValue: 500,
+      postsCarrossel: 4,
+      postsReels: 0,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updatePlanNotes(db, plan.id, "  linha 1\nlinha 2  ");
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.notes).toBe("linha 1\nlinha 2");
+  });
+
+  it("rejeita plano inexistente", async () => {
+    await expect(updatePlanNotes(db, 9999, "qualquer")).rejects.toThrow(
+      "plano não encontrado"
+    );
+  });
+
+  it("não altera outros campos do plano", async () => {
+    const { plan } = await createPlan(db, {
+      clientName: "Preserve Test",
+      planType: "Personalizado",
+      planValue: 500,
+      billingCycleDays: 10,
+      postsCarrossel: 4,
+      postsReels: 1,
+      postsEstatico: 2,
+      postsTrafego: 0,
+      startDate: "2026-01-15",
+      movementType: "New",
+    });
+
+    await updatePlanNotes(db, plan.id, "nova obs");
+
+    const updated = await getPlanById(db, plan.id);
+    expect(updated!.planType).toBe("Personalizado");
+    expect(updated!.planValue).toBe(500);
+    expect(updated!.billingCycleDays).toBe(10);
+    expect(updated!.postsCarrossel).toBe(4);
+    expect(updated!.postsReels).toBe(1);
+    expect(updated!.postsEstatico).toBe(2);
+    expect(updated!.startDate).toBe("2026-01-15");
+    expect(updated!.movementType).toBe("New");
+    expect(updated!.status).toBe("ativo");
   });
 });
 

@@ -341,6 +341,34 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
   return { ...existing, ...input };
 }
 
+// ─── updatePlanNotes ──────────────────────────────────────────────────────────
+// Atualiza apenas a observação (notes) de um plano. Action dedicada para o
+// indicador de obs na tabela, que não conhece os demais campos do plano.
+
+export async function updatePlanNotes(
+  db: any,
+  planId: number,
+  notes: string | null,
+): Promise<void> {
+  const existing = await db
+    .select()
+    .from(schema.subscriptionPlans)
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .get();
+
+  if (!existing) throw new Error("plano não encontrado");
+
+  const normalized = notes?.trim() || null;
+
+  await db.update(schema.subscriptionPlans)
+    .set({
+      notes: normalized,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(schema.subscriptionPlans.id, planId))
+    .run();
+}
+
 // ─── updateBillingDays (inline edit on /planos table) ────────────────────────
 
 export async function updateBillingDays(
