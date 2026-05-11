@@ -104,20 +104,42 @@ type ActionItem =
 
 function RowActionsMenu({ items }: { items: ActionItem[] }) {
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; right: number; placed: boolean } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Posicionar o menu em coordenadas de viewport (position: fixed) para escapar
-  // do container da tabela que tem overflow: auto. Sem isso, o menu virava scroll.
+  // Pass 1: posicionar abaixo do trigger em coordenadas de viewport.
+  // position: fixed para escapar do container da tabela (overflow: auto).
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setPos({
       top: rect.bottom + 4,
       right: window.innerWidth - rect.right,
+      placed: false,
     });
   }, [open]);
+
+  // Pass 2: depois que o menu renderiza, mede a altura real e flipa pra cima
+  // se não couber abaixo. `placed` evita loop e libera a opacidade.
+  useLayoutEffect(() => {
+    if (!pos || pos.placed || !menuRef.current || !triggerRef.current) return;
+    const menuRect = menuRef.current.getBoundingClientRect();
+    const triggerRect = triggerRef.current.getBoundingClientRect();
+    const margin = 8;
+    const spaceBelow = window.innerHeight - triggerRect.bottom - margin;
+
+    if (menuRect.height > spaceBelow) {
+      // Flip: abre acima do trigger
+      setPos({
+        top: Math.max(margin, triggerRect.top - menuRect.height - 4),
+        right: window.innerWidth - triggerRect.right,
+        placed: true,
+      });
+    } else {
+      setPos((p) => (p ? { ...p, placed: true } : null));
+    }
+  }, [pos]);
 
   useEffect(() => {
     if (!open) return;
@@ -166,7 +188,13 @@ function RowActionsMenu({ items }: { items: ActionItem[] }) {
           <div
             ref={menuRef}
             role="menu"
-            style={{ position: "fixed", top: pos.top, right: pos.right }}
+            style={{
+              position: "fixed",
+              top: pos.top,
+              right: pos.right,
+              opacity: pos.placed ? 1 : 0,
+              pointerEvents: pos.placed ? "auto" : "none",
+            }}
             className="z-50 min-w-[200px] rounded-md border bg-popover shadow-lg py-1 text-sm"
           >
             {items.map((item, i) => {
