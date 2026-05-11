@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, useTransition } from "react";
+import { createPortal } from "react-dom";
 import {
   Table,
   TableBody,
@@ -103,8 +104,20 @@ type ActionItem =
 
 function RowActionsMenu({ items }: { items: ActionItem[] }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Posicionar o menu em coordenadas de viewport (position: fixed) para escapar
+  // do container da tabela que tem overflow: auto. Sem isso, o menu virava scroll.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setPos({
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+    });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,16 +129,24 @@ function RowActionsMenu({ items }: { items: ActionItem[] }) {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
     }
+    // Fechar em scroll/resize evita o menu "descolar" do trigger.
+    function handleViewportChange() {
+      setOpen(false);
+    }
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", handleViewportChange, true);
+    window.addEventListener("resize", handleViewportChange);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", handleViewportChange, true);
+      window.removeEventListener("resize", handleViewportChange);
     };
   }, [open]);
 
   return (
-    <div className="relative inline-block">
+    <>
       <Button
         ref={triggerRef}
         variant="ghost"
@@ -140,40 +161,43 @@ function RowActionsMenu({ items }: { items: ActionItem[] }) {
       >
         <MoreHorizontal size={14} />
       </Button>
-      {open && (
-        <div
-          ref={menuRef}
-          role="menu"
-          className="absolute right-0 top-full mt-1 z-50 min-w-[200px] rounded-md border bg-popover shadow-lg py-1 text-sm"
-        >
-          {items.map((item, i) => {
-            if (item.type === "separator") {
-              return <div key={`sep-${i}`} className="my-1 border-t" aria-hidden />;
-            }
-            return (
-              <button
-                key={item.label}
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOpen(false);
-                  item.onClick();
-                }}
-                className={cn(
-                  "w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
-                  item.destructive
-                    ? "text-destructive hover:bg-destructive/10"
-                    : "hover:bg-muted/60"
-                )}
-              >
-                <item.icon size={14} />
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+      {open && pos && typeof window !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: "fixed", top: pos.top, right: pos.right }}
+            className="z-50 min-w-[200px] rounded-md border bg-popover shadow-lg py-1 text-sm"
+          >
+            {items.map((item, i) => {
+              if (item.type === "separator") {
+                return <div key={`sep-${i}`} className="my-1 border-t" aria-hidden />;
+              }
+              return (
+                <button
+                  key={item.label}
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOpen(false);
+                    item.onClick();
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors",
+                    item.destructive
+                      ? "text-destructive hover:bg-destructive/10"
+                      : "hover:bg-muted/60"
+                  )}
+                >
+                  <item.icon size={14} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 
