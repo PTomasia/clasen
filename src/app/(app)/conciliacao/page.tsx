@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FileJson } from "lucide-react";
 import { db } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
-import { isNull } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { buttonVariants } from "@/components/ui/button";
 import { ConciliacaoClient } from "./conciliacao-client";
 import { format, addMonths } from "date-fns";
@@ -23,8 +23,9 @@ export default async function ConciliacaoPage() {
       clientName: schema.clients.name,
     })
     .from(schema.subscriptionPlans)
-    .innerJoin(schema.clients, (j: any) =>
-      j.eq(schema.subscriptionPlans.clientId, schema.clients.id)
+    .innerJoin(
+      schema.clients,
+      eq(schema.subscriptionPlans.clientId, schema.clients.id)
     )
     .where(isNull(schema.subscriptionPlans.endDate))
     .all() as any[];
