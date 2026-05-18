@@ -1,6 +1,9 @@
+import Link from "next/link";
+import { FileJson } from "lucide-react";
 import { db } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import { isNull } from "drizzle-orm";
+import { buttonVariants } from "@/components/ui/button";
 import { ConciliacaoClient } from "./conciliacao-client";
 import { format, addMonths } from "date-fns";
 
@@ -34,11 +37,20 @@ export default async function ConciliacaoPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Conciliação bancária</h1>
-        <p className="text-muted-foreground mt-1">
-          Cole o extrato do banco para identificar e registrar pagamentos automaticamente
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Conciliação bancária</h1>
+          <p className="text-muted-foreground mt-1">
+            Cole o extrato do banco para identificar e registrar pagamentos automaticamente
+          </p>
+        </div>
+        <Link
+          href="/conciliacao/json"
+          className={buttonVariants({ variant: "outline" })}
+        >
+          <FileJson size={16} className="mr-1.5" />
+          Importar JSON do ChatGPT
+        </Link>
       </div>
 
       <ConciliacaoClient
