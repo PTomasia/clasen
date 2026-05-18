@@ -23,6 +23,8 @@ import {
 import {
   AlertCircle,
   CheckCircle2,
+  Check,
+  Clipboard,
   Download,
   FileJson,
   FileText,
@@ -34,6 +36,7 @@ import {
   applyBulkImportAction,
 } from "@/lib/actions/bulk-import";
 import { exportDictionaryAction } from "@/lib/actions/conciliacao-dictionary";
+import { CONCILIACAO_CHATGPT_PROMPT } from "@/lib/conciliacao-prompt";
 import type {
   BulkImportPreview,
   Decision,
@@ -91,6 +94,7 @@ export function JsonImportClient() {
   const [errorsAcked, setErrorsAcked] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isExporting, startExport] = useTransition();
+  const [promptCopied, setPromptCopied] = useState(false);
 
   function getDecision(index: number, status: EntryStatus): Decision {
     return (
@@ -135,6 +139,17 @@ export function JsonImportClient() {
       const { filename, content } = await exportDictionaryAction();
       downloadBlob(filename, content);
     });
+  }
+
+  async function handleCopyPrompt() {
+    try {
+      await navigator.clipboard.writeText(CONCILIACAO_CHATGPT_PROMPT);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 2000);
+    } catch {
+      // Fallback raro (HTTP, browsers antigos): baixa como arquivo
+      downloadBlob("conciliacao-prompt.txt", CONCILIACAO_CHATGPT_PROMPT, "text/plain");
+    }
   }
 
   function handleApply() {
@@ -209,22 +224,39 @@ export function JsonImportClient() {
             <p className="font-medium">Fluxo recomendado</p>
             <ol className="text-sm text-muted-foreground mt-1.5 space-y-1 list-decimal list-inside">
               <li>
-                Baixe o dicionário (clientes + categorias) e cole no ChatGPT antes de mandar a fatura
+                Numa conversa nova do ChatGPT, cole o <strong>dicionário</strong> e o <strong>prompt</strong> (botões à direita)
               </li>
-              <li>Mande o PDF/CSV do extrato e peça o JSON estruturado de saída</li>
+              <li>Anexe o PDF/CSV do extrato — o GPT devolve um JSON estruturado</li>
               <li>Cole o JSON aqui embaixo e clique em <strong>Analisar</strong></li>
               <li>Revise linha a linha e clique em <strong>Aplicar</strong></li>
             </ol>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleExportDictionary}
-            disabled={isExporting}
-            className="shrink-0"
-          >
-            <Download size={16} className="mr-1.5" />
-            {isExporting ? "Gerando..." : "Baixar dicionário"}
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+            <Button
+              variant="outline"
+              onClick={handleExportDictionary}
+              disabled={isExporting}
+            >
+              <Download size={16} className="mr-1.5" />
+              {isExporting ? "Gerando..." : "Baixar dicionário"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleCopyPrompt}
+            >
+              {promptCopied ? (
+                <>
+                  <Check size={16} className="mr-1.5" />
+                  Copiado!
+                </>
+              ) : (
+                <>
+                  <Clipboard size={16} className="mr-1.5" />
+                  Copiar prompt
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
