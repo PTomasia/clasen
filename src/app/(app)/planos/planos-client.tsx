@@ -512,9 +512,12 @@ export function PlanosClient({
     return activePlans.reduce(
       (acc, p) => ({
         conteudo: acc.conteudo + p.postsCarrossel + p.postsReels + p.postsEstatico,
+        carrossel: acc.carrossel + p.postsCarrossel,
+        reels: acc.reels + p.postsReels,
+        estatico: acc.estatico + p.postsEstatico,
         trafego: acc.trafego + p.postsTrafego,
       }),
-      { conteudo: 0, trafego: 0 }
+      { conteudo: 0, carrossel: 0, reels: 0, estatico: 0, trafego: 0 }
     );
   }, [activePlans]);
   const activeTotal = useMemo(
@@ -584,6 +587,9 @@ export function PlanosClient({
             receitaMensal={activeTotal}
             totalPlanos={activePlans.length}
             postsConteudo={postsAtuais.conteudo}
+            postsCarrossel={postsAtuais.carrossel}
+            postsReels={postsAtuais.reels}
+            postsEstatico={postsAtuais.estatico}
             postsTrafego={postsAtuais.trafego}
             reajustes={
               targetCostPerPost && overdueAdjustments.length > 0
@@ -1123,6 +1129,9 @@ function PlanosHeroCard({
   receitaMensal,
   totalPlanos,
   postsConteudo,
+  postsCarrossel,
+  postsReels,
+  postsEstatico,
   postsTrafego,
   reajustes,
   custoPostMedio,
@@ -1132,6 +1141,9 @@ function PlanosHeroCard({
   receitaMensal: number;
   totalPlanos: number;
   postsConteudo: number;
+  postsCarrossel: number;
+  postsReels: number;
+  postsEstatico: number;
   postsTrafego: number;
   reajustes: {
     count: number;
@@ -1237,7 +1249,13 @@ function PlanosHeroCard({
           {totalPlanos === 1 ? "plano" : "planos"}
           {" · "}
           <span className="tabular-nums">{postsConteudo}</span> conteúdo
-          {" · "}
+          {" ("}
+          <span className="tabular-nums" title="Carrosséis">{postsCarrossel}C</span>
+          {" "}
+          <span className="tabular-nums" title="Reels">{postsReels}R</span>
+          {" "}
+          <span className="tabular-nums" title="Estáticos">{postsEstatico}E</span>
+          {") · "}
           <span className="tabular-nums">{postsTrafego}</span> tráfego
         </p>
       </div>
