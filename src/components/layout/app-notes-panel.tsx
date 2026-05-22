@@ -206,14 +206,7 @@ export function AppNotesPanel() {
                 </button>
               </div>
 
-              <ul
-                style={{ scrollbarWidth: "none" }}
-                className={cn(
-                  "max-h-44 space-y-1 overflow-y-auto",
-                  // Esconde scrollbar no Chromium — scroll continua via wheel/touch
-                  "[&::-webkit-scrollbar]:hidden",
-                )}
-              >
+              <ul className="no-scrollbar max-h-44 space-y-1 overflow-y-auto">
                 {notes.map((note) => {
                   const isEditing = editingId === note.id;
                   return (
