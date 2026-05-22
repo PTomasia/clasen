@@ -935,7 +935,9 @@ export function calculateGapsForPlan(
 
 // ─── skipPaymentMonth ─────────────────────────────────────────────────────────
 // Registra mês congelado: insere plan_payment com amount=0, skipped=true.
-// Não altera lastPaymentDate nem nextPaymentDate do plano.
+// Quando o mês congelado coincide com o mês de nextPaymentDate, avança
+// nextPaymentDate até sair desse mês (cobre billingCycleDays2 → 2 saltos).
+// lastPaymentDate não é alterado (congelar não é pagamento).
 
 export async function skipPaymentMonth(
   db: any,
@@ -984,6 +986,29 @@ export async function skipPaymentMonth(
     skipped: true,
     notes: "Mês congelado",
   }).run();
+
+  // Avança nextPaymentDate se ele cai dentro do mês congelado.
+  // Com billingCycleDays2, repete até sair do mês (pula ambas as datas).
+  if (plan.nextPaymentDate && plan.billingCycleDays) {
+    let next: string = plan.nextPaymentDate;
+    while (next.slice(0, 7) === month) {
+      next = calcularProximoVencimento(
+        next,
+        plan.billingCycleDays,
+        plan.billingCycleDays2
+      );
+    }
+    if (next !== plan.nextPaymentDate) {
+      await db
+        .update(schema.subscriptionPlans)
+        .set({
+          nextPaymentDate: next,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(schema.subscriptionPlans.id, planId))
+        .run();
+    }
+  }
 }
 
 export async function getActivePlans(db: any) {
