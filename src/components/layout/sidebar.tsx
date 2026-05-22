@@ -112,7 +112,7 @@ export function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+        <nav className="no-scrollbar flex-1 p-4 space-y-6 overflow-y-auto">
           {navigation.map((group) => {
             const renderedItems = group.items.map((item) => {
               const isActive = pathname === item.href;

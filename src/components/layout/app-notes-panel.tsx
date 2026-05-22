@@ -21,6 +21,8 @@ export function AppNotesPanel() {
   const [pulse, setPulse] = useState(false);
   const [, startTransition] = useTransition();
   const editInputRef = useRef<HTMLInputElement | null>(null);
+  const flyoutRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     listAppNotesAction("pending").then(setNotes).catch(() => {
@@ -31,6 +33,30 @@ export function AppNotesPanel() {
   useEffect(() => {
     if (editingId !== null) editInputRef.current?.focus();
   }, [editingId]);
+
+  // Fechar flyout ao clicar fora ou apertar Esc
+  useEffect(() => {
+    if (!expanded) return;
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as Node;
+      if (
+        flyoutRef.current?.contains(target) ||
+        headerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setExpanded(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setExpanded(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [expanded]);
 
   function triggerPulse() {
     setPulse(true);
@@ -118,13 +144,14 @@ export function AppNotesPanel() {
   const hasNotes = notes.length > 0;
 
   return (
-    <div className="space-y-2">
+    <div className="relative space-y-2">
       {hasNotes ? (
         <button
+          ref={headerRef}
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          aria-controls="app-notes-list"
+          aria-controls="app-notes-flyout"
           className="group flex w-full items-baseline justify-between rounded-sm px-0.5 py-0.5 text-left transition-colors hover:text-sidebar-foreground focus-visible:outline focus-visible:outline-1 focus-visible:outline-sidebar-foreground/40"
         >
           <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/60 group-hover:text-sidebar-foreground/80">
@@ -180,106 +207,113 @@ export function AppNotesPanel() {
 
       {hasNotes && (
         <div
-          id="app-notes-list"
+          id="app-notes-flyout"
+          ref={flyoutRef}
+          role="region"
+          aria-label="Lista de melhorias pendentes"
           className={cn(
-            "grid transition-[grid-template-rows] duration-200 ease-out",
-            expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+            "absolute bottom-full left-0 right-0 mb-2 z-50",
+            "rounded-lg border border-sidebar-border/60 bg-sidebar p-3 space-y-2",
+            "shadow-[0_-12px_28px_-12px_rgba(0,0,0,0.45)]",
+            "transition-all duration-200 ease-out",
+            expanded
+              ? "opacity-100 translate-y-0 pointer-events-auto"
+              : "opacity-0 translate-y-1 pointer-events-none",
           )}
         >
-          <div className="overflow-hidden">
-            <div className="space-y-1.5 pt-2 mt-1 border-t border-sidebar-border/60">
-              <div className="flex justify-end">
-                <button
-                  onClick={handleCopy}
-                  title="Copiar pendentes em markdown"
-                  className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                >
-                  {copied ? (
-                    <>
-                      <Check size={10} /> copiado
-                    </>
-                  ) : (
-                    <>
-                      <Copy size={10} /> copiar md
-                    </>
-                  )}
-                </button>
-              </div>
-
-              <ul className="no-scrollbar max-h-44 space-y-1 overflow-y-auto">
-                {notes.map((note) => {
-                  const isEditing = editingId === note.id;
-                  return (
-                    <li
-                      key={note.id}
-                      className={cn(
-                        "group flex items-start gap-1.5 rounded-md px-1.5 py-1 text-xs text-sidebar-foreground/80 transition-colors",
-                        "hover:bg-sidebar-accent/30",
-                      )}
-                    >
-                      <button
-                        onClick={() => handleToggleDone(note)}
-                        title="Marcar como feito"
-                        className="mt-0.5 size-3.5 shrink-0 rounded border border-sidebar-foreground/30 transition-colors hover:border-sidebar-foreground/60 hover:bg-sidebar-accent"
-                      />
-                      {isEditing ? (
-                        <input
-                          ref={editInputRef}
-                          value={editDraft}
-                          onChange={(e) => setEditDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              commitEdit();
-                            } else if (e.key === "Escape") {
-                              e.preventDefault();
-                              cancelEdit();
-                            }
-                          }}
-                          onBlur={commitEdit}
-                          className="flex-1 min-w-0 rounded border border-sidebar-foreground/30 bg-sidebar px-1 py-0.5 text-xs text-sidebar-foreground outline-none focus:border-sidebar-foreground/60"
-                        />
-                      ) : (
-                        <span
-                          title={note.content}
-                          className="flex-1 min-w-0 break-words leading-snug line-clamp-3 cursor-text"
-                          onDoubleClick={() => startEdit(note)}
-                        >
-                          {note.content}
-                        </span>
-                      )}
-                      {isEditing ? (
-                        <button
-                          onClick={cancelEdit}
-                          title="Cancelar"
-                          className="shrink-0 rounded p-0.5 text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                        >
-                          <X size={11} />
-                        </button>
-                      ) : (
-                        <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => startEdit(note)}
-                            title="Editar"
-                            className="rounded p-0.5 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                          >
-                            <Pencil size={11} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(note)}
-                            title="Excluir"
-                            className="rounded p-0.5 text-sidebar-foreground/50 hover:bg-destructive/20 hover:text-destructive"
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/50">
+              {notes.length} pendente{notes.length === 1 ? "" : "s"}
+            </span>
+            <button
+              onClick={handleCopy}
+              title="Copiar pendentes em markdown"
+              className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+            >
+              {copied ? (
+                <>
+                  <Check size={10} /> copiado
+                </>
+              ) : (
+                <>
+                  <Copy size={10} /> copiar md
+                </>
+              )}
+            </button>
           </div>
+
+          <ul className="no-scrollbar max-h-[55vh] space-y-1 overflow-y-auto">
+            {notes.map((note) => {
+              const isEditing = editingId === note.id;
+              return (
+                <li
+                  key={note.id}
+                  className={cn(
+                    "group flex items-start gap-1.5 rounded-md px-1.5 py-1 text-xs text-sidebar-foreground/85 transition-colors",
+                    "hover:bg-sidebar-accent/40",
+                  )}
+                >
+                  <button
+                    onClick={() => handleToggleDone(note)}
+                    title="Marcar como feito"
+                    className="mt-0.5 size-3.5 shrink-0 rounded border border-sidebar-foreground/30 transition-colors hover:border-sidebar-foreground/70 hover:bg-sidebar-accent"
+                  />
+                  {isEditing ? (
+                    <input
+                      ref={editInputRef}
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitEdit();
+                        } else if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelEdit();
+                        }
+                      }}
+                      onBlur={commitEdit}
+                      className="flex-1 min-w-0 rounded border border-sidebar-foreground/30 bg-sidebar px-1 py-0.5 text-xs text-sidebar-foreground outline-none focus:border-sidebar-foreground/60"
+                    />
+                  ) : (
+                    <span
+                      title={note.content}
+                      className="flex-1 min-w-0 break-words leading-snug line-clamp-3 cursor-text"
+                      onDoubleClick={() => startEdit(note)}
+                    >
+                      {note.content}
+                    </span>
+                  )}
+                  {isEditing ? (
+                    <button
+                      onClick={cancelEdit}
+                      title="Cancelar"
+                      className="shrink-0 rounded p-0.5 text-sidebar-foreground/40 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    >
+                      <X size={11} />
+                    </button>
+                  ) : (
+                    <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => startEdit(note)}
+                        title="Editar"
+                        className="rounded p-0.5 text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(note)}
+                        title="Excluir"
+                        className="rounded p-0.5 text-sidebar-foreground/50 hover:bg-destructive/20 hover:text-destructive"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </div>
