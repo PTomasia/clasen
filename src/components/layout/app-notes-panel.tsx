@@ -207,15 +207,11 @@ export function AppNotesPanel() {
               </div>
 
               <ul
-                style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.18) transparent" }}
+                style={{ scrollbarWidth: "none" }}
                 className={cn(
-                  "max-h-44 space-y-1 overflow-y-auto pr-1.5",
-                  // Scrollbar minimal pra Chromium — combina com o sidebar
-                  "[&::-webkit-scrollbar]:w-1",
-                  "[&::-webkit-scrollbar-track]:bg-transparent",
-                  "[&::-webkit-scrollbar-thumb]:rounded-full",
-                  "[&::-webkit-scrollbar-thumb]:bg-sidebar-foreground/20",
-                  "hover:[&::-webkit-scrollbar-thumb]:bg-sidebar-foreground/35",
+                  "max-h-44 space-y-1 overflow-y-auto",
+                  // Esconde scrollbar no Chromium — scroll continua via wheel/touch
+                  "[&::-webkit-scrollbar]:hidden",
                 )}
               >
                 {notes.map((note) => {
@@ -252,7 +248,8 @@ export function AppNotesPanel() {
                         />
                       ) : (
                         <span
-                          className="flex-1 min-w-0 break-words leading-snug"
+                          title={note.content}
+                          className="flex-1 min-w-0 break-words leading-snug line-clamp-3 cursor-text"
                           onDoubleClick={() => startEdit(note)}
                         >
                           {note.content}
