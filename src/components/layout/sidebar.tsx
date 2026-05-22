@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { AppNotesPanel } from "./app-notes-panel";
 
 type NavItem = { name: string; href: string; icon: typeof LayoutDashboard; sprint: number };
 type NavGroup = { label: string; items: NavItem[] };
@@ -162,16 +163,8 @@ export function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-sidebar-border space-y-2">
-          <a
-            href="mailto:pedro.tomasia@gmail.com?subject=Clasen ADM — feedback"
-            className="flex items-center justify-between text-xs text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
-          >
-            <span>Enviar feedback</span>
-            <svg viewBox="0 0 16 16" className="size-3" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-              <path d="M5 11l6-6M11 5H6.5M11 5v4.5" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </a>
+        <div className="p-4 border-t border-sidebar-border space-y-3">
+          <AppNotesPanel />
           <p className="text-[10px] uppercase tracking-[0.14em] text-sidebar-foreground/40">
             Clasen Studio · {new Date().getFullYear()}
           </p>

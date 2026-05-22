@@ -162,3 +162,17 @@ export const expenses = sqliteTable("expenses", {
     .notNull()
     .default(sql`(datetime('now'))`),
 });
+
+// ─── App Notes ──────────────────────────────────────────────────────
+// Anotações rápidas do dono sobre melhorias do próprio app (sidebar).
+export const appNotes = sqliteTable("app_notes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  content: text("content").notNull(),
+  status: text("status").notNull().default("pending"), // pending, done
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
