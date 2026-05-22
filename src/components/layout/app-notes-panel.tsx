@@ -206,7 +206,18 @@ export function AppNotesPanel() {
                 </button>
               </div>
 
-              <ul className="max-h-44 space-y-1 overflow-y-auto pr-1">
+              <ul
+                style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.18) transparent" }}
+                className={cn(
+                  "max-h-44 space-y-1 overflow-y-auto pr-1.5",
+                  // Scrollbar minimal pra Chromium — combina com o sidebar
+                  "[&::-webkit-scrollbar]:w-1",
+                  "[&::-webkit-scrollbar-track]:bg-transparent",
+                  "[&::-webkit-scrollbar-thumb]:rounded-full",
+                  "[&::-webkit-scrollbar-thumb]:bg-sidebar-foreground/20",
+                  "hover:[&::-webkit-scrollbar-thumb]:bg-sidebar-foreground/35",
+                )}
+              >
                 {notes.map((note) => {
                   const isEditing = editingId === note.id;
                   return (
