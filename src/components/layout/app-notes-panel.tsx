@@ -19,7 +19,7 @@ export function AppNotesPanel() {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [pulse, setPulse] = useState(false);
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
   const editInputRef = useRef<HTMLInputElement | null>(null);
   const flyoutRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLButtonElement | null>(null);
@@ -64,6 +64,7 @@ export function AppNotesPanel() {
   }
 
   function handleSave() {
+    if (isPending) return; // evita duplo submit enquanto o save está em voo
     const trimmed = draft.trim();
     if (!trimmed) return;
     startTransition(async () => {
@@ -187,7 +188,8 @@ export function AppNotesPanel() {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          // Enter salva; Shift+Enter quebra linha.
+          if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             handleSave();
           }
@@ -199,10 +201,10 @@ export function AppNotesPanel() {
 
       <button
         onClick={handleSave}
-        disabled={!draft.trim()}
+        disabled={!draft.trim() || isPending}
         className="w-full rounded-md bg-sidebar-accent px-2 py-1 text-xs text-sidebar-accent-foreground transition-colors hover:bg-sidebar-accent/80 disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        Salvar
+        {isPending ? "Salvando…" : "Salvar"}
       </button>
 
       {hasNotes && (

@@ -69,6 +69,46 @@ export function sortPlans<T extends PlanRow>(
   });
 }
 
+// ─── Ordenação de despesas ──────────────────────────────────────────────────
+
+export type ExpenseSortKey =
+  | "month"
+  | "description"
+  | "category"
+  | "amount"
+  | "isPaid";
+
+export interface ExpenseSortRow {
+  month: string; // YYYY-MM (ordenável lexicograficamente)
+  description: string;
+  category: string;
+  amount: number;
+  isPaid: boolean;
+}
+
+export function sortExpenses<T extends ExpenseSortRow>(
+  rows: T[],
+  key: ExpenseSortKey,
+  direction: SortDirection
+): T[] {
+  return [...rows].sort((a, b) => {
+    const valA = a[key];
+    const valB = b[key];
+
+    let comparison: number;
+    if (typeof valA === "boolean" && typeof valB === "boolean") {
+      // asc: pendente (false) antes de paga (true)
+      comparison = valA === valB ? 0 : valA ? 1 : -1;
+    } else if (typeof valA === "string" && typeof valB === "string") {
+      comparison = valA.localeCompare(valB, "pt-BR");
+    } else {
+      comparison = (valA as number) - (valB as number);
+    }
+
+    return direction === "asc" ? comparison : -comparison;
+  });
+}
+
 // ─── Filtro ───────────────────────────────────────────────────────────────────
 
 export function filterPlans<T extends PlanRow>(

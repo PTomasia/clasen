@@ -19,9 +19,6 @@ import {
   XCircle,
   Pencil,
   Trash2,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
   Search,
   TrendingUp,
   TrendingDown,
@@ -42,6 +39,7 @@ import {
   type SortKey,
   type SortDirection,
 } from "@/lib/utils/table-helpers";
+import { SortableHead } from "@/components/ui/sortable-head";
 import { PlanFormDialog } from "./plan-form-dialog";
 import { PaymentDialog } from "./payment-dialog";
 import { ClosePlanDialog } from "./close-plan-dialog";
@@ -302,43 +300,6 @@ function AdjustmentCell({
         (+{suggestion.percentChange.toFixed(0)}%{suggestion.capped ? " max" : ""})
       </span>
     </button>
-  );
-}
-
-// ─── Sortable Header ──────────────────────────────────────────────────────────
-
-function SortableHead({
-  label,
-  sortKey,
-  currentSort,
-  currentDirection,
-  onSort,
-  className,
-}: {
-  label: string;
-  sortKey: SortKey;
-  currentSort: SortKey | null;
-  currentDirection: SortDirection;
-  onSort: (key: SortKey) => void;
-  className?: string;
-}) {
-  const isActive = currentSort === sortKey;
-  const Icon = isActive
-    ? currentDirection === "asc"
-      ? ArrowUp
-      : ArrowDown
-    : ArrowUpDown;
-
-  return (
-    <TableHead className={className}>
-      <button
-        className="inline-flex items-center gap-1 hover:text-foreground transition-colors -ml-2 px-2 py-1 rounded"
-        onClick={() => onSort(sortKey)}
-      >
-        {label}
-        <Icon size={14} className={isActive ? "text-foreground" : "text-muted-foreground/50"} />
-      </button>
-    </TableHead>
   );
 }
 
@@ -652,8 +613,18 @@ export function PlanosClient({
               placeholder="Buscar cliente..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-9 pr-9"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="Limpar busca"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <XCircle size={16} />
+              </button>
+            )}
           </div>
           <select
             value={pgtoFilter}

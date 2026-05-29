@@ -55,14 +55,17 @@ export function calcularStatusPagamento(
 ): StatusPagamento {
   if (!nextPaymentDate) return "sem_pagamento";
 
-  // Se há meses anteriores em aberto, o cliente ainda está atrasado mesmo que
-  // o próximo vencimento seja futuro. Sem essa checagem, registrar pagamento
-  // do mês mais recente (sem fechar os anteriores) marcaria como "em_dia"
-  // incorretamente.
-  if (gapsCount && gapsCount > 0) return "atrasado";
+  // Quando os gaps foram computados, eles são a fonte da verdade: um mês só está
+  // "em aberto" se não foi pago NEM congelado (gaps já excluem meses skipped e
+  // pagos). Logo gapsCount=0 ⇒ em dia — mesmo que nextPaymentDate tenha ficado no
+  // passado por não ter sido avançado após o congelamento (caso Dara/Maju). E
+  // gapsCount>0 ⇒ atrasado mesmo com próximo vencimento futuro (caso Gabriele:
+  // pagar o mês recente sem fechar os anteriores não "limpa" o atraso).
+  if (gapsCount !== undefined) return gapsCount > 0 ? "atrasado" : "em_dia";
 
+  // Sem gaps computados (ex.: plano sem dia de vencimento): cai no nextPaymentDate.
   // Comparar strings ISO diretamente (YYYY-MM-DD é lexicograficamente ordenável)
-  // Evita problemas de timezone com Date objects
+  // evita problemas de timezone com Date objects.
   const todayStr = format(new Date(), "yyyy-MM-dd");
   return nextPaymentDate >= todayStr ? "em_dia" : "atrasado";
 }

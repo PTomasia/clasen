@@ -254,6 +254,12 @@ describe("calcularStatusPagamento", () => {
     expect(calcularStatusPagamento("2026-03-01", 5)).toBe("atrasado");
   });
 
+  it("em_dia quando data passada mas gapsCount=0 (mês congelado — Dara/Maju)", () => {
+    // nextPaymentDate pode ficar no passado se não foi avançado após congelar,
+    // mas sem gaps reais o mês congelado conta como resolvido → em dia.
+    expect(calcularStatusPagamento("2026-04-10", 0)).toBe("em_dia");
+  });
+
   it("sem_pagamento ignora gapsCount quando next_payment_date é null", () => {
     expect(calcularStatusPagamento(null, 4)).toBe("sem_pagamento");
   });

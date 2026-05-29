@@ -171,6 +171,33 @@ describe("aggregateMrr — mês corrente (contratado)", () => {
   });
 });
 
+// ─── Mês do reajuste: vale o valor antigo, não o pós-reajuste ────────────────
+// Reajuste = changePlan: encerra o plano antigo (endDate=data) e cria um novo
+// (startDate=mesma data, valor novo). No mês do reajuste os dois ficam "ativos no
+// mês"; deve valer o que vigia no início do mês (o plano antigo).
+
+describe("aggregateMrr — mês corrente com reajuste (Upgrade/Downgrade)", () => {
+  it("conta o valor antigo no mês do reajuste, não o novo nem a soma dos dois", () => {
+    const plans = [
+      plan({ id: 1, clientId: 1, planValue: 1000, startDate: "2026-01-01", endDate: "2026-05-15" }),
+      plan({ id: 2, clientId: 1, planValue: 1200, startDate: "2026-05-15", endDate: null }),
+    ];
+    const result = aggregateMrr({ plans, payments: [], today: TODAY, cutoff: CUTOFF });
+    const may = result.find((r) => r.month === "2026-05")!;
+    expect(may.value).toBe(1000);
+  });
+
+  it("não confunde planos concorrentes (2 planos ativos do mesmo cliente) com reajuste", () => {
+    const plans = [
+      plan({ id: 1, clientId: 1, planValue: 1000, startDate: "2026-01-01", endDate: null }),
+      plan({ id: 2, clientId: 1, planValue: 700, startDate: "2026-02-01", endDate: null }),
+    ];
+    const result = aggregateMrr({ plans, payments: [], today: TODAY, cutoff: CUTOFF });
+    const may = result.find((r) => r.month === "2026-05")!;
+    expect(may.value).toBe(1700);
+  });
+});
+
 // ─── Integração: cenário do bug ──────────────────────────────────────────────
 
 describe("aggregateMrr — cenário real (22/05/2026)", () => {

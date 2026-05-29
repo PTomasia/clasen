@@ -34,6 +34,12 @@ import {
 } from "lucide-react";
 import { formatBRL, formatMonth } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
+import { SortableHead } from "@/components/ui/sortable-head";
+import {
+  sortExpenses,
+  type ExpenseSortKey,
+  type SortDirection,
+} from "@/lib/utils/table-helpers";
 import type { ExpenseRow, ExpensesSummary } from "@/lib/services/expenses";
 import type { PnLData, PnLRow } from "@/lib/queries/profit-and-loss";
 import { ExpenseDialog } from "./expense-dialog";
@@ -72,6 +78,8 @@ export function DespesasClient({
   const [statusFilter, setStatusFilter] = useState<"todos" | "pago" | "pendente">("todos");
   const [includePreview, setIncludePreview] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("detalhado");
+  const [sortKey, setSortKey] = useState<ExpenseSortKey | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const [newOpen, setNewOpen] = useState(false);
   const [newDialogMode, setNewDialogMode] = useState<DialogMode>("avulsa");
@@ -147,6 +155,26 @@ export function DespesasClient({
       return true;
     });
   }, [expenses, search, monthFilter, categoryFilter, statusFilter]);
+
+  // Ordenação por coluna (só na view detalhada). Sem sortKey: mantém a ordem natural.
+  const sortedFiltered = useMemo(
+    () => (sortKey ? sortExpenses(filtered, sortKey, sortDirection) : filtered),
+    [filtered, sortKey, sortDirection]
+  );
+
+  function handleSort(key: ExpenseSortKey) {
+    if (sortKey === key) {
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else {
+        setSortKey(null);
+        setSortDirection("asc");
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  }
 
   const totalFiltrado = filtered.reduce((s, e) => s + (e.isPaid ? e.amount : 0), 0);
 
@@ -292,7 +320,7 @@ export function DespesasClient({
       {/* ── Lista (Detalhada ou Agrupada) ── */}
       {viewMode === "detalhado" ? (
         <ExpensesTableDetalhada
-          filtered={filtered}
+          filtered={sortedFiltered}
           activePreviews={activePreviews}
           totalDespesaMes={totalDespesaMes}
           monthFilter={monthFilter}
@@ -302,6 +330,9 @@ export function DespesasClient({
           onDelete={setDeleting}
           onRepeat={setRepeatPicker}
           totalFiltrado={totalFiltrado}
+          sortKey={sortKey}
+          sortDirection={sortDirection}
+          onSort={handleSort}
         />
       ) : (
         <GroupedExpensesView
@@ -836,6 +867,9 @@ function ExpensesTableDetalhada({
   onDelete,
   onRepeat,
   totalFiltrado,
+  sortKey,
+  sortDirection,
+  onSort,
 }: {
   filtered: ExpenseRow[];
   activePreviews: ExpenseRow[];
@@ -847,6 +881,9 @@ function ExpensesTableDetalhada({
   onDelete: (e: ExpenseRow) => void;
   onRepeat: (e: ExpenseRow) => void;
   totalFiltrado: number;
+  sortKey: ExpenseSortKey | null;
+  sortDirection: SortDirection;
+  onSort: (key: ExpenseSortKey) => void;
 }) {
   const showPercentage = monthFilter !== "todos" && totalDespesaMes > 0;
 
@@ -855,12 +892,12 @@ function ExpensesTableDetalhada({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Mês</TableHead>
-            <TableHead>Descrição</TableHead>
-            <TableHead>Categoria</TableHead>
-            <TableHead className="text-right">Valor</TableHead>
+            <SortableHead label="Mês" sortKey="month" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
+            <SortableHead label="Descrição" sortKey="description" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
+            <SortableHead label="Categoria" sortKey="category" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
+            <SortableHead label="Valor" sortKey="amount" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} className="text-right" />
             {showPercentage && <TableHead className="text-right">% mês</TableHead>}
-            <TableHead>Status</TableHead>
+            <SortableHead label="Status" sortKey="isPaid" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>

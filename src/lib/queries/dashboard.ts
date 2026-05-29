@@ -96,6 +96,25 @@ function monthLabel(yyyymm: string): string {
   return `${MONTH_LABELS[Number(m) - 1]}/${y.slice(2)}`;
 }
 
+// ─── Atraso de pagamento ────────────────────────────────────────────────────
+// gaps (datas de vencimento vencidas sem pagamento) é a fonte da verdade: meses
+// congelados (skipped) e pagos já são excluídos do cálculo de gaps. Logo, sem
+// gaps o cliente está em dia — mesmo que nextPaymentDate tenha ficado no passado
+// por não ter sido avançado após congelar (caso Dara/Maju). O fallback por
+// nextPaymentDate vencido só vale quando não dá pra computar gaps (plano sem dia
+// de vencimento definido).
+export function isPlanAtrasado(
+  plan: { billingCycleDays: number | null; nextPaymentDate: string | null },
+  gaps: ReadonlyArray<string>,
+  today: string
+): boolean {
+  if (gaps.length > 0) return true;
+  if (!plan.billingCycleDays) {
+    return !!plan.nextPaymentDate && plan.nextPaymentDate < today;
+  }
+  return false;
+}
+
 // ─── Query principal ──────────────────────────────────────────────────────────
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -197,19 +216,17 @@ export async function getDashboardData(): Promise<DashboardData> {
   });
 
   // ─── Atrasados ─────────────────────────────────────────────────────
-  // Considera atraso por gap (mês anterior em aberto) OU nextPaymentDate vencido.
-  // Sem isso, registrar pagamento do mês mais recente "limpa" o status mesmo
-  // com meses anteriores ainda em aberto (bug Gabriele).
+  // Atraso = ter gap (mês vencido sem pagamento E sem congelamento). Ver
+  // isPlanAtrasado: meses congelados/pagos saem dos gaps, então sem gaps o
+  // cliente está em dia. Cobre tanto o bug Gabriele (gap anterior em aberto
+  // continua atrasado) quanto Dara/Maju (mês congelado → em dia).
   const atrasados: AtrasadoRow[] = activePlans
     .map((p) => {
       const planPayments = paymentsByPlan.get(p.id) ?? [];
       const gaps = calculateGapsForPlan(p, planPayments, today, minDate);
       return { plan: p, gaps };
     })
-    .filter(({ plan, gaps }) => {
-      if (gaps.length > 0) return true;
-      return !!plan.nextPaymentDate && plan.nextPaymentDate < today;
-    })
+    .filter(({ plan, gaps }) => isPlanAtrasado(plan, gaps, today))
     .map(({ plan, gaps }) => {
       const client = clientMap.get(plan.clientId);
       // Se há gaps, o "atraso" começa no primeiro gap; senão no nextPaymentDate.
@@ -381,13 +398,20 @@ export function aggregateMrr(input: {
       // Mês inteiro antes do cutoff: zerado
       value = 0;
     } else if (yyyymm === currentYyyymm) {
-      // Mês corrente: soma planos ativos durante o mês (contratado)
-      value = plans
-        .filter(
-          (p) =>
-            p.startDate <= lastDay &&
-            (p.endDate === null || p.endDate >= firstDay)
-        )
+      // Mês corrente: soma planos ativos durante o mês (contratado).
+      const active = plans.filter(
+        (p) =>
+          p.startDate <= lastDay &&
+          (p.endDate === null || p.endDate >= firstDay)
+      );
+      // Reajuste no mês: changePlan encerra o plano antigo (endDate) e cria um
+      // novo com startDate == esse endDate. Ambos ficam "ativos no mês"; conta só
+      // o que vigia no início do mês (o valor que ERA), não o sucessor.
+      const successorKeys = new Set(
+        active.filter((p) => p.endDate).map((p) => `${p.clientId}|${p.endDate}`)
+      );
+      value = active
+        .filter((p) => !successorKeys.has(`${p.clientId}|${p.startDate}`))
         .reduce((sum, p) => sum + p.planValue, 0);
     } else {
       // Mês passado: soma pagamentos realizados (pago + pendente)

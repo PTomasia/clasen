@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { sortPlans, filterPlans, type SortKey, type SortDirection } from "../table-helpers";
+import {
+  sortPlans,
+  filterPlans,
+  sortExpenses,
+  type SortKey,
+  type SortDirection,
+  type ExpenseSortRow,
+} from "../table-helpers";
 import type { StatusPagamento } from "../calculations";
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
@@ -186,6 +193,80 @@ describe("sortPlans", () => {
     const sorted = sortPlans(plans, "planValue", "asc");
     expect(sorted).toHaveLength(1);
     expect(sorted[0].planValue).toBe(500);
+  });
+});
+
+// ─── sortExpenses ─────────────────────────────────────────────────────────────
+
+function makeExpense(overrides: Partial<ExpenseSortRow> = {}): ExpenseSortRow {
+  return {
+    month: "2026-03",
+    description: "Despesa",
+    category: "fixo",
+    amount: 100,
+    isPaid: false,
+    ...overrides,
+  };
+}
+
+describe("sortExpenses", () => {
+  it("ordena por amount asc (menor→maior)", () => {
+    const rows = [
+      makeExpense({ amount: 900 }),
+      makeExpense({ amount: 350 }),
+      makeExpense({ amount: 670 }),
+    ];
+    const sorted = sortExpenses(rows, "amount", "asc");
+    expect(sorted.map((e) => e.amount)).toEqual([350, 670, 900]);
+  });
+
+  it("ordena por amount desc (maior→menor)", () => {
+    const rows = [makeExpense({ amount: 350 }), makeExpense({ amount: 900 })];
+    const sorted = sortExpenses(rows, "amount", "desc");
+    expect(sorted.map((e) => e.amount)).toEqual([900, 350]);
+  });
+
+  it("ordena por month asc (cronológico via YYYY-MM)", () => {
+    const rows = [
+      makeExpense({ month: "2026-05" }),
+      makeExpense({ month: "2026-01" }),
+      makeExpense({ month: "2026-03" }),
+    ];
+    const sorted = sortExpenses(rows, "month", "asc");
+    expect(sorted.map((e) => e.month)).toEqual(["2026-01", "2026-03", "2026-05"]);
+  });
+
+  it("ordena por description asc (alfabético pt-BR)", () => {
+    const rows = [
+      makeExpense({ description: "Zoom" }),
+      makeExpense({ description: "Água" }),
+      makeExpense({ description: "Internet" }),
+    ];
+    const sorted = sortExpenses(rows, "description", "asc");
+    expect(sorted.map((e) => e.description)).toEqual(["Água", "Internet", "Zoom"]);
+  });
+
+  it("ordena por isPaid asc (pendente antes de paga)", () => {
+    const rows = [
+      makeExpense({ isPaid: true }),
+      makeExpense({ isPaid: false }),
+      makeExpense({ isPaid: true }),
+    ];
+    const sorted = sortExpenses(rows, "isPaid", "asc");
+    expect(sorted.map((e) => e.isPaid)).toEqual([false, true, true]);
+  });
+
+  it("ordena por isPaid desc (paga antes de pendente)", () => {
+    const rows = [makeExpense({ isPaid: false }), makeExpense({ isPaid: true })];
+    const sorted = sortExpenses(rows, "isPaid", "desc");
+    expect(sorted.map((e) => e.isPaid)).toEqual([true, false]);
+  });
+
+  it("não modifica o array original (imutável)", () => {
+    const rows = [makeExpense({ amount: 900 }), makeExpense({ amount: 350 })];
+    const original = rows.map((e) => e.amount);
+    sortExpenses(rows, "amount", "asc");
+    expect(rows.map((e) => e.amount)).toEqual(original);
   });
 });
 
