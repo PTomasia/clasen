@@ -215,9 +215,9 @@ describe("aggregateUnitEconomics — CAC, ROAS, churn rate", () => {
 });
 
 describe("aggregateUnitEconomics — totais", () => {
-  it("LTV médio ignora clientes sem pagamento", () => {
+  it("receita média por cliente ignora clientes sem pagamento", () => {
     // Cliente 1: 3 pagamentos totalizando 900
-    // Cliente 2: 2 pagamentos totalizando 400 + 1 avulsa de 100 → LTV=500
+    // Cliente 2: 2 pagamentos totalizando 400 + 1 avulsa de 100 → 500
     // Cliente 3: SEM pagamento pago (só pendente) → NÃO entra na média
     const data = aggregateUnitEconomics({
       plans: [],
@@ -236,8 +236,56 @@ describe("aggregateUnitEconomics — totais", () => {
       today: TODAY,
     });
 
-    // LTV médio = (900 + 500) / 2 = 700
-    expect(data.totals.ltvMedio).toBe(700);
+    // Receita média realizada por cliente = (900 + 500) / 2 = 700
+    expect(data.totals.receitaMediaPorCliente).toBe(700);
+  });
+
+  it("LTV médio preditivo = ticket médio mensal × permanência média", () => {
+    const data = aggregateUnitEconomics({
+      plans: [
+        { clientId: 1, planValue: 600, startDate: "2025-01-01", endDate: null },
+        { clientId: 2, planValue: 1000, startDate: "2025-01-01", endDate: null },
+      ],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map(),
+      permanenciaMedia: 10,
+      today: TODAY,
+    });
+    // ticket = (600+1000)/2 = 800; permanência = 10 → LTV = 8000
+    expect(data.totals.ticketMedioMensal).toBe(800);
+    expect(data.totals.permanenciaMedia).toBe(10);
+    expect(data.totals.ltvMedio).toBe(8000);
+  });
+
+  it("LTV médio preditivo = 0 quando permanência média não é informada", () => {
+    const data = aggregateUnitEconomics({
+      plans: [
+        { clientId: 1, planValue: 600, startDate: "2025-01-01", endDate: null },
+      ],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map(),
+      today: TODAY,
+    });
+    expect(data.totals.ltvMedio).toBe(0);
+  });
+
+  it("LTV:CAC usa o LTV preditivo (não a receita realizada)", () => {
+    const data = aggregateUnitEconomics({
+      plans: [
+        { clientId: 1, planValue: 500, startDate: "2026-04-05", endDate: null },
+      ],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map([["2026-04", 1000]]),
+      permanenciaMedia: 8,
+      today: TODAY,
+    });
+    // ticket = 500, permanência = 8 → LTV = 4000; CAC = 1000/1 novo = 1000 → 4.0x
+    expect(data.totals.ltvMedio).toBe(4000);
+    expect(data.totals.cacMedio).toBe(1000);
+    expect(data.totals.ltvCacRatio).toBe(4);
   });
 
   it("ticket médio mensal considera apenas planos ativos", () => {
@@ -371,11 +419,11 @@ describe("aggregateUnitEconomics — corte temporal (financialDataStart)", () =>
     expect(pickMonth(data, "2026-02").receita).toBe(200);
   });
 
-  it("LTV exclui pagamentos pré-corte (recalculado apenas com 2026+)", () => {
+  it("receita média por cliente exclui pagamentos pré-corte (apenas 2026+)", () => {
     const data = aggregateUnitEconomics({
       plans: [],
       payments: [
-        { clientId: 1, paymentDate: "2025-06-01", amount: 5000, status: "pago" }, // excluído do LTV
+        { clientId: 1, paymentDate: "2025-06-01", amount: 5000, status: "pago" }, // excluído
         { clientId: 1, paymentDate: "2026-01-01", amount: 600, status: "pago" },  // incluído
       ],
       revenues: [],
@@ -383,8 +431,8 @@ describe("aggregateUnitEconomics — corte temporal (financialDataStart)", () =>
       financialDataStart: "2026-01-01",
       today: TODAY,
     });
-    // LTV de cliente 1 = 600 (apenas 2026+)
-    expect(data.totals.ltvMedio).toBe(600);
+    // Receita realizada de cliente 1 = 600 (apenas 2026+)
+    expect(data.totals.receitaMediaPorCliente).toBe(600);
   });
 
   it("sem financialDataStart inclui tudo (comportamento legacy)", () => {

@@ -4,6 +4,7 @@ import {
   calcularROAS,
   calcularChurnRate,
   calcularLTV,
+  calcularLTVPreditivo,
   calcularPayback,
 } from "../unit-economics";
 
@@ -60,6 +61,24 @@ describe("calcularLTV", () => {
 
   it("funciona apenas com pagamentos recorrentes", () => {
     expect(calcularLTV({ planPayments: [100, 200, 300] })).toBe(600);
+  });
+});
+
+describe("calcularLTVPreditivo", () => {
+  it("retorna ticket médio mensal × permanência média (meses)", () => {
+    expect(calcularLTVPreditivo(646, 10)).toBe(6460);
+  });
+
+  it("retorna 0 quando o ticket é 0", () => {
+    expect(calcularLTVPreditivo(0, 10)).toBe(0);
+  });
+
+  it("retorna 0 quando a permanência é 0", () => {
+    expect(calcularLTVPreditivo(646, 0)).toBe(0);
+  });
+
+  it("não retorna negativo com entradas inválidas", () => {
+    expect(calcularLTVPreditivo(-100, 10)).toBe(0);
   });
 });
 

@@ -31,7 +31,7 @@ export function AquisicaoClient({ data }: { data: UnitEconomicsData }) {
         <KPI
           label="LTV médio"
           value={formatBRL(totals.ltvMedio)}
-          sub="Soma planos + avulsas"
+          sub={`Ticket × ${totals.permanenciaMedia.toFixed(1)} m de permanência`}
         />
         <KPI
           label="LTV : CAC"
@@ -112,7 +112,11 @@ export function AquisicaoClient({ data }: { data: UnitEconomicsData }) {
         Receita = pagamentos recorrentes + avulsas (pagas). Churned = clientes
         cujo último plano encerrou no mês e não houve retomada.{" "}
         <strong>Churn % (receita)</strong> = MRR perdido / MRR ativo no início do mês
-        — mais relevante que a contagem de cabeças quando os tickets diferem.
+        — mais relevante que a contagem de cabeças quando os tickets diferem.{" "}
+        <strong>LTV médio</strong> = ticket médio mensal × permanência média
+        (projeção do valor de vida, não só o já recebido). Para referência, a
+        receita média <em>já realizada</em> por cliente é{" "}
+        {formatBRL(totals.receitaMediaPorCliente)}.
       </p>
     </>
   );

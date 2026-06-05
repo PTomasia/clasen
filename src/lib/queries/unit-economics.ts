@@ -7,8 +7,10 @@ import {
   calcularROAS,
   calcularChurnRate,
   calcularLTV,
+  calcularLTVPreditivo,
   calcularPayback,
 } from "../utils/unit-economics";
+import { calcularPermanenciaCliente } from "../utils/calculations";
 import { getAdSpendMap } from "../services/marketing";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -35,7 +37,9 @@ export interface UnitEconomicsData {
     receitaTotal: number;
     cacMedio: number | null;
     roasMedio: number | null;
-    ltvMedio: number;
+    ltvMedio: number; // preditivo: ticket médio mensal × permanência média
+    receitaMediaPorCliente: number; // realizado: média da receita já recebida por cliente
+    permanenciaMedia: number; // meses (média geral, mesma base do dashboard)
     ltvCacRatio: number | null;
     paybackMeses: number | null;
     ticketMedioMensal: number;
@@ -88,8 +92,10 @@ export function aggregateUnitEconomics(input: {
   adSpendMap: Map<string, number>;
   today: Date;
   financialDataStart?: string;
+  permanenciaMedia?: number; // meses; precomputado no IO (mesma base do dashboard)
 }): UnitEconomicsData {
   const { plans, adSpendMap, today, financialDataStart } = input;
+  const permanenciaMedia = input.permanenciaMedia ?? 0;
 
   const payments = financialDataStart
     ? input.payments.filter((p) => p.paymentDate >= financialDataStart)
@@ -200,7 +206,9 @@ export function aggregateUnitEconomics(input: {
     novosClientesTotal > 0 ? adSpendTotal / novosClientesTotal : null;
   const roasMedio = adSpendTotal > 0 ? receitaTotal / adSpendTotal : null;
 
-  // LTV médio: média de (total pagamentos + total avulsas) por cliente que já pagou algo
+  // Receita média realizada por cliente: média de (pagamentos pagos + avulsas
+  // pagas) por cliente que já pagou algo. Métrica de receita JÁ recebida — não
+  // é LTV (não projeta o futuro). Mantida como referência secundária.
   const paymentsByClient = new Map<number, number[]>();
   for (const p of payments) {
     if (p.status !== "pago") continue;
@@ -219,18 +227,16 @@ export function aggregateUnitEconomics(input: {
     ...paymentsByClient.keys(),
     ...revenuesByClient.keys(),
   ]);
-  const ltvs: number[] = [];
+  const receitas: number[] = [];
   for (const cid of clientIds) {
-    const ltv = calcularLTV({
+    const total = calcularLTV({
       planPayments: paymentsByClient.get(cid) ?? [],
       oneTimeRevenues: revenuesByClient.get(cid) ?? [],
     });
-    if (ltv > 0) ltvs.push(ltv);
+    if (total > 0) receitas.push(total);
   }
-  const ltvMedio =
-    ltvs.length > 0 ? ltvs.reduce((a, b) => a + b, 0) / ltvs.length : 0;
-
-  const ltvCacRatio = cacMedio && cacMedio > 0 ? ltvMedio / cacMedio : null;
+  const receitaMediaPorCliente =
+    receitas.length > 0 ? receitas.reduce((a, b) => a + b, 0) / receitas.length : 0;
 
   // Ticket médio mensal: média de planValue dos planos atualmente ativos
   const activePlans = plans.filter((p) => !p.endDate);
@@ -238,6 +244,11 @@ export function aggregateUnitEconomics(input: {
     activePlans.length > 0
       ? activePlans.reduce((s, p) => s + p.planValue, 0) / activePlans.length
       : 0;
+
+  // LTV preditivo = ticket médio mensal × permanência média (meses).
+  const ltvMedio = calcularLTVPreditivo(ticketMedioMensal, permanenciaMedia);
+
+  const ltvCacRatio = cacMedio && cacMedio > 0 ? ltvMedio / cacMedio : null;
 
   const paybackMeses = calcularPayback(cacMedio, ticketMedioMensal);
 
@@ -250,6 +261,8 @@ export function aggregateUnitEconomics(input: {
       cacMedio,
       roasMedio,
       ltvMedio,
+      receitaMediaPorCliente,
+      permanenciaMedia,
       ltvCacRatio,
       paybackMeses,
       ticketMedioMensal,
@@ -260,19 +273,36 @@ export function aggregateUnitEconomics(input: {
 // ─── Query principal (IO) ─────────────────────────────────────────────────────
 
 export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
-  const [plans, payments, revenues, adSpendMap] = await Promise.all([
+  const [plans, payments, revenues, clients, adSpendMap] = await Promise.all([
     db.select().from(schema.subscriptionPlans).all(),
     db.select().from(schema.planPayments).all(),
     db.select().from(schema.oneTimeRevenues).all(),
+    db.select().from(schema.clients).all(),
     getAdSpendMap(db),
   ]);
+
+  const now = new Date();
+
+  // Permanência média (geral): média da permanência de cada cliente com plano.
+  // Mesma base usada no dashboard (calcularPermanenciaCliente honra clientSince).
+  const tenures: number[] = [];
+  for (const client of clients) {
+    const clientPlans = plans.filter((p) => p.clientId === client.id);
+    if (clientPlans.length === 0) continue;
+    const tenure = calcularPermanenciaCliente(client, clientPlans, now);
+    if (tenure === null) continue;
+    tenures.push(tenure);
+  }
+  const permanenciaMedia =
+    tenures.length > 0 ? tenures.reduce((a, b) => a + b, 0) / tenures.length : 0;
 
   return aggregateUnitEconomics({
     plans: plans as any,
     payments: payments as any,
     revenues: revenues as any,
     adSpendMap,
-    today: new Date(),
+    today: now,
     financialDataStart: FINANCIAL_DATA_START,
+    permanenciaMedia,
   });
 }

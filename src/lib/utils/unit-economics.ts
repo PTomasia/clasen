@@ -53,6 +53,20 @@ export function calcularLTV(input: {
 }
 
 /**
+ * LTV preditivo = ticket médio mensal × permanência média (em meses).
+ * Projeta o valor de vida do cliente, em vez de só a receita já realizada —
+ * mais fiel para uma carteira jovem, onde a maioria ainda não viveu o ciclo todo.
+ * Robusto a churn ruidoso/zero (não divide por churn).
+ */
+export function calcularLTVPreditivo(
+  ticketMedioMensal: number,
+  permanenciaMediaMeses: number
+): number {
+  if (ticketMedioMensal <= 0 || permanenciaMediaMeses <= 0) return 0;
+  return ticketMedioMensal * permanenciaMediaMeses;
+}
+
+/**
  * Payback = quantos meses de ticket médio são necessários para recuperar o CAC.
  * Retorna null se CAC for null ou ticket for 0.
  */
