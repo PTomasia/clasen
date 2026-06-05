@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { ClientTypeBadge } from "@/components/shared/client-type-badge";
 import {
   Table,
   TableBody,
@@ -47,6 +48,7 @@ interface ClientDetail {
   id: number;
   name: string;
   contactOrigin: string | null;
+  clientType: string | null;
   birthday: string | null;
   whatsapp: string | null;
   city: string | null;
@@ -111,8 +113,9 @@ export function ClientDetailDialog({
 
         {data && (
           <>
-            <div className="flex flex-wrap gap-3 text-sm">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
               <StatusBadge status={data.status === "ativo" ? "ativo" : "inativo"} />
+              {data.clientType && <ClientTypeBadge type={data.clientType} />}
               <span className="text-muted-foreground">
                 {data.permanencia} meses de permanência
               </span>

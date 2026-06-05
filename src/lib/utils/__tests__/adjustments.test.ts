@@ -38,9 +38,9 @@ describe("calcularProximoReajuste", () => {
 // ─── calcularSugestaoReajuste ─────────────────────────────────────────────────
 
 describe("calcularSugestaoReajuste", () => {
-  it("sugere valor ideal quando aumento ≤ 25%", () => {
+  it("sugere valor ideal quando aumento está dentro do teto", () => {
     // 4C + 0R + 6E×0.5 = 7 posts eq. | target 178 → ideal = 178×7 = 1246
-    // atual 1100 → aumento = 13.3% (< 25%) → retorna 1246
+    // atual 1100 → aumento = 13.3% (< 50%) → retorna 1246
     const result = calcularSugestaoReajuste({
       planValue: 1100,
       postsCarrossel: 4,
@@ -53,18 +53,18 @@ describe("calcularSugestaoReajuste", () => {
     expect(result.capped).toBe(false);
   });
 
-  it("limita a 25% quando o ideal ultrapassa o teto", () => {
+  it("limita a 50% quando o ideal ultrapassa o teto", () => {
     // 4C + 0R + 6E×0.5 = 7 posts eq. | target 178 → ideal = 1246
-    // atual 900 → aumento = 38.4% → cap a 25% → 900 × 1.25 = 1125
+    // atual 700 → aumento = 78% → cap a 50% → 700 × 1.50 = 1050
     const result = calcularSugestaoReajuste({
-      planValue: 900,
+      planValue: 700,
       postsCarrossel: 4,
       postsReels: 0,
       postsEstatico: 6,
       targetCostPerPost: 178,
     });
-    expect(result.suggestedValue).toBeCloseTo(1125, 0);
-    expect(result.percentChange).toBe(25);
+    expect(result.suggestedValue).toBeCloseTo(1050, 0);
+    expect(result.percentChange).toBe(50);
     expect(result.capped).toBe(true);
   });
 
@@ -97,7 +97,7 @@ describe("calcularSugestaoReajuste", () => {
   });
 
   it("funciona com teto customizado (maxPercent)", () => {
-    // ideal = 178×7 = 1246 | atual 900 | default 25% → 1125
+    // ideal = 178×7 = 1246 | atual 900 | default 50% (teto 1350) não capa
     // com teto 10% → 900 × 1.10 = 990
     const result = calcularSugestaoReajuste({
       planValue: 900,

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setTargetCostPerPost } from "@/lib/actions/settings";
 import { useDialogAction } from "@/lib/hooks/use-dialog-action";
+import { MAX_REAJUSTE_PERCENT } from "@/lib/utils/adjustments";
 
 export function TargetPriceDialog({
   open,
@@ -41,7 +42,8 @@ export function TargetPriceDialog({
           <DialogTitle>Preço-alvo por post</DialogTitle>
           <p className="text-sm text-muted-foreground">
             Valor de referência para sugestões de reajuste. Planos com $/post
-            abaixo deste valor receberão sugestão de aumento (máximo 25%).
+            abaixo deste valor receberão sugestão de aumento (máximo{" "}
+            {MAX_REAJUSTE_PERCENT}%).
           </p>
         </DialogHeader>
 

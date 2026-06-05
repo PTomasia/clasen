@@ -1,0 +1,1 @@
+ALTER TABLE `clients` ADD `client_type` text;

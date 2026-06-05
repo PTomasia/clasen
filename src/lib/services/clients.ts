@@ -40,6 +40,7 @@ export async function findOrCreateClient(
 export interface CreateClientInput {
   name: string;
   contactOrigin?: string;
+  clientType?: string;
   clientSince?: string;
   birthday?: string;
   whatsapp?: string;
@@ -75,6 +76,7 @@ export async function createClient(
     .values({
       name: normalized,
       contactOrigin: input.contactOrigin?.trim() || null,
+      clientType: input.clientType?.trim() || null,
       clientSince: input.clientSince || null,
       birthday: input.birthday || null,
       whatsapp: input.whatsapp?.trim() || null,
@@ -124,6 +126,7 @@ export interface ClientRow {
   id: number;
   name: string;
   contactOrigin: string | null;
+  clientType: string | null;
   clientSince: string | null;
   birthday: string | null;
   whatsapp: string | null;
@@ -186,6 +189,7 @@ export async function getClientsList(
       id: client.id,
       name: client.name,
       contactOrigin: client.contactOrigin,
+      clientType: client.clientType,
       clientSince: client.clientSince,
       birthday: client.birthday,
       whatsapp: client.whatsapp,

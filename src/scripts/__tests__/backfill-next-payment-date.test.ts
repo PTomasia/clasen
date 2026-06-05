@@ -13,6 +13,7 @@ function createTestDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       contact_origin TEXT,
+      client_type TEXT,
       client_since TEXT,
       birthday TEXT,
       whatsapp TEXT,

@@ -21,12 +21,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { updateClientAction } from "@/lib/actions/plans";
 import { createClientAction } from "@/lib/actions/clients";
-import { ORIGINS, NICHES } from "@/lib/constants";
+import { ORIGINS, NICHES, CLIENT_TYPES } from "@/lib/constants";
 
 export interface EditClientQuickData {
   clientId: number;
   name: string;
   contactOrigin: string | null;
+  clientType: string | null;
   clientSince: string | null;
   birthday: string | null;
   whatsapp: string | null;
@@ -46,6 +47,7 @@ const EMPTY_DATA: EditClientQuickData = {
   clientId: 0,
   name: "",
   contactOrigin: null,
+  clientType: null,
   clientSince: null,
   birthday: null,
   whatsapp: null,
@@ -77,6 +79,7 @@ export function EditClientQuickDialog({
 
   const [name, setName] = useState(effectiveData.name);
   const [contactOrigin, setContactOrigin] = useState(effectiveData.contactOrigin ?? "");
+  const [clientType, setClientType] = useState(effectiveData.clientType ?? "");
   const [clientSince, setClientSince] = useState(effectiveData.clientSince ?? "");
   const [birthday, setBirthday] = useState(effectiveData.birthday ?? "");
   const [whatsapp, setWhatsapp] = useState(effectiveData.whatsapp ?? "");
@@ -105,6 +108,7 @@ export function EditClientQuickDialog({
     const payload = {
       name,
       contactOrigin: contactOrigin || undefined,
+      clientType: clientType || undefined,
       clientSince: clientSince || undefined,
       birthday: birthday || undefined,
       whatsapp: whatsapp || undefined,
@@ -157,6 +161,20 @@ export function EditClientQuickDialog({
               <SelectContent>
                 {ORIGINS.map((o) => (
                   <SelectItem key={o} value={o}>{o}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Tipo de cliente</Label>
+            <Select value={clientType} onValueChange={(v) => v && setClientType(v)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione..." />
+              </SelectTrigger>
+              <SelectContent>
+                {CLIENT_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

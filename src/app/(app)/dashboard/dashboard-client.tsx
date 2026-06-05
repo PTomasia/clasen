@@ -15,7 +15,10 @@ import {
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Calendar, BarChart3 } from "lucide-react";
+import { Calendar, BarChart3, Info } from "lucide-react";
+
+const MRR_VS_RECEITA_HINT =
+  "O MRR do mês corrente soma os planos ativos em qualquer dia do mês (inclui quem saiu no meio do mês e usa o valor pré-reajuste). A Receita bruta mensal é uma foto dos planos ativos hoje — por isso os dois podem divergir.";
 import { EmptyState } from "@/components/shared/empty-state";
 import type {
   DashboardData,
@@ -88,7 +91,10 @@ function DashboardHeroCard({
       <div className="flex h-full flex-col">
         {/* Hero */}
         <div className="flex-1 flex flex-col justify-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <p
+            className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground cursor-help"
+            title={MRR_VS_RECEITA_HINT}
+          >
             Receita bruta mensal
           </p>
           <p
@@ -261,7 +267,12 @@ function MRRChart({ data, range }: { data: DashboardData["mrr"]; range?: TimeRan
   return (
     <div className="bg-card border rounded-lg p-5">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="font-semibold">MRR</h2>
+        <div className="flex items-center gap-1.5">
+          <h2 className="font-semibold">MRR</h2>
+          <span className="text-muted-foreground/60 cursor-help" title={MRR_VS_RECEITA_HINT}>
+            <Info size={14} aria-label="Por que difere da Receita bruta mensal?" />
+          </span>
+        </div>
         <span
           className="text-lg text-muted-foreground tabular-nums"
           style={{ fontFamily: "var(--font-heading), serif" }}

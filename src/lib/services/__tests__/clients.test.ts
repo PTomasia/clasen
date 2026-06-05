@@ -13,6 +13,7 @@ import {
   getClientsList,
   getClientDetail,
   findOrCreateClient,
+  createClient,
 } from "../clients";
 import { eq } from "drizzle-orm";
 
@@ -25,6 +26,7 @@ function createTestDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       contact_origin TEXT,
+      client_type TEXT,
       client_since TEXT,
       birthday TEXT,
       whatsapp TEXT,
@@ -640,5 +642,39 @@ describe("findOrCreateClient", () => {
     await expect(findOrCreateClient(db, "   ")).rejects.toThrow(
       "nome do cliente é obrigatório"
     );
+  });
+});
+
+describe("createClient — tipo de cliente", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("salva clientType ao criar cliente novo", async () => {
+    const client = await createClient(db, {
+      name: "Carla Premium",
+      clientType: "Premium",
+    });
+
+    const row = db.select().from(schema.clients).all()[0];
+    expect(row.clientType).toBe("Premium");
+    expect(client.clientType).toBe("Premium");
+  });
+
+  it("clientType é null quando não informado", async () => {
+    await createClient(db, { name: "Sem Tipo" });
+
+    const row = db.select().from(schema.clients).all()[0];
+    expect(row.clientType).toBeNull();
+  });
+
+  it("getClientsList retorna o clientType", async () => {
+    await createClient(db, { name: "Dora Legado", clientType: "Legado" });
+
+    const list = await getClientsList(db, MOCK_TODAY);
+    expect(list).toHaveLength(1);
+    expect(list[0].clientType).toBe("Legado");
   });
 });

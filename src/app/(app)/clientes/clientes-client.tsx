@@ -32,14 +32,16 @@ import { formatBRL } from "@/lib/utils/formatting";
 import { ClientDetailDialog } from "./client-detail-dialog";
 import { EditClientQuickDialog, type EditClientQuickData } from "./edit-client-quick-dialog";
 import type { ClientRow } from "@/lib/services/clients";
-import { ORIGINS } from "@/lib/constants";
+import { ORIGINS, CLIENT_TYPES, CLIENT_TYPE_COLORS, type ClientType } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
-type SortKey = "name" | "permanencia" | "planosAtivos" | "valorMensal" | "custoPostMedio" | "status" | "contactOrigin";
+type SortKey = "name" | "permanencia" | "planosAtivos" | "valorMensal" | "custoPostMedio" | "status" | "contactOrigin" | "clientType";
 type SortDirection = "asc" | "desc" | null;
 
 export function ClientesClient({ clients }: { clients: ClientRow[] }) {
   const [statusFilter, setStatusFilter] = useState<"todos" | "ativo" | "inativo">("todos");
   const [originFilter, setOriginFilter] = useState<string>("todos");
+  const [typeFilter, setTypeFilter] = useState<string>("todos");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDirection>(null);
@@ -48,6 +50,8 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
   const [showCreate, setShowCreate] = useState(false);
   const [updatingOriginId, setUpdatingOriginId] = useState<number | null>(null);
   const [, startOriginTransition] = useTransition();
+  const [updatingTypeId, setUpdatingTypeId] = useState<number | null>(null);
+  const [, startTypeTransition] = useTransition();
 
   function handleOriginChange(client: ClientRow, newOriginRaw: string | null) {
     const newOrigin = newOriginRaw ?? "";
@@ -59,6 +63,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
           clientId: client.id,
           name: client.name,
           contactOrigin: newOrigin || undefined,
+          clientType: client.clientType ?? undefined,
           clientSince: client.clientSince ?? undefined,
           birthday: client.birthday ?? undefined,
           whatsapp: client.whatsapp ?? undefined,
@@ -75,6 +80,37 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
         });
       } finally {
         setUpdatingOriginId(null);
+      }
+    });
+  }
+
+  function handleTypeChange(client: ClientRow, newTypeRaw: string | null) {
+    const newType = newTypeRaw ?? "";
+    if (newType === (client.clientType ?? "")) return;
+    setUpdatingTypeId(client.id);
+    startTypeTransition(async () => {
+      try {
+        await updateClientAction({
+          clientId: client.id,
+          name: client.name,
+          contactOrigin: client.contactOrigin ?? undefined,
+          clientType: newType || undefined,
+          clientSince: client.clientSince ?? undefined,
+          birthday: client.birthday ?? undefined,
+          whatsapp: client.whatsapp ?? undefined,
+          email: client.email ?? undefined,
+          city: client.city ?? undefined,
+          state: client.state ?? undefined,
+          niche: client.niche ?? undefined,
+          yearsInPractice: client.yearsInPractice ?? undefined,
+          consultaTicket: client.consultaTicket ?? undefined,
+          hasPhysicalOffice: client.hasPhysicalOffice ?? undefined,
+          birthYear: client.birthYear ?? undefined,
+          targetAudience: client.targetAudience ?? undefined,
+          notes: client.notes ?? undefined,
+        });
+      } finally {
+        setUpdatingTypeId(null);
       }
     });
   }
@@ -110,6 +146,11 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
       result = result.filter((c) => c.contactOrigin === originFilter);
     }
 
+    // Type filter
+    if (typeFilter !== "todos") {
+      result = result.filter((c) => c.clientType === typeFilter);
+    }
+
     // Search
     if (search.trim()) {
       const q = search.toLowerCase().trim();
@@ -138,7 +179,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
     }
 
     return result;
-  }, [clients, statusFilter, originFilter, search, sortKey, sortDir]);
+  }, [clients, statusFilter, originFilter, typeFilter, search, sortKey, sortDir]);
 
   // Summary metrics (from filtered active clients)
   const activeClients = clients.filter((c) => c.status === "ativo");
@@ -159,7 +200,11 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
     ? activeClients.reduce((s, c) => s + c.valorMensal, 0) / activeClients.length
     : 0;
 
-  const hasFilters = statusFilter !== "todos" || originFilter !== "todos" || search.trim() !== "";
+  const hasFilters =
+    statusFilter !== "todos" ||
+    originFilter !== "todos" ||
+    typeFilter !== "todos" ||
+    search.trim() !== "";
 
   return (
     <>
@@ -210,6 +255,18 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
           </SelectContent>
         </Select>
 
+        <Select value={typeFilter} onValueChange={(v) => v && setTypeFilter(v)}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os tipos</SelectItem>
+            {CLIENT_TYPES.map((t) => (
+              <SelectItem key={t} value={t}>{t}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -224,7 +281,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { setStatusFilter("todos"); setOriginFilter("todos"); setSearch(""); }}
+            onClick={() => { setStatusFilter("todos"); setOriginFilter("todos"); setTypeFilter("todos"); setSearch(""); }}
           >
             Limpar filtros
           </Button>
@@ -253,6 +310,11 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
               <TableHead>
                 <button className="flex items-center gap-1" onClick={() => handleSort("contactOrigin")}>
                   Origem <SortIcon column="contactOrigin" />
+                </button>
+              </TableHead>
+              <TableHead>
+                <button className="flex items-center gap-1" onClick={() => handleSort("clientType")}>
+                  Tipo <SortIcon column="clientType" />
                 </button>
               </TableHead>
               <TableHead>
@@ -286,7 +348,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                   Nenhum cliente encontrado
                 </TableCell>
               </TableRow>
@@ -319,6 +381,29 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                       </SelectContent>
                     </Select>
                   </TableCell>
+                  <TableCell className="text-sm">
+                    <Select
+                      value={client.clientType ?? ""}
+                      onValueChange={(v) => handleTypeChange(client, v)}
+                      disabled={updatingTypeId === client.id}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "h-7 w-[130px] gap-1 border-transparent bg-transparent text-xs hover:border-input hover:bg-background focus:border-input data-[state=open]:border-input",
+                          client.clientType
+                            ? cn("rounded-full px-2 font-medium", CLIENT_TYPE_COLORS[client.clientType as ClientType])
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        <SelectValue placeholder="—" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CLIENT_TYPES.map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell>
                     <StatusBadge status={client.status === "ativo" ? "ativo" : "inativo"} />
                   </TableCell>
@@ -342,6 +427,7 @@ export function ClientesClient({ clients }: { clients: ClientRow[] }) {
                         clientId: client.id,
                         name: client.name,
                         contactOrigin: client.contactOrigin,
+                        clientType: client.clientType,
                         clientSince: client.clientSince,
                         birthday: client.birthday,
                         whatsapp: client.whatsapp,

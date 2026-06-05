@@ -16,6 +16,7 @@ function createTestDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       contact_origin TEXT,
+      client_type TEXT,
       client_since TEXT,
       birthday TEXT,
       whatsapp TEXT,
@@ -1079,6 +1080,33 @@ describe("updateClient", () => {
       .get();
 
     expect(updated!.contactOrigin).toBe("Instagram");
+  });
+
+  it("atualiza tipo de cliente", async () => {
+    const { client } = await createPlan(db, {
+      clientName: "Cliente Tipo",
+      planType: "Essential",
+      planValue: 790,
+      postsCarrossel: 4,
+      postsReels: 1,
+      postsEstatico: 0,
+      postsTrafego: 0,
+      startDate: "2026-04-01",
+    });
+
+    await updateClient(db, {
+      clientId: client.id,
+      name: "Cliente Tipo",
+      clientType: "Premium",
+    });
+
+    const updated = db
+      .select()
+      .from(schema.clients)
+      .where(eq(schema.clients.id, client.id))
+      .get();
+
+    expect(updated!.clientType).toBe("Premium");
   });
 
   it("rejeita nome vazio", async () => {

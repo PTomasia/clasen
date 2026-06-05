@@ -214,6 +214,7 @@ export interface UpdateClientInput {
   clientId: number;
   name: string;
   contactOrigin?: string;
+  clientType?: string;
   clientSince?: string;
   birthday?: string;
   whatsapp?: string;
@@ -247,6 +248,7 @@ export async function updateClient(db: any, input: UpdateClientInput) {
     .set({
       name: input.name.trim(),
       contactOrigin: input.contactOrigin?.trim() || null,
+      clientType: input.clientType?.trim() || null,
       clientSince: input.clientSince?.trim() || null,
       birthday: input.birthday?.trim() || null,
       whatsapp: input.whatsapp?.trim() || null,
