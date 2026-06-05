@@ -2,7 +2,7 @@ import { addMonths, parseISO, format } from "date-fns";
 import { calcularTotalPostsEquivalentes } from "./calculations";
 
 // Teto padrão de reajuste de preço (% de aumento máximo sugerido).
-export const MAX_REAJUSTE_PERCENT = 50;
+export const MAX_REAJUSTE_PERCENT = 40;
 
 // ─── Próximo Reajuste ─────────────────────────────────────────────────────────
 // 6 meses após lastAdjustmentDate (ou startDate se nunca ajustado)
@@ -26,7 +26,7 @@ interface SugestaoInput {
   postsReels: number;
   postsEstatico: number;
   targetCostPerPost: number;
-  maxPercent?: number; // default: MAX_REAJUSTE_PERCENT (50)
+  maxPercent?: number; // default: MAX_REAJUSTE_PERCENT (40)
 }
 
 interface SugestaoResult {
