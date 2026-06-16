@@ -36,6 +36,8 @@ export async function exportCfoReportAction(): Promise<string> {
     lastPaymentDate: p.lastPaymentDate ?? null,
     statusPagamento: p.statusPagamento,
     adjustmentSuggestion: p.adjustmentSuggestion,
+    permanencia: p.permanencia,
+    nextAdjustmentDate: p.nextAdjustmentDate,
   }));
 
   return buildCfoReportMarkdown({

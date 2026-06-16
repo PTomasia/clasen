@@ -28,6 +28,8 @@ function buildInput() {
       lastPaymentDate: "2026-04-10",
       statusPagamento: "em_dia",
       adjustmentSuggestion: { suggestedValue: 1_500, percentChange: 25, capped: true },
+      permanencia: 12,
+      nextAdjustmentDate: "2026-08-10",
     },
     {
       id: 2,
@@ -45,6 +47,8 @@ function buildInput() {
       lastPaymentDate: "2026-04-15",
       statusPagamento: "em_dia",
       adjustmentSuggestion: null,
+      permanencia: 1,
+      nextAdjustmentDate: "2026-09-15",
     },
     {
       id: 3,
@@ -62,6 +66,8 @@ function buildInput() {
       lastPaymentDate: "2026-01-20",
       statusPagamento: "sem_pagamento",
       adjustmentSuggestion: null,
+      permanencia: 1,
+      nextAdjustmentDate: null,
     },
   ];
 
@@ -202,6 +208,16 @@ describe("buildCfoReportMarkdown", () => {
     expect(md).toContain("| Bia Lima | Personalizado | R$ 2.000,00 | — |");
     expect(md).not.toContain("Cris Velha"); // cancelado: não aparece
     expect(md).toContain("**TOTAL MRR (atual)**: R$ 3.200,00 — 2 planos ativos, ticket médio R$ 1.600,00");
+  });
+
+  it("seção 1: inclui permanência e data prevista de reajuste por plano", () => {
+    const md = buildCfoReportMarkdown(buildInput());
+    // Cabeçalho com as novas colunas
+    expect(md).toContain("| Cliente | Plano | Valor atual | Valor c/ reajuste | Próx. reajuste | Permanência |");
+    // Ana: reajuste 10/08/2026, 12 meses de permanência
+    expect(md).toContain("| R$ 1.500,00 | 10/08/2026 | 12 meses |");
+    // Bia: reajuste 15/09/2026, 1 mês (singular)
+    expect(md).toContain("| — | 15/09/2026 | 1 mês |");
   });
 
   it("seção 2: resumo de reajustes com diferença e tabela", () => {

@@ -35,6 +35,8 @@ export interface PlanForCfoReport extends PlanForReajuste {
   nextPaymentDate: string | null;
   lastPaymentDate: string | null;
   statusPagamento: "em_dia" | "atrasado" | "sem_pagamento";
+  permanencia: number; // meses de permanência do plano (tenure)
+  nextAdjustmentDate: string | null; // data prevista de reajuste (null se não ativo)
 }
 
 export interface BuildCfoReportInput {
@@ -98,6 +100,8 @@ function renderRecorrente(plans: PlanForCfoReport[]): string {
       "Plano",
       "Valor atual",
       "Valor c/ reajuste",
+      "Próx. reajuste",
+      "Permanência",
       "Status",
       "Vencimento",
       "Último pgto",
@@ -114,6 +118,8 @@ function renderRecorrente(plans: PlanForCfoReport[]): string {
       p.planType,
       formatBRL(p.planValue),
       reajuste !== null ? formatBRL(reajuste) : "—",
+      p.nextAdjustmentDate ? formatDate(p.nextAdjustmentDate) : "—",
+      formatMeses(p.permanencia),
       statusLabel(p.statusPagamento),
       p.nextPaymentDate ? formatDate(p.nextPaymentDate) : "—",
       p.lastPaymentDate ? formatDate(p.lastPaymentDate) : "—",
@@ -462,6 +468,10 @@ function renderParametros(params: FinancialParams): string {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatMeses(meses: number): string {
+  return `${meses} ${meses === 1 ? "mês" : "meses"}`;
+}
 
 function monthsAgo(now: Date, n: number): string {
   const d = new Date(now.getFullYear(), now.getMonth() - n, 1);
