@@ -13,7 +13,8 @@ export interface PnLRow {
   receitaTotal: number;
   despesaFixa: number;
   despesaVariavel: number;
-  despesaTotal: number;
+  despesaTotal: number; // fixa + variável (NÃO inclui tributos)
+  tributosPagos: number; // despesas de categoria "tributos" pagas no mês (DAS oficial)
   lucroLiquido: number;
   margemLiquida: number | null; // 0..1 ou null se receitaTotal=0
 }
@@ -115,12 +116,19 @@ export function aggregateProfitAndLoss(input: {
       if (monthKey(r.date) === m) receitaAvulsa += r.amount;
     }
 
-    // Despesa: pagas, agrupadas por categoria
+    // Despesa: pagas, agrupadas por categoria. Tributos (DAS) NÃO entram em
+    // despesa operacional — viram linha própria na DRE (evita dupla contagem com
+    // o DAS estimado).
     let despesaFixa = 0;
     let despesaVariavel = 0;
+    let tributosPagos = 0;
     for (const e of expenses) {
       if (!e.isPaid) continue;
       if (e.month !== m) continue;
+      if (e.category === "tributos") {
+        tributosPagos += e.amount;
+        continue;
+      }
       if (e.category === "fixo") despesaFixa += e.amount;
       else despesaVariavel += e.amount;
     }
@@ -142,6 +150,7 @@ export function aggregateProfitAndLoss(input: {
       despesaFixa,
       despesaVariavel,
       despesaTotal,
+      tributosPagos,
       lucroLiquido,
       margemLiquida,
     };

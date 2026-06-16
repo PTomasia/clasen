@@ -25,6 +25,7 @@ import {
   createExpenseInstallmentsAction,
 } from "@/lib/actions/expenses";
 import type { ExpenseRow } from "@/lib/services/expenses";
+import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/constants";
 
 type PaymentMode = "avista" | "parcelado";
 
@@ -45,7 +46,7 @@ export function ExpenseDialog({
 
   const [month, setMonth] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<"fixo" | "variavel">("fixo");
+  const [category, setCategory] = useState<ExpenseCategory>("fixo");
   const [amount, setAmount] = useState("");
   const [isPaid, setIsPaid] = useState(true);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -164,14 +165,17 @@ export function ExpenseDialog({
             <Label>Categoria</Label>
             <Select
               value={category}
-              onValueChange={(v) => v && setCategory(v as "fixo" | "variavel")}
+              onValueChange={(v) => v && setCategory(v as ExpenseCategory)}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="fixo">Fixo</SelectItem>
-                <SelectItem value="variavel">Variável</SelectItem>
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {EXPENSE_CATEGORY_LABELS[c]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

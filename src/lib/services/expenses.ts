@@ -1,8 +1,9 @@
 import { eq, desc, and } from "drizzle-orm";
 import { addMonths, format } from "date-fns";
 import * as schema from "../db/schema";
+import { EXPENSE_CATEGORIES, type ExpenseCategory } from "../constants";
 
-export type ExpenseCategory = "fixo" | "variavel";
+export type { ExpenseCategory };
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -96,8 +97,8 @@ function validateInput(input: {
   if (!input.description?.trim()) {
     throw new Error("descrição é obrigatória");
   }
-  if (input.category !== "fixo" && input.category !== "variavel") {
-    throw new Error("categoria inválida (use 'fixo' ou 'variavel')");
+  if (!(EXPENSE_CATEGORIES as readonly string[]).includes(input.category)) {
+    throw new Error("categoria inválida (use 'fixo', 'variavel' ou 'tributos')");
   }
   if (!input.amount || input.amount <= 0) {
     throw new Error("valor deve ser maior que zero");

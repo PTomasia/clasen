@@ -25,6 +25,7 @@ function pnlRow(partial: Partial<PnLRow>): PnLRow {
     despesaFixa: 0,
     despesaVariavel: 0,
     despesaTotal: 0,
+    tributosPagos: 0,
     lucroLiquido: 0,
     margemLiquida: null,
     ...partial,
@@ -143,29 +144,36 @@ describe("calcReservaPj", () => {
 });
 
 describe("calcCenario", () => {
-  it("cenário Atual com R$ 17.322 (MRR realista)", () => {
+  it("cenário Atual com R$ 17.322 → RBT12 projetada 207.864 cai na Faixa 2", () => {
     const c = calcCenario("Atual", 17_322, FINANCIAL_PARAMS);
     expect(c.label).toBe("Atual");
     expect(c.receitaBruta).toBe(17_322);
-    expect(c.tributos).toBe(1_039.32); // 17322 × 0.06
+    // RBT12 = 17322×12 = 207.864 → Faixa 2 (11,2% / R$9.360)
+    // tributos = receita×nominal − parcela/12 = 17322×0.112 − 780 = 1160.06
+    expect(c.aliquotaEfetiva).toBeCloseTo(0.066971, 5);
+    expect(c.tributos).toBe(1_160.06);
     expect(c.proLabore).toBe(15_000);
     expect(c.despesasFixas).toBe(PLANNED_FIXED_EXPENSES_TOTAL); // 5810
-    expect(c.saidaTotal).toBe(21_849.32);
-    expect(c.resultado).toBe(-4_527.32);
+    expect(c.saidaTotal).toBe(21_970.06);
+    expect(c.resultado).toBe(-4_648.06);
     expect(c.sobraReserva).toBe(0); // resultado negativo → sobra zerada
   });
 
-  it("cenário Meta com R$ 40.000 gera resultado positivo", () => {
+  it("cenário Meta com R$ 40.000 → RBT12 480k Faixa 3, ainda lucrativo", () => {
     const c = calcCenario("Meta", 40_000, FINANCIAL_PARAMS);
-    expect(c.tributos).toBe(2_400);
-    expect(c.saidaTotal).toBe(23_210);
-    expect(c.resultado).toBe(16_790);
-    expect(c.margem).toBeCloseTo(0.4198, 3); // ~42% de margem
-    expect(c.sobraReserva).toBe(16_790);
+    // RBT12 = 480.000 → Faixa 3 → efetiva 9,825% → DAS 3.930
+    expect(c.aliquotaEfetiva).toBeCloseTo(0.09825, 6);
+    expect(c.tributos).toBe(3_930);
+    expect(c.saidaTotal).toBe(24_740); // 3930 + 15000 + 5810
+    expect(c.resultado).toBe(15_260);
+    expect(c.margem).toBeCloseTo(0.3815, 3); // ~38% de margem
+    expect(c.sobraReserva).toBe(15_260);
   });
 
-  it("margem 0 quando receita 0", () => {
+  it("margem 0 e tributo 0 quando receita 0", () => {
     const c = calcCenario("Vazio", 0, FINANCIAL_PARAMS);
+    expect(c.aliquotaEfetiva).toBe(0);
+    expect(c.tributos).toBe(0);
     expect(c.margem).toBe(0);
     expect(c.sobraReserva).toBe(0);
   });

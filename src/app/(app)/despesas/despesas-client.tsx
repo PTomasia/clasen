@@ -31,8 +31,9 @@ import {
   Zap,
   LayoutList,
   LayoutGrid,
+  Landmark,
 } from "lucide-react";
-import { formatBRL, formatMonth } from "@/lib/utils/formatting";
+import { formatBRL, formatMonth, formatPercentage } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { SortableHead } from "@/components/ui/sortable-head";
 import {
@@ -42,12 +43,15 @@ import {
 } from "@/lib/utils/table-helpers";
 import type { ExpenseRow, ExpensesSummary } from "@/lib/services/expenses";
 import type { PnLData, PnLRow } from "@/lib/queries/profit-and-loss";
+import type { TaxEstimateData } from "@/lib/queries/tax-estimate";
+import { type ExpenseCategory } from "@/lib/constants";
 import { ExpenseDialog } from "./expense-dialog";
 import { DeleteExpenseDialog } from "./delete-expense-dialog";
 import {
   togglePaidExpenseAction,
   duplicateExpenseAction,
   launchRecurringExpensesAction,
+  createExpenseAction,
 } from "@/lib/actions/expenses";
 
 interface Props {
@@ -58,6 +62,7 @@ interface Props {
   currentMonth: string;
   nextMonth: string;
   previewsByMonth: Record<string, ExpenseRow[]>;
+  tax: TaxEstimateData;
 }
 
 type ViewMode = "detalhado" | "agrupado";
@@ -71,6 +76,7 @@ export function DespesasClient({
   currentMonth,
   nextMonth,
   previewsByMonth,
+  tax,
 }: Props) {
   const [search, setSearch] = useState("");
   const [monthFilter, setMonthFilter] = useState<string>(currentMonth);
@@ -87,6 +93,7 @@ export function DespesasClient({
   const [deleting, setDeleting] = useState<ExpenseRow | null>(null);
   const [repeatPicker, setRepeatPicker] = useState<ExpenseRow | null>(null);
   const [launching, setLaunching] = useState(false);
+  const [launchingDas, setLaunchingDas] = useState(false);
   const [toggling, setToggling] = useState<number | null>(null);
 
   // Persist viewMode em localStorage
@@ -134,6 +141,32 @@ export function DespesasClient({
       await launchRecurringExpensesAction(currentMonth);
     } finally {
       setLaunching(false);
+    }
+  }
+
+  // DAS estimado do mês de apuração já lançado como despesa (categoria tributos)?
+  const dasLaunched = useMemo(
+    () =>
+      expenses.find(
+        (e) => e.category === "tributos" && e.month === tax.mesApuracao
+      ) ?? null,
+    [expenses, tax.mesApuracao]
+  );
+
+  async function handleLaunchDas() {
+    setLaunchingDas(true);
+    try {
+      await createExpenseAction({
+        month: tax.mesApuracao,
+        description: "DAS estimado — Simples Nacional Anexo III",
+        category: "tributos",
+        amount: tax.estimativa.das,
+        isPaid: false,
+        isRecurring: false,
+        notes: `Valor gerencial estimado. Substituir pelo valor oficial quando a Contabilizei/PGDAS confirmar. Vencimento previsto: ${formatMonth(nextMonth)}.`,
+      });
+    } finally {
+      setLaunchingDas(false);
     }
   }
 
@@ -242,6 +275,16 @@ export function DespesasClient({
         <TendenciaPanel pnl={pnl} currentMonth={heroRow?.month ?? currentMonth} />
       </div>
 
+      {/* ── Sugestão de DAS estimado (Simples Nacional) ── */}
+      <DasSuggestionPanel
+        tax={tax}
+        vencimentoLabel={formatMonth(nextMonth)}
+        launched={dasLaunched}
+        launching={launchingDas}
+        onLaunch={handleLaunchDas}
+        onEditLaunched={setEditing}
+      />
+
       {/* ── Filtros + ações ── */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px]">
@@ -298,6 +341,7 @@ export function DespesasClient({
             <SelectItem value="todos">Todas</SelectItem>
             <SelectItem value="fixo">Fixo</SelectItem>
             <SelectItem value="variavel">Variável</SelectItem>
+            <SelectItem value="tributos">Tributos</SelectItem>
           </SelectContent>
         </Select>
 
@@ -501,6 +545,98 @@ type HeroData = {
   pendentesTotal: number;
   pendentesCount: number;
 };
+
+// ─── Painel de sugestão do DAS estimado (Simples Nacional) ────────────────────
+
+function DasSuggestionPanel({
+  tax,
+  vencimentoLabel,
+  launched,
+  launching,
+  onLaunch,
+  onEditLaunched,
+}: {
+  tax: TaxEstimateData;
+  vencimentoLabel: string;
+  launched: ExpenseRow | null;
+  launching: boolean;
+  onLaunch: () => void;
+  onEditLaunched: (e: ExpenseRow) => void;
+}) {
+  const e = tax.estimativa;
+  // Sem receita no mês → não há o que sugerir.
+  if (e.das <= 0 && !launched) return null;
+
+  return (
+    <div className="bg-card border rounded-lg p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Landmark size={18} className="text-primary" />
+        <h2 className="font-semibold">DAS estimado do mês</h2>
+        <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 ml-1">
+          Tributos · Simples Nacional (Anexo III)
+        </span>
+        <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.12em] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+          {launched ? "Lançado" : "Estimado / A confirmar"}
+        </span>
+      </div>
+
+      <div className="grid md:grid-cols-[auto_1fr_auto] gap-x-6 gap-y-3 items-center mt-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Valor sugerido
+          </p>
+          <p
+            className="mt-1 text-3xl font-medium leading-none tracking-tight tabular-nums"
+            style={{ fontFamily: "var(--font-heading), serif" }}
+          >
+            {formatBRL(e.das)}
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-1.5">
+            {formatPercentage(e.aliquotaEfetiva * 100)} (Faixa {e.faixa}) sobre{" "}
+            {formatBRL(e.receitaBrutaMes)}
+          </p>
+        </div>
+
+        <div className="text-xs text-muted-foreground space-y-1">
+          <p>
+            <span className="font-medium text-foreground">Categoria:</span> Tributos ·{" "}
+            <span className="font-medium text-foreground">Subcategoria:</span> DAS Simples Nacional
+          </p>
+          <p>
+            <span className="font-medium text-foreground">Competência:</span>{" "}
+            {formatMonth(tax.mesApuracao)} ·{" "}
+            <span className="font-medium text-foreground">Vencimento previsto:</span>{" "}
+            {vencimentoLabel}
+          </p>
+          <p className="italic">
+            Valor gerencial estimado. Substituir pelo valor oficial quando a
+            Contabilizei/PGDAS confirmar.
+          </p>
+        </div>
+
+        <div className="flex md:justify-end">
+          {launched ? (
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground mb-1">
+                Lançado: {formatBRL(launched.amount)}{" "}
+                {launched.isPaid ? "(pago)" : "(pendente)"}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => onEditLaunched(launched)}>
+                <Pencil size={14} />
+                Editar / substituir valor oficial
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={onLaunch} disabled={launching}>
+              <Plus size={16} />
+              {launching ? "Lançando..." : "Lançar DAS estimado"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DespesasHeroCard({
   data,
@@ -1074,7 +1210,7 @@ type GroupedItem =
       key: string;
       groupId: string;
       description: string;
-      category: "fixo" | "variavel";
+      category: ExpenseCategory;
       installments: ExpenseRow[];
       total: number;
       installmentValue: number;
@@ -1094,9 +1230,10 @@ function GroupedExpensesView({
 }) {
   // Group by category, then within: collapse installments by groupId
   const grouped = useMemo(() => {
-    const byCat: Record<"fixo" | "variavel", GroupedItem[]> = {
+    const byCat: Record<ExpenseCategory, GroupedItem[]> = {
       fixo: [],
       variavel: [],
+      tributos: [],
     };
 
     // Index installments by groupId (so we can collapse all installments of same series in current view)
@@ -1142,7 +1279,7 @@ function GroupedExpensesView({
     }
 
     // Sort each category by amount desc
-    (["fixo", "variavel"] as const).forEach((cat) => {
+    (["fixo", "variavel", "tributos"] as const).forEach((cat) => {
       byCat[cat].sort((a, b) => {
         const aAmt = a.kind === "single" ? a.amount : a.installmentValue;
         const bAmt = b.kind === "single" ? b.amount : b.installmentValue;
@@ -1150,20 +1287,17 @@ function GroupedExpensesView({
       });
     });
 
-    const totalFixo = byCat.fixo.reduce(
-      (s, item) =>
-        s + (item.kind === "single" ? item.amount : item.installmentValue),
-      0
-    );
-    const totalVariavel = byCat.variavel.reduce(
-      (s, item) =>
-        s + (item.kind === "single" ? item.amount : item.installmentValue),
-      0
-    );
+    const catTotal = (items: GroupedItem[]) =>
+      items.reduce(
+        (s, item) =>
+          s + (item.kind === "single" ? item.amount : item.installmentValue),
+        0
+      );
 
     return {
-      fixo: { items: byCat.fixo, total: totalFixo },
-      variavel: { items: byCat.variavel, total: totalVariavel },
+      fixo: { items: byCat.fixo, total: catTotal(byCat.fixo) },
+      variavel: { items: byCat.variavel, total: catTotal(byCat.variavel) },
+      tributos: { items: byCat.tributos, total: catTotal(byCat.tributos) },
     };
   }, [filtered]);
 
@@ -1177,7 +1311,8 @@ function GroupedExpensesView({
 
   const hasFixo = grouped.fixo.items.length > 0;
   const hasVariavel = grouped.variavel.items.length > 0;
-  const totalGeral = grouped.fixo.total + grouped.variavel.total;
+  const hasTributos = grouped.tributos.items.length > 0;
+  const totalGeral = grouped.fixo.total + grouped.variavel.total + grouped.tributos.total;
 
   return (
     <div className="space-y-3">
@@ -1199,6 +1334,17 @@ function GroupedExpensesView({
           total={grouped.variavel.total}
           totalDespesaMes={totalDespesaMes}
           items={grouped.variavel.items}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      )}
+      {hasTributos && (
+        <CategoryGroup
+          title="Tributos"
+          tone="muted"
+          total={grouped.tributos.total}
+          totalDespesaMes={totalDespesaMes}
+          items={grouped.tributos.items}
           onEdit={onEdit}
           onDelete={onDelete}
         />

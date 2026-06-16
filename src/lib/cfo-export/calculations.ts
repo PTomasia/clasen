@@ -1,5 +1,6 @@
 import type { PnLData, PnLRow } from "../queries/profit-and-loss";
 import type { FinancialParams } from "./financial-params";
+import { calcAliquotaEfetiva } from "../utils/simples-nacional";
 
 // ─── DRE Mensal ───────────────────────────────────────────────────────────────
 
@@ -9,14 +10,24 @@ export interface DreRow {
   receitaRecorrente: number;
   receitaAvulsa: number;
   receitaTotal: number;
-  tributos: number;
+  tributos: number; // DAS estimado (Simples Nacional) — antes era 6% fixo
   despesas: number;
   proLabore: number;
   resultado: number;
 }
 
-export function calcDreRow(pnl: PnLRow, params: FinancialParams): DreRow {
-  const tributos = round2(pnl.receitaTotal * params.taxRate);
+// `dasEstimado` (DAS do mês, calculado pelo Simples) é a linha de tributo. Quando
+// não informado, cai no fallback antigo de 6% fixo (mantém testes legados e usos
+// sem estimativa funcionando).
+export function calcDreRow(
+  pnl: PnLRow,
+  params: FinancialParams,
+  dasEstimado?: number
+): DreRow {
+  const tributos =
+    dasEstimado !== undefined
+      ? round2(dasEstimado)
+      : round2(pnl.receitaTotal * params.taxRate);
   const proLabore = pnl.receitaTotal === 0 && pnl.despesaTotal === 0 ? 0 : params.proLaboreMonthly;
   const resultado = round2(pnl.receitaTotal - tributos - pnl.despesaTotal - proLabore);
   return {
@@ -32,8 +43,12 @@ export function calcDreRow(pnl: PnLRow, params: FinancialParams): DreRow {
   };
 }
 
-export function calcDre12m(pnl: PnLData, params: FinancialParams): DreRow[] {
-  return pnl.rows.map((row) => calcDreRow(row, params));
+export function calcDre12m(
+  pnl: PnLData,
+  params: FinancialParams,
+  dasPorMes?: Record<string, number>
+): DreRow[] {
+  return pnl.rows.map((row) => calcDreRow(row, params, dasPorMes?.[row.month]));
 }
 
 // ─── Ponto de Equilíbrio ──────────────────────────────────────────────────────
@@ -145,7 +160,8 @@ export function calcReajusteSummary(plans: PlanForReajuste[]): ReajusteSummary {
 export interface CenarioResult {
   label: string;
   receitaBruta: number;
-  tributos: number;
+  aliquotaEfetiva: number; // alíquota efetiva do Simples projetada (RBT12 = receita×12)
+  tributos: number; // DAS estimado projetado
   proLabore: number;
   despesasFixas: number;
   saidaTotal: number;
@@ -159,7 +175,10 @@ export function calcCenario(
   receitaBruta: number,
   params: FinancialParams
 ): CenarioResult {
-  const tributos = round2(receitaBruta * params.taxRate);
+  // Projeção em regime permanente: RBT12 = receita mensal × 12 → faixa/alíquota
+  // efetiva do Anexo III. Substitui a antiga premissa de 6% fixo.
+  const aliquotaEfetiva = calcAliquotaEfetiva(receitaBruta * 12);
+  const tributos = round2(receitaBruta * aliquotaEfetiva);
   const proLabore = params.proLaboreMonthly;
   const despesasFixas = params.plannedFixedExpensesTotal;
   const saidaTotal = round2(tributos + proLabore + despesasFixas);
@@ -169,6 +188,7 @@ export function calcCenario(
   return {
     label,
     receitaBruta: round2(receitaBruta),
+    aliquotaEfetiva,
     tributos,
     proLabore,
     despesasFixas,

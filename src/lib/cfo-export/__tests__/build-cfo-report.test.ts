@@ -244,20 +244,19 @@ describe("buildCfoReportMarkdown", () => {
     expect(md).not.toContain("| Fev/26 |");
   });
 
-  it("seção 6: 3 cenários com Atual / Pós-reajuste / Meta", () => {
+  it("seção 6: 3 cenários usam alíquota efetiva do Simples (não mais 6% fixo)", () => {
     const md = buildCfoReportMarkdown(buildInput());
     expect(md).toContain("## 6. DRE — 3 Cenários (regime competência)");
     expect(md).toContain("| Linha | Atual (MRR) | Pós-reajuste | Meta R$ 40k |");
-    // Receita bruta dos 3 cenários:
-    // Atual MRR = 3200, Pós-reajuste = 3500, Meta = 40000
+    // Receita bruta dos 3 cenários: Atual 3200, Pós 3500, Meta 40000
     expect(md).toContain("| Receita bruta | R$ 3.200,00 | R$ 3.500,00 | R$ 40.000,00 |");
-    // Tributos: 192, 210, 2400
-    expect(md).toContain("| Tributos (6%) | R$ 192,00 | R$ 210,00 | R$ 2.400,00 |");
-    // Despesas planejadas fixas (5810) iguais nos 3 cenários
-    expect(md).toContain("| Despesas operacionais fixas | R$ 5.810,00 | R$ 5.810,00 | R$ 5.810,00 |");
-    expect(md).toContain("Pró-labore | R$ 15.000,00 | R$ 15.000,00 | R$ 15.000,00 |");
-    // Resultado meta: 40000 - 2400 - 15000 - 5810 = 16790
-    expect(md).toContain("| **Resultado gerencial** | -R$ 17.802,00 | -R$ 17.520,00 | R$ 16.790,00 |");
+    expect(md).toContain("Alíquota efetiva (Simples)");
+    // DAS estimado: Atual/Pós ficam na Faixa 1 (6% → 192/210); Meta sobe p/ Faixa 3 (3.930)
+    expect(md).toContain("| (-) DAS estimado | R$ 192,00 | R$ 210,00 | R$ 3.930,00 |");
+    expect(md).toContain("| (-) Despesas operacionais fixas | R$ 5.810,00 | R$ 5.810,00 | R$ 5.810,00 |");
+    expect(md).toContain("(-) Pró-labore | R$ 15.000,00 | R$ 15.000,00 | R$ 15.000,00 |");
+    // Resultado meta: 40000 - 3930 - 15000 - 5810 = 15260
+    expect(md).toContain("| **Resultado gerencial** | -R$ 17.802,00 | -R$ 17.520,00 | R$ 15.260,00 |");
   });
 
   it("seção 7: resumo executivo com 7 itens estruturados", () => {
@@ -288,14 +287,53 @@ describe("buildCfoReportMarkdown", () => {
   it("rodapé inclui parâmetros e lista completa de despesas planejadas", () => {
     const md = buildCfoReportMarkdown(buildInput());
     expect(md).toContain("## Parâmetros usados");
-    expect(md).toContain("Pró-labore mensal: R$ 15.000,00");
-    expect(md).toContain("Tributo estimado: 6,00% da receita");
+    expect(md).toContain("Pró-labore mensal (gerencial): R$ 15.000,00");
+    expect(md).toContain("DAS estimado pelo Simples Nacional");
+    expect(md).toContain("Pró-labore contábil (Fator R): 28,00% da receita do mês");
     expect(md).toContain("Meta de receita mensal: R$ 40.000,00");
     expect(md).toContain("Margem de respiro acima do breakeven: 20%");
     expect(md).toContain("Despesas operacionais fixas planejadas (total R$ 5.810,00)");
     expect(md).toContain("Bibo (design) R$ 2.500,00");
     expect(md).toContain("Claude R$ 550,00");
     expect(md).toContain("Capcut R$ 65,00");
+  });
+
+  it("seção Estimativa Tributária: campos do Simples + alerta de valor não oficial", () => {
+    const tax = {
+      mesApuracao: "2026-05",
+      dasPorMes: { "2026-05": 213 },
+      estimativa: {
+        receitaBrutaMes: 3_550,
+        rbt12: 42_600,
+        rbt12Tipo: "proporcionalizada" as const,
+        mesesApurados: 4,
+        faixa: 1,
+        aliquotaNominal: 0.06,
+        parcelaDeduzir: 0,
+        aliquotaEfetiva: 0.06,
+        das: 213,
+        receitaLiquidaAposDas: 3_337,
+        proLaboreContabil: 994,
+        folha12m: 11_928,
+        fatorR: 0.28,
+        fatorRStatus: "ok_anexo_iii" as const,
+        dasSeisPorcento: 213,
+        diferencaVs6: 0,
+      },
+    };
+    const md = buildCfoReportMarkdown({ ...buildInput(), tax });
+    expect(md).toContain("## Estimativa Tributária (Simples Nacional · Anexo III)");
+    expect(md).toContain("**Receita bruta do mês**: R$ 3.550,00");
+    expect(md).toContain("**RBT12 usada**: R$ 42.600,00 — proporcionalizada (4 meses)");
+    expect(md).toContain("**Faixa do Anexo III**: Faixa 1");
+    expect(md).toContain("**DAS estimado do mês**: R$ 213,00");
+    expect(md).toContain("**Receita líquida após DAS**: R$ 3.337,00");
+    expect(md).toContain("OK — Anexo III");
+    // Sem despesa de tributos paga → alerta de valor estimado
+    expect(md).toContain("⚠️");
+    expect(md).toContain("não foi substituído pelo valor oficial");
+    // Frase-modelo de leitura
+    expect(md).toContain("se enquadra na Faixa 1 do Anexo III");
   });
 
   it("não quebra com listas vazias (zero planos, zero avulsas, zero despesas)", () => {

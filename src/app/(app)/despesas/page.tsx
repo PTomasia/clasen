@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getExpenses, getExpensesSummary, getRecurringToLaunch } from "@/lib/services/expenses";
 import { getProfitAndLossData } from "@/lib/queries/profit-and-loss";
+import { getTaxEstimate } from "@/lib/queries/tax-estimate";
 import { format, addMonths } from "date-fns";
 import { DespesasClient } from "./despesas-client";
 
@@ -19,10 +20,11 @@ export default async function DespesasPage() {
     futureMonths.push(format(addMonths(today, i), "yyyy-MM"));
   }
 
-  const [expenses, summary, pnl, recurringPending, ...futurePreviews] = await Promise.all([
+  const [expenses, summary, pnl, tax, recurringPending, ...futurePreviews] = await Promise.all([
     getExpenses(db as any),
     getExpensesSummary(db as any),
     getProfitAndLossData(),
+    getTaxEstimate(),
     getRecurringToLaunch(db as any, currentMonth),
     ...futureMonths.map((m) => getRecurringToLaunch(db as any, m)),
   ]);
@@ -50,6 +52,7 @@ export default async function DespesasPage() {
         currentMonth={currentMonth}
         nextMonth={nextMonth}
         previewsByMonth={previewsByMonth}
+        tax={tax}
       />
     </div>
   );

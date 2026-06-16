@@ -1,6 +1,7 @@
 import type { PnLData, PnLRow } from "../queries/profit-and-loss";
 import type { ExpenseRow } from "../services/expenses";
 import type { RevenueRow } from "../services/revenues";
+import type { TaxEstimateData } from "../queries/tax-estimate";
 import { formatBRL, formatDate, formatMonth, formatPercentage } from "../utils/formatting";
 import {
   calcBreakevenPlanejado,
@@ -42,6 +43,7 @@ export interface BuildCfoReportInput {
   plans: PlanForCfoReport[];
   revenues: RevenueRow[];
   expenses: ExpenseRow[];
+  tax?: TaxEstimateData; // estimativa Simples Nacional (DAS) do mês corrente
   params?: FinancialParams;
 }
 
@@ -50,6 +52,7 @@ export interface BuildCfoReportInput {
 export function buildCfoReportMarkdown(input: BuildCfoReportInput): string {
   const params = input.params ?? FINANCIAL_PARAMS;
   const reajustes = calcReajusteSummary(input.plans);
+  const dasPorMes = input.tax?.dasPorMes;
 
   const sections = [
     renderHeader(input.now),
@@ -57,10 +60,11 @@ export function buildCfoReportMarkdown(input: BuildCfoReportInput): string {
     renderReajustes(reajustes),
     renderAvulsas(input.revenues, input.now),
     renderDespesas(input.expenses, input.now),
-    renderDre3m(input.pnl, params),
+    renderEstimativaTributaria(input.tax, input.expenses),
+    renderDre3m(input.pnl, params, dasPorMes),
     renderCenarios(reajustes, params),
     renderResumoExecutivo(reajustes, input.plans, params),
-    renderCaixaMesCorrente(input.pnl, params),
+    renderCaixaMesCorrente(input.pnl, params, dasPorMes),
     renderParametros(params),
   ];
   return sections.filter(Boolean).join("\n\n");
@@ -249,21 +253,83 @@ function renderDespesas(expenses: ExpenseRow[], now: Date): string {
   return lines.join("\n");
 }
 
+// ─── Estimativa Tributária (Simples Nacional · Anexo III) ────────────────────
+
+function renderEstimativaTributaria(
+  tax: TaxEstimateData | undefined,
+  expenses: ExpenseRow[]
+): string {
+  if (!tax) return "";
+  const e = tax.estimativa;
+
+  const tipoLabel =
+    e.rbt12Tipo === "real"
+      ? "real (12 meses)"
+      : `proporcionalizada (${e.mesesApurados} ${e.mesesApurados === 1 ? "mês" : "meses"})`;
+  const statusLabel =
+    e.fatorRStatus === "ok_anexo_iii"
+      ? "OK — Anexo III"
+      : "Atenção — risco de Anexo V";
+
+  // Alerta: DAS oficial (despesa de tributos paga no mês) ainda não substituiu a estimativa?
+  const oficialPago = expenses.some(
+    (x) => x.category === "tributos" && x.month === tax.mesApuracao && x.isPaid
+  );
+
+  const diffLabel =
+    e.diferencaVs6 === 0
+      ? "sem diferença (Faixa 1 ≈ 6%)"
+      : `${e.diferencaVs6 > 0 ? "+" : ""}${formatBRL(e.diferencaVs6)} vs. 6% fixo (${formatBRL(e.dasSeisPorcento)})`;
+
+  const lines = [
+    mdHeader(2, "Estimativa Tributária (Simples Nacional · Anexo III)"),
+    "_Estimativa gerencial do DAS via Fator R (Anexo III). Substitui a antiga premissa de 6% fixo. O valor oficial é confirmado pela contabilidade/Contabilizei (PGDAS)._",
+    "",
+    `- **Mês de apuração**: ${formatMonth(tax.mesApuracao)}`,
+    `- **Receita bruta do mês**: ${formatBRL(e.receitaBrutaMes)}`,
+    `- **RBT12 usada**: ${formatBRL(e.rbt12)} — ${tipoLabel}`,
+    `- **Faixa do Anexo III**: Faixa ${e.faixa} (nominal ${formatPercentage(e.aliquotaNominal * 100)}, parcela a deduzir ${formatBRL(e.parcelaDeduzir)})`,
+    `- **Alíquota efetiva**: ${formatPercentage(e.aliquotaEfetiva * 100)}`,
+    `- **DAS estimado do mês**: ${formatBRL(e.das)}`,
+    `- **Receita líquida após DAS**: ${formatBRL(e.receitaLiquidaAposDas)}`,
+    `- **Fator R estimado**: ${formatPercentage(e.fatorR * 100)} → **${statusLabel}**`,
+    `- **Diferença 6% fixo × efetiva**: ${diffLabel}`,
+  ];
+
+  if (!oficialPago) {
+    lines.push(
+      "",
+      `> ⚠️ **Alerta**: o DAS deste mês ainda está com **valor estimado** — não foi substituído pelo valor oficial (nenhuma despesa de Tributos paga em ${formatMonth(tax.mesApuracao)}). Confirme com a Contabilizei/PGDAS e atualize.`
+    );
+  }
+
+  lines.push(
+    "",
+    `**Leitura**: Com base na RBT12 ${e.rbt12Tipo} de ${formatBRL(e.rbt12)}, a Clasen se enquadra na Faixa ${e.faixa} do Anexo III, com alíquota efetiva de ${formatPercentage(e.aliquotaEfetiva * 100)}. O DAS estimado para o mês é de ${formatBRL(e.das)}. Esse valor substitui a antiga premissa de 6% fixo e deve ser confirmado posteriormente pela contabilidade.`
+  );
+
+  return lines.join("\n");
+}
+
 // ─── Seção 5: DRE Últimos 3 Meses (regime caixa) ─────────────────────────────
 
-function renderDre3m(pnl: PnLData, params: FinancialParams): string {
+function renderDre3m(
+  pnl: PnLData,
+  params: FinancialParams,
+  dasPorMes?: Record<string, number>
+): string {
   const last3 = pnl.rows.slice(-3);
-  const dre = last3.map((row) => calcDreRow(row, params));
+  const dre = last3.map((row) => calcDreRow(row, params, dasPorMes?.[row.month]));
   const rows: string[][] = [
     [
       "Mês",
       "Rec. Recorrente",
       "Rec. Avulsa",
       "Receita Total",
-      `Tributos (${(params.taxRate * 100).toFixed(0)}%)`,
-      "Despesas",
-      "Pró-labore",
-      "Resultado",
+      "(-) DAS estimado",
+      "(-) Despesas",
+      "(-) Pró-labore",
+      "= Resultado",
     ],
   ];
   for (const r of dre) {
@@ -280,7 +346,7 @@ function renderDre3m(pnl: PnLData, params: FinancialParams): string {
   }
   return [
     mdHeader(2, "5. DRE Últimos 3 Meses (regime caixa)"),
-    "_Receitas e despesas conforme efetivamente recebidas/pagas no mês. Mostra a tendência recente do fluxo._",
+    "_Receitas e despesas conforme efetivamente recebidas/pagas no mês. O DAS é a estimativa gerencial do Simples (Anexo III), separado das despesas operacionais._",
     mdTable(rows),
   ].join("\n");
 }
@@ -300,9 +366,10 @@ function renderCenarios(
   const rows: string[][] = [
     ["Linha", ...cenarios.map((c) => c.label)],
     ["Receita bruta", ...cenarios.map((c) => formatBRL(c.receitaBruta))],
-    [`Tributos (${(params.taxRate * 100).toFixed(0)}%)`, ...cenarios.map((c) => formatBRL(c.tributos))],
-    ["Pró-labore", ...cenarios.map((c) => formatBRL(c.proLabore))],
-    ["Despesas operacionais fixas", ...cenarios.map((c) => formatBRL(c.despesasFixas))],
+    ["Alíquota efetiva (Simples)", ...cenarios.map((c) => formatPercentage(c.aliquotaEfetiva * 100))],
+    ["(-) DAS estimado", ...cenarios.map((c) => formatBRL(c.tributos))],
+    ["(-) Pró-labore", ...cenarios.map((c) => formatBRL(c.proLabore))],
+    ["(-) Despesas operacionais fixas", ...cenarios.map((c) => formatBRL(c.despesasFixas))],
     ["**Saída total**", ...cenarios.map((c) => formatBRL(c.saidaTotal))],
     ["**Resultado gerencial**", ...cenarios.map((c) => formatBRL(c.resultado))],
     ["Margem final", ...cenarios.map((c) => formatPercentage(c.margem * 100))],
@@ -311,7 +378,7 @@ function renderCenarios(
 
   return [
     mdHeader(2, "6. DRE — 3 Cenários (regime competência)"),
-    "_Receita = MRR contratado (independente de já ter sido recebido). Despesas = lista planejada (sem variáveis). Permite comparar saúde da empresa hoje, com reajustes aceitos, e na meta._",
+    "_Receita = MRR contratado (independente de já ter sido recebido). DAS = estimativa do Simples (Anexo III) com RBT12 projetada = receita × 12. Despesas = lista planejada (sem variáveis). Permite comparar saúde da empresa hoje, com reajustes aceitos, e na meta._",
     mdTable(rows),
   ].join("\n");
 }
@@ -350,21 +417,27 @@ function renderResumoExecutivo(
 
 // ─── Seção 8: Caixa do Mês Corrente ──────────────────────────────────────────
 
-function renderCaixaMesCorrente(pnl: PnLData, params: FinancialParams): string {
+function renderCaixaMesCorrente(
+  pnl: PnLData,
+  params: FinancialParams,
+  dasPorMes?: Record<string, number>
+): string {
   const currentRow: PnLRow | undefined = pnl.rows[pnl.rows.length - 1];
   if (!currentRow) return "";
 
-  const tributosMes = currentRow.receitaTotal * params.taxRate;
+  // Tributo = DAS estimado do mês (Simples). Fallback: 6% fixo se não houver estimativa.
+  const tributosMes =
+    dasPorMes?.[currentRow.month] ?? currentRow.receitaTotal * params.taxRate;
   const saidaTotal = currentRow.despesaTotal + tributosMes + params.proLaboreMonthly;
   const sobra = currentRow.receitaTotal - saidaTotal;
 
   return [
     mdHeader(2, "8. Caixa do Mês Corrente"),
-    "_Visão de fluxo: o que efetivamente entrou e saiu este mês (regime caixa). Diferente do MRR, depende dos pagamentos de fato registrados._",
+    "_Visão de fluxo: o que efetivamente entrou e saiu este mês (regime caixa). Diferente do MRR, depende dos pagamentos de fato registrados. O DAS é a estimativa gerencial do Simples._",
     "",
     `- **Mês**: ${currentRow.label}`,
     `- **Recebido (caixa)**: ${formatBRL(currentRow.receitaTotal)} (recorrente ${formatBRL(currentRow.receitaRecorrente)} + avulsa ${formatBRL(currentRow.receitaAvulsa)})`,
-    `- **Saída efetiva**: ${formatBRL(saidaTotal)} (despesas pagas ${formatBRL(currentRow.despesaTotal)} + tributos ${formatBRL(tributosMes)} + pró-labore ${formatBRL(params.proLaboreMonthly)})`,
+    `- **Saída efetiva**: ${formatBRL(saidaTotal)} (despesas pagas ${formatBRL(currentRow.despesaTotal)} + DAS estimado ${formatBRL(tributosMes)} + pró-labore ${formatBRL(params.proLaboreMonthly)})`,
     `- **Sobra/falta de caixa**: ${formatBRL(sobra)}${sobra < 0 ? " (déficit)" : ""}`,
   ].join("\n");
 }
@@ -378,8 +451,9 @@ function renderParametros(params: FinancialParams): string {
 
   return [
     mdHeader(2, "Parâmetros usados"),
-    `- Pró-labore mensal: ${formatBRL(params.proLaboreMonthly)}`,
-    `- Tributo estimado: ${formatPercentage(params.taxRate * 100)} da receita`,
+    `- Pró-labore mensal (gerencial): ${formatBRL(params.proLaboreMonthly)}`,
+    `- Tributo: DAS estimado pelo Simples Nacional (Anexo III, Fator R). Premissa antiga de ${formatPercentage(params.taxRate * 100)} fixo mantida apenas como baseline de comparação.`,
+    `- Pró-labore contábil (Fator R): ${formatPercentage(params.proLaboreContabilRate * 100)} da receita do mês`,
     `- Meta de receita mensal: ${formatBRL(params.monthlyRevenueTarget)}`,
     `- Meta de reserva PJ: ${params.reserveMonthsTarget} meses de custo fixo`,
     `- Margem de respiro acima do breakeven: ${(params.respiroMargin * 100).toFixed(0)}%`,

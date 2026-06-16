@@ -117,8 +117,9 @@ Full specs in `docs/sprints/`. Status as of 2026-04-22:
 | 2 | Clientes (lista, permanência, métricas) | ✅ concluído |
 | 3 | Dashboard (KPIs, MRR, alertas pagamento) | ✅ concluído |
 | A–E | Melhorias incrementais (histórico pgtos, ajustes) | ✅ concluído |
-| 4 | Receitas Avulsas + Aquisição & Unit Economics (CAC, LTV, ROAS, churn) | 🔜 próximo |
-| 5 | Despesas (P&L, resultado líquido mensal) | 🔜 planejado |
+| 4 | Receitas Avulsas + Aquisição & Unit Economics (CAC, LTV, ROAS, churn) | ✅ concluído |
+| 5 | Despesas (P&L, resultado líquido mensal) | ✅ concluído |
+| 6 | Tributação — DAS Simples Nacional estimado (Anexo III + Fator R) | ✅ concluído |
 
 ## Domain Language
 
