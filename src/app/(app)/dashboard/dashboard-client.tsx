@@ -12,10 +12,11 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { formatBRL, formatDate } from "@/lib/utils/formatting";
+import { formatBRL, formatDate, formatPercentage } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Calendar, BarChart3, Info } from "lucide-react";
+import { Calendar, BarChart3, Info, Landmark } from "lucide-react";
+import type { TaxEstimateData } from "@/lib/queries/tax-estimate";
 
 const MRR_VS_RECEITA_HINT =
   "O MRR do mês corrente soma os planos ativos em qualquer dia do mês (inclui quem saiu no meio do mês e usa o valor pré-reajuste). A Receita bruta mensal é uma foto dos planos ativos hoje — por isso os dois podem divergir.";
@@ -328,11 +329,144 @@ function MRRChart({ data, range }: { data: DashboardData["mrr"]; range?: TimeRan
   );
 }
 
+// ─── Bloco Tributário — Estimativa Simples Nacional (Anexo III + Fator R) ──────
+
+function TaxField({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <p
+        className={cn(
+          "text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground",
+          hint && "cursor-help"
+        )}
+        title={hint}
+      >
+        {label}
+      </p>
+      <p className="text-base font-medium tabular-nums leading-tight">{value}</p>
+    </div>
+  );
+}
+
+function TributarioBlock({ tax }: { tax: TaxEstimateData }) {
+  const e = tax.estimativa;
+  const fatorOk = e.fatorRStatus === "ok_anexo_iii";
+  const tipoLabel =
+    e.rbt12Tipo === "real"
+      ? "real (12 meses)"
+      : `proporcionalizada (${e.mesesApurados} ${e.mesesApurados === 1 ? "mês" : "meses"})`;
+
+  return (
+    <div className="bg-card border rounded-lg p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Landmark size={18} className="text-primary" />
+        <h2 className="font-semibold">Estimativa Tributária</h2>
+        <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70 ml-1">
+          Simples Nacional · Anexo III (Fator R)
+        </span>
+        <span className="ml-auto text-[10px] font-semibold uppercase tracking-[0.12em] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+          Estimativa
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Mês de apuração: {formatMonthLabel(tax.mesApuracao)}
+      </p>
+
+      {/* Destaque: DAS estimado + receita líquida */}
+      <div className="grid grid-cols-2 gap-4 mb-5">
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            DAS estimado do mês
+          </p>
+          <p
+            className="mt-1 text-3xl md:text-4xl font-medium leading-none tracking-tight tabular-nums"
+            style={{ fontFamily: "var(--font-heading), serif" }}
+          >
+            {formatBRL(e.das)}
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            {formatPercentage(e.aliquotaEfetiva * 100)} sobre {formatBRL(e.receitaBrutaMes)}
+          </p>
+        </div>
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Receita líquida após DAS
+          </p>
+          <p
+            className="mt-1 text-3xl md:text-4xl font-medium leading-none tracking-tight tabular-nums"
+            style={{ fontFamily: "var(--font-heading), serif" }}
+          >
+            {formatBRL(e.receitaLiquidaAposDas)}
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Receita bruta − DAS estimado
+          </p>
+        </div>
+      </div>
+
+      {/* Detalhamento do cálculo */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 mb-5">
+        <TaxField label="Receita bruta do mês" value={formatBRL(e.receitaBrutaMes)} />
+        <TaxField
+          label="RBT12 utilizada"
+          value={formatBRL(e.rbt12)}
+          hint="Receita bruta acumulada dos últimos 12 meses (ou proporcionalizada no início)"
+        />
+        <TaxField label="Tipo de RBT12" value={tipoLabel} />
+        <TaxField label="Faixa do Anexo III" value={`Faixa ${e.faixa}`} />
+        <TaxField label="Alíquota nominal" value={formatPercentage(e.aliquotaNominal * 100)} />
+        <TaxField label="Parcela a deduzir" value={formatBRL(e.parcelaDeduzir)} />
+        <TaxField
+          label="Alíquota efetiva"
+          value={formatPercentage(e.aliquotaEfetiva * 100)}
+          hint="((RBT12 × nominal) − parcela a deduzir) / RBT12"
+        />
+        <TaxField
+          label="Fator R estimado"
+          value={formatPercentage(e.fatorR * 100)}
+          hint="Folha 12m (pró-labore contábil = 28% da receita) / RBT12"
+        />
+      </div>
+
+      {/* Status do Fator R */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          Status do Fator R
+        </span>
+        <span
+          className={cn(
+            "text-xs font-semibold px-2.5 py-1 rounded-full",
+            fatorOk
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+              : "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400"
+          )}
+        >
+          {fatorOk ? "OK — Anexo III" : "Atenção — risco de Anexo V"}
+        </span>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground border-t pt-3">
+        Estimativa gerencial. Valor oficial será confirmado pela contabilidade.
+      </p>
+    </div>
+  );
+}
+
+function formatMonthLabel(yyyymm: string): string {
+  const labels = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  ];
+  const [y, m] = yyyymm.split("-");
+  return `${labels[Number(m) - 1]}/${y}`;
+}
+
 export function DashboardClient({
   data,
   pnl,
   operational,
   unit,
+  tax,
 }: {
   data: DashboardData;
   pnl: PnLData;
@@ -341,6 +475,7 @@ export function DashboardClient({
     evolution: OperationalMonth[];
   };
   unit: import("@/lib/queries/unit-economics").UnitEconomicsData;
+  tax: TaxEstimateData;
 }) {
   // Filtro de período compartilhado entre os 3 gráficos
   const months = pnl.rows.map((r) => r.label);
@@ -416,6 +551,9 @@ export function DashboardClient({
 
       {/* Evolução mensal: receita, despesa, lucro */}
       <MonthlyEvolutionChart pnl={pnl} range={chartRange} />
+
+      {/* Estimativa tributária — DAS Simples Nacional (Anexo III) */}
+      <TributarioBlock tax={tax} />
 
       {/* Evolução operacional: clientes, posts, ticket/post */}
       <OperationalEvolutionChart data={operational.evolution} range={chartRange} />

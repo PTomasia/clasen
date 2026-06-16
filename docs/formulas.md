@@ -105,3 +105,63 @@ SQLite não tem MEDIAN nativa — calculado em TypeScript.
 | Relação LTV/CAC | LTV / CAC |
 | ROAS bruto | receita_mes / ad_spend |
 | Churn | churned_clients / total_clients_inicio_mes |
+
+---
+
+## Imposto — DAS Simples Nacional (Anexo III + Fator R)
+
+> **Estimativa gerencial.** O valor oficial do DAS é apurado pela contabilidade
+> (Contabilizei/PGDAS). Implementado em `src/lib/utils/simples-nacional.ts`.
+> Substitui a antiga premissa de **6% fixo** (mantida só como baseline de comparação).
+
+Premissa principal da Clasen: CNAE 7311-4/00 (agência de publicidade), usa **Fator R**
+→ tributa pelo **Anexo III**. Base de receita = **regime de competência** (MRR contratado
++ avulsas do mês).
+
+### Alíquota efetiva e DAS
+
+```
+aliquota_efetiva = ((RBT12 × aliquota_nominal) − parcela_deduzir) / RBT12
+DAS_do_mes       = receita_bruta_do_mes × aliquota_efetiva
+```
+
+### RBT12 (Receita Bruta dos últimos 12 meses)
+
+```
+real (≥12 meses de operação)  = soma da receita bruta dos 12 meses anteriores ao mês de apuração
+proporcionalizada (<12 meses) = (receita acumulada desde o início / meses apurados) × 12
+1º mês de atividade           = receita do próprio mês × 12
+```
+
+O dashboard sinaliza se a RBT12 é **real** ou **proporcionalizada**.
+
+### Tabela do Anexo III
+
+| Faixa | RBT12 até | Alíquota nominal | Parcela a deduzir |
+|-------|-----------|------------------|-------------------|
+| 1 | R$ 180.000 | 6,00% | R$ 0 |
+| 2 | R$ 360.000 | 11,20% | R$ 9.360 |
+| 3 | R$ 720.000 | 13,50% | R$ 17.640 |
+| 4 | R$ 1.800.000 | 16,00% | R$ 35.640 |
+| 5 | R$ 3.600.000 | 21,00% | R$ 125.640 |
+| 6 | R$ 4.800.000 | 33,00% | R$ 648.000 |
+
+### Fator R
+
+```
+Fator_R = folha_salarios_12m (incl. pró-labore) / RBT12
+status  = "OK — Anexo III"            se Fator_R ≥ 28%
+          "Atenção — risco de Anexo V" se Fator_R < 28%
+```
+
+Política da Clasen: o **pró-labore contábil = exatamente 28% da receita do mês** (o
+restante até os R$ 15.000 gerenciais vira distribuição de lucros; o contador calcula).
+Logo folha 12m = 28% × RBT12 → **Fator R = 28% por design** → Anexo III. O pró-labore
+**gerencial** da DRE continua **R$ 15.000**.
+
+### Validação (Faixa 1 e Faixa 3)
+
+| RBT12 | Faixa | Alíquota efetiva | Receita do mês | DAS |
+|-------|-------|------------------|----------------|-----|
+| R$ 168.000 (proporc.) | 1 | 6,00% | R$ 14.000 | R$ 840 |
+| R$ 480.000 (real) | 3 | 9,825% = (480000×0,135 − 17640)/480000 | R$ 40.000 | R$ 3.930 |

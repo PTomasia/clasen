@@ -4,17 +4,19 @@ import {
 } from "@/lib/queries/dashboard";
 import { getProfitAndLossData } from "@/lib/queries/profit-and-loss";
 import { getUnitEconomicsData } from "@/lib/queries/unit-economics";
+import { getTaxEstimate } from "@/lib/queries/tax-estimate";
 import { CopyForCFOButton } from "@/components/cfo-export/copy-for-cfo-button";
 import { DashboardClient } from "./dashboard-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [data, pnl, operational, unit] = await Promise.all([
+  const [data, pnl, operational, unit, tax] = await Promise.all([
     getDashboardData(),
     getProfitAndLossData(),
     getOperationalDashboard(),
     getUnitEconomicsData(),
+    getTaxEstimate(),
   ]);
 
   return (
@@ -27,7 +29,7 @@ export default async function DashboardPage() {
         <CopyForCFOButton />
       </div>
 
-      <DashboardClient data={data} pnl={pnl} operational={operational} unit={unit} />
+      <DashboardClient data={data} pnl={pnl} operational={operational} unit={unit} tax={tax} />
     </div>
   );
 }

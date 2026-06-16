@@ -61,8 +61,17 @@ export const REVALIDATE_PATHS = [
   "/despesas",
 ] as const;
 
-export const EXPENSE_CATEGORIES = ["fixo", "variavel"] as const;
+// "tributos" = impostos sobre a receita (DAS Simples Nacional). Separado de
+// fixo/variável porque aparece como linha própria na DRE e não conta como
+// despesa operacional (evita dupla contagem com o DAS estimado).
+export const EXPENSE_CATEGORIES = ["fixo", "variavel", "tributos"] as const;
 export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
+  fixo: "Fixo",
+  variavel: "Variável",
+  tributos: "Tributos",
+};
 
 // Produtos comuns de receita avulsa
 // Corte temporal: agregações financeiras só consideram dados a partir desta data

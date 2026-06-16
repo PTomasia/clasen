@@ -3,6 +3,7 @@
 import { db } from "../db";
 import { getAllPlans } from "../queries/plans";
 import { getProfitAndLossData } from "../queries/profit-and-loss";
+import { getTaxEstimate } from "../queries/tax-estimate";
 import { getExpenses } from "../services/expenses";
 import { getRevenues } from "../services/revenues";
 import {
@@ -11,11 +12,12 @@ import {
 } from "../cfo-export/build-cfo-report";
 
 export async function exportCfoReportAction(): Promise<string> {
-  const [plans, pnl, revenues, expenses] = await Promise.all([
+  const [plans, pnl, revenues, expenses, tax] = await Promise.all([
     getAllPlans(),
     getProfitAndLossData(),
     getRevenues(db),
     getExpenses(db),
+    getTaxEstimate(),
   ]);
 
   const planSubset: PlanForCfoReport[] = plans.map((p) => ({
@@ -42,5 +44,6 @@ export async function exportCfoReportAction(): Promise<string> {
     plans: planSubset,
     revenues,
     expenses,
+    tax,
   });
 }
