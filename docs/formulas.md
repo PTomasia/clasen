@@ -25,6 +25,33 @@ $/post = valor_mensal / (carrosseis + reels + (estático × 0.5))
 
 ---
 
+## Unidades Operacionais (UO)
+
+Métrica gerencial **interna** de carga operacional. **Não afeta o $/post** (preço
+continua na contagem cheia) nem nenhuma análise por post.
+
+```
+UO_plano = carrossel × pesoCarrossel + reels × pesoReels + (estático × 0.5) + tráfego
+```
+
+- **Carrossel e reels valem 1** por padrão; **estático 0,5**; **tráfego 1**.
+- **Redutor** (`pesoCarrossel` / `pesoReels`): peso ajustável **por plano**, default
+  1,0. Para produções simplificadas, reduz-se o peso (ex.: "só design" = 0,5; reels
+  médio = 0,75). Sem teto superior. Estático e tráfego não têm redutor.
+- **Carga da carteira** = soma de `UO_plano` dos planos ativos.
+- **Teto de capacidade** = `TETO_OPERACIONAL_UO` = **120 UO**, desenhado como 30
+  clientes Essential × 4,0 UO. **Utilização** = carga ÷ teto.
+
+### Validação
+
+| Composição | Pesos | Cálculo | UO |
+|------------|-------|---------|-----|
+| Essential: 2C 2R 1E | reels 0,75 | 2×1 + 2×0,75 + 1×0,5 | 4,0 ✓ |
+| "Só design": 2C | carrossel 0,5 | 2×0,5 | 1,0 ✓ |
+| 30× Essential | reels 0,75 | 30 × 4,0 | 120 (100% do teto) ✓ |
+
+---
+
 ## Permanência (Tenure)
 
 ```

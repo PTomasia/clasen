@@ -12,7 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { formatBRL, formatDate, formatPercentage } from "@/lib/utils/formatting";
+import { formatBRL, formatDate, formatPercentage, formatUO } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Calendar, BarChart3, Info, Landmark } from "lucide-react";
@@ -461,6 +461,55 @@ function formatMonthLabel(yyyymm: string): string {
   return `${labels[Number(m) - 1]}/${y}`;
 }
 
+// Medidor de carga operacional (UO) vs teto de capacidade.
+function CargaOperacionalCard({ carga }: { carga: PostsPorClienteResult }) {
+  const pct = carga.utilizacao;
+  const pctClamped = Math.min(pct, 100);
+  const barColor =
+    pct >= 100 ? "bg-destructive" : pct >= 85 ? "bg-amber-500" : "bg-primary";
+
+  return (
+    <div className="bg-card border rounded-lg p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <h2 className="font-semibold flex items-center gap-1.5">
+          Carga operacional
+          <span
+            className="text-muted-foreground text-xs cursor-help"
+            title="Soma das unidades operacionais (UO) dos planos ativos vs teto de capacidade. Carrossel e reels valem 1 (ajustável pelo redutor no plano), estático 0,5, tráfego 1. Teto desenhado: 30 clientes Essential = 120 UO."
+          >
+            ⓘ
+          </span>
+        </h2>
+        <span className="ml-auto text-sm text-muted-foreground tabular-nums">
+          {carga.clientes} {carga.clientes === 1 ? "cliente ativo" : "clientes ativos"}
+        </span>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span
+          className="text-3xl font-medium tracking-tight tabular-nums"
+          style={{ fontFamily: "var(--font-heading), serif" }}
+        >
+          {formatUO(carga.posts)}
+        </span>
+        <span className="text-sm text-muted-foreground tabular-nums">
+          / {carga.teto} UO · {pct}%
+        </span>
+      </div>
+      <div className="mt-3 h-2.5 w-full rounded-full bg-muted overflow-hidden">
+        <div
+          className={cn("h-full rounded-full transition-all", barColor)}
+          style={{ width: `${pctClamped}%` }}
+        />
+      </div>
+      {pct >= 100 && (
+        <p className="text-xs text-destructive mt-2">
+          Teto atingido — avalie a capacidade antes de assumir novos clientes.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function DashboardClient({
   data,
   pnl,
@@ -554,6 +603,9 @@ export function DashboardClient({
 
       {/* Estimativa tributária — DAS Simples Nacional (Anexo III) */}
       <TributarioBlock tax={tax} />
+
+      {/* Carga operacional atual vs teto de capacidade (UO) */}
+      <CargaOperacionalCard carga={operational.postsPorCliente} />
 
       {/* Evolução operacional: clientes, posts, ticket/post */}
       <OperationalEvolutionChart data={operational.evolution} range={chartRange} />

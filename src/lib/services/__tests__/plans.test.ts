@@ -45,6 +45,8 @@ function createTestDb() {
       posts_reels INTEGER NOT NULL DEFAULT 0,
       posts_estatico INTEGER NOT NULL DEFAULT 0,
       posts_trafego INTEGER NOT NULL DEFAULT 0,
+      peso_carrossel REAL NOT NULL DEFAULT 1,
+      peso_reels REAL NOT NULL DEFAULT 1,
       start_date TEXT NOT NULL,
       end_date TEXT,
       last_adjustment_date TEXT,
@@ -393,6 +395,122 @@ describe("createPlan", () => {
     const allClients = db.select().from(schema.clients).all();
     expect(allClients).toHaveLength(2);
     expect(result.client.name).toBe("Ana Silva");
+  });
+});
+
+describe("redutor de unidades operacionais (peso)", () => {
+  let db: ReturnType<typeof createTestDb>;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  const base = {
+    clientName: "Peso Teste",
+    planType: "Essential",
+    planValue: 790,
+    postsCarrossel: 2,
+    postsReels: 2,
+    postsEstatico: 1,
+    postsTrafego: 0,
+    startDate: "2026-04-01",
+  };
+
+  it("createPlan: pesos default 1 quando não informados", async () => {
+    const { plan } = await createPlan(db, base);
+    const saved = db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(saved!.pesoCarrossel).toBe(1);
+    expect(saved!.pesoReels).toBe(1);
+  });
+
+  it("createPlan: persiste pesos customizados", async () => {
+    const { plan } = await createPlan(db, {
+      ...base,
+      pesoCarrossel: 0.5,
+      pesoReels: 0.75,
+    });
+    const saved = db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(saved!.pesoCarrossel).toBe(0.5);
+    expect(saved!.pesoReels).toBe(0.75);
+  });
+
+  it("createPlan: rejeita peso <= 0", async () => {
+    await expect(
+      createPlan(db, { ...base, pesoReels: 0 })
+    ).rejects.toThrow("peso do reels deve ser maior que zero");
+    await expect(
+      createPlan(db, { ...base, pesoCarrossel: -1 })
+    ).rejects.toThrow("peso do carrossel deve ser maior que zero");
+  });
+
+  it("updatePlan: persiste pesos customizados", async () => {
+    const { plan } = await createPlan(db, base);
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Essential",
+      planValue: 790,
+      postsCarrossel: 2,
+      postsReels: 2,
+      postsEstatico: 1,
+      postsTrafego: 0,
+      pesoCarrossel: 1,
+      pesoReels: 0.75,
+    });
+    const saved = db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(saved!.pesoReels).toBe(0.75);
+  });
+
+  it("updatePlan: preserva peso existente quando omitido", async () => {
+    const { plan } = await createPlan(db, {
+      ...base,
+      pesoCarrossel: 0.5,
+      pesoReels: 0.75,
+    });
+    await updatePlan(db, {
+      planId: plan.id,
+      planType: "Essential",
+      planValue: 800,
+      postsCarrossel: 2,
+      postsReels: 2,
+      postsEstatico: 1,
+      postsTrafego: 0,
+      // pesos omitidos — devem ser preservados
+    });
+    const saved = db
+      .select()
+      .from(schema.subscriptionPlans)
+      .where(eq(schema.subscriptionPlans.id, plan.id))
+      .get();
+    expect(saved!.pesoCarrossel).toBe(0.5);
+    expect(saved!.pesoReels).toBe(0.75);
+  });
+
+  it("updatePlan: rejeita peso <= 0", async () => {
+    const { plan } = await createPlan(db, base);
+    await expect(
+      updatePlan(db, {
+        planId: plan.id,
+        planType: "Essential",
+        planValue: 790,
+        postsCarrossel: 2,
+        postsReels: 2,
+        postsEstatico: 1,
+        postsTrafego: 0,
+        pesoCarrossel: 0,
+      })
+    ).rejects.toThrow("peso do carrossel deve ser maior que zero");
   });
 });
 

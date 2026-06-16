@@ -33,6 +33,27 @@ export function calcularTotalPostsEquivalentes(
   return posts.carrossel + posts.reels + posts.estatico * 0.5;
 }
 
+// ─── Unidades Operacionais (UO) ────────────────────────────────────────────────
+// Métrica gerencial INTERNA de carga operacional (não afeta $/post, que continua
+// na contagem cheia). Base: carrossel e reels valem 1, estático 0,5, tráfego 1.
+// O "redutor" é um peso por tipo (pesoCarrossel/pesoReels, default 1) ajustável por
+// plano — ex.: produção simplificada ("só design") pesa 0,5; reels médios, 0,75.
+// Estático fica fixo em 0,5; tráfego em 1.
+
+export function calcularUnidadesOperacionais(
+  posts: PostComposition,
+  pesos?: { pesoCarrossel?: number; pesoReels?: number }
+): number {
+  const pesoCarrossel = pesos?.pesoCarrossel ?? 1;
+  const pesoReels = pesos?.pesoReels ?? 1;
+  return (
+    posts.carrossel * pesoCarrossel +
+    posts.reels * pesoReels +
+    posts.estatico * 0.5 +
+    (posts.trafego ?? 0)
+  );
+}
+
 // ─── Permanência (Tenure) ──────────────────────────────────────────────────────
 // Meses calendário completos (floor) entre start_date e (end_date ou hoje)
 

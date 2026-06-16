@@ -1,7 +1,7 @@
 import { and, isNotNull, gte, lte, eq, isNull, lt } from "drizzle-orm";
 import { db } from "../db";
 import * as schema from "../db/schema";
-import { FINANCIAL_DATA_START } from "../constants";
+import { FINANCIAL_DATA_START, TETO_OPERACIONAL_UO } from "../constants";
 import {
   format,
   addDays,
@@ -14,7 +14,7 @@ import {
   calcularCustoPost,
   calcularMediana,
   calcularPermanenciaCliente,
-  calcularTotalPostsEquivalentes,
+  calcularUnidadesOperacionais,
 } from "../utils/calculations";
 import { calculateGapsForPlan } from "../services/plans";
 import { getSetting } from "../services/settings";
@@ -325,6 +325,8 @@ export interface PlanForOperational {
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
+  pesoCarrossel: number;
+  pesoReels: number;
   startDate: string;
   endDate: string | null;
 }
@@ -339,8 +341,10 @@ export interface OperationalMonth {
 
 export interface PostsPorClienteResult {
   clientes: number;
-  posts: number;
+  posts: number; // = carga operacional total (soma de UO dos planos ativos)
   ratio: number | null;
+  teto: number; // teto de capacidade em UO
+  utilizacao: number; // carga ÷ teto em % (pode passar de 100)
 }
 
 const MONTH_LABELS_LOWER = [
@@ -353,15 +357,21 @@ function monthLabelLower(yyyymm: string): string {
   return `${MONTH_LABELS_LOWER[Number(m) - 1]}/${y.slice(2)}`;
 }
 
+// Carga operacional do plano em UO: aplica o redutor (pesoCarrossel/pesoReels).
+// Estático conta 0,5 e tráfego 1 (ver calcularUnidadesOperacionais).
 function postsPonderados(p: Pick<PlanForOperational,
-  "postsCarrossel" | "postsReels" | "postsEstatico" | "postsTrafego">
+  "postsCarrossel" | "postsReels" | "postsEstatico" | "postsTrafego"
+  | "pesoCarrossel" | "pesoReels">
 ): number {
-  const equivalentes = calcularTotalPostsEquivalentes({
-    carrossel: p.postsCarrossel,
-    reels: p.postsReels,
-    estatico: p.postsEstatico,
-  });
-  return equivalentes + p.postsTrafego;
+  return calcularUnidadesOperacionais(
+    {
+      carrossel: p.postsCarrossel,
+      reels: p.postsReels,
+      estatico: p.postsEstatico,
+      trafego: p.postsTrafego,
+    },
+    { pesoCarrossel: p.pesoCarrossel, pesoReels: p.pesoReels }
+  );
 }
 
 // ─── Aggregator: MRR híbrido 12 meses ─────────────────────────────────────────
@@ -439,9 +449,12 @@ export function aggregatePostsPorCliente(
   const ativos = plans.filter((p) => p.endDate === null);
   const clientesSet = new Set(ativos.map((p) => p.clientId));
   const clientes = clientesSet.size;
-  const posts = ativos.reduce((sum, p) => sum + postsPonderados(p), 0);
+  // Arredonda em 2 casas para evitar resíduo de ponto flutuante ao somar pesos.
+  const posts =
+    Math.round(ativos.reduce((sum, p) => sum + postsPonderados(p), 0) * 100) / 100;
   const ratio = clientes > 0 ? Math.round((posts / clientes) * 10) / 10 : null;
-  return { clientes, posts, ratio };
+  const utilizacao = Math.round((posts / TETO_OPERACIONAL_UO) * 100);
+  return { clientes, posts, ratio, teto: TETO_OPERACIONAL_UO, utilizacao };
 }
 
 // ─── Aggregator: evolução operacional 12 meses ────────────────────────────────
@@ -513,6 +526,8 @@ export async function getOperationalDashboard(): Promise<{
     postsReels: p.postsReels,
     postsEstatico: p.postsEstatico,
     postsTrafego: p.postsTrafego,
+    pesoCarrossel: p.pesoCarrossel,
+    pesoReels: p.pesoReels,
     startDate: p.startDate,
     endDate: p.endDate,
   }));

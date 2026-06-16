@@ -5,6 +5,7 @@ import {
   calcularStatusPagamento,
   calcularMediana,
   calcularTotalPostsEquivalentes,
+  calcularUnidadesOperacionais,
   assertBillingDays,
   isDataPassada,
   calcularPermanenciaCliente,
@@ -150,6 +151,75 @@ describe("calcularTotalPostsEquivalentes", () => {
   it("retorna 0 quando tudo é zero", () => {
     expect(
       calcularTotalPostsEquivalentes({ carrossel: 0, reels: 0, estatico: 0 })
+    ).toBe(0);
+  });
+});
+
+// ─── Unidades Operacionais (UO) ────────────────────────────────────────────────
+describe("calcularUnidadesOperacionais", () => {
+  it("pesos default (=1): carrossel + reels + estático×0,5", () => {
+    expect(
+      calcularUnidadesOperacionais({ carrossel: 4, reels: 0, estatico: 6 })
+    ).toBe(7);
+  });
+
+  it("tráfego conta 1 (entra na carga operacional)", () => {
+    expect(
+      calcularUnidadesOperacionais({
+        carrossel: 1,
+        reels: 1,
+        estatico: 2,
+        trafego: 1,
+      })
+    ).toBe(4); // 1 + 1 + 2×0.5 + 1
+  });
+
+  it("Essential desenhado: 2C + 2R(0,75) + 1E = 4,0 UO", () => {
+    expect(
+      calcularUnidadesOperacionais(
+        { carrossel: 2, reels: 2, estatico: 1 },
+        { pesoReels: 0.75 }
+      )
+    ).toBe(4);
+  });
+
+  it("redutor no carrossel ('só design'): 2C×0,5 = 1,0 UO", () => {
+    expect(
+      calcularUnidadesOperacionais(
+        { carrossel: 2, reels: 0, estatico: 0 },
+        { pesoCarrossel: 0.5 }
+      )
+    ).toBe(1);
+  });
+
+  it("redutor afeta carrossel e reels independentemente", () => {
+    expect(
+      calcularUnidadesOperacionais(
+        { carrossel: 2, reels: 2, estatico: 0 },
+        { pesoCarrossel: 0.5, pesoReels: 0.75 }
+      )
+    ).toBe(2.5); // 2×0.5 + 2×0.75
+  });
+
+  it("estático sempre 0,5 (não sofre redutor)", () => {
+    expect(
+      calcularUnidadesOperacionais(
+        { carrossel: 0, reels: 0, estatico: 4 },
+        { pesoCarrossel: 0.5, pesoReels: 0.5 }
+      )
+    ).toBe(2); // 4×0.5
+  });
+
+  it("pesos omitidos equivalem a 1 (igual aos posts equivalentes + tráfego)", () => {
+    const posts = { carrossel: 4, reels: 2, estatico: 4, trafego: 0 };
+    expect(calcularUnidadesOperacionais(posts)).toBe(
+      calcularTotalPostsEquivalentes(posts)
+    );
+  });
+
+  it("retorna 0 quando tudo é zero", () => {
+    expect(
+      calcularUnidadesOperacionais({ carrossel: 0, reels: 0, estatico: 0, trafego: 0 })
     ).toBe(0);
   });
 });

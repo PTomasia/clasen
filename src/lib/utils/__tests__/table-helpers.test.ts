@@ -39,6 +39,7 @@ function basePlan() {
     status: "ativo",
     notes: null as string | null,
     custoPost: 125 as number | null,
+    unidadesOperacionais: 4,
     permanencia: 3,
     statusPagamento: "em_dia" as StatusPagamento,
   };
