@@ -1,7 +1,7 @@
 import { db } from "../db";
 import * as schema from "../db/schema";
 import { format } from "date-fns";
-import { FINANCIAL_DATA_START } from "../constants";
+import { FINANCIAL_DATA_START, SIMPLES_NACIONAL_INICIO } from "../constants";
 import { FINANCIAL_PARAMS } from "../cfo-export/financial-params";
 import {
   aggregateMrr,
@@ -129,7 +129,9 @@ export async function getTaxEstimate(): Promise<TaxEstimateData> {
   return buildTaxEstimate({
     series,
     mesApuracao: format(today, "yyyy-MM"),
-    cutoffMonth: FINANCIAL_DATA_START.slice(0, 7),
+    // RBT12/DAS contam a partir da abertura do CNPJ atual (jun/2026), não do
+    // início dos dados financeiros (jan/2026) — receita do CNPJ antigo não entra.
+    cutoffMonth: SIMPLES_NACIONAL_INICIO,
     proLaboreContabilRate: FINANCIAL_PARAMS.proLaboreContabilRate,
     taxRateLegacy: FINANCIAL_PARAMS.taxRate,
   });

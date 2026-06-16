@@ -40,8 +40,9 @@ tratada como pagamento realizado.
 - **Valor oficial do DAS** (quando a Contabilizei/PGDAS confirmar): editar a despesa de
   `tributos` lançada e marcar como paga.
 - Opcional: ajustar pró-labore gerencial se mudar de R$ 15.000.
-- Receita, RBT12, faixa, alíquota, DAS e Fator R são automáticos. Início do enquadramento
-  usa `FINANCIAL_DATA_START` (2026-01).
+- Receita, RBT12, faixa, alíquota, DAS e Fator R são automáticos. O início do enquadramento
+  no Simples usa `SIMPLES_NACIONAL_INICIO` (2026-06 = abertura do CNPJ atual). Junho é o 1º
+  mês de atividade (RBT12 = receita × 12); receita de jan–mai (CNPJ antigo) não entra.
 
 ## Fórmulas
 

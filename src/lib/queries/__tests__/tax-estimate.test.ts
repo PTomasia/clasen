@@ -84,6 +84,25 @@ describe("buildTaxEstimate", () => {
     expect(r.dasPorMes["2026-06"]).toBe(840);
   });
 
+  it("CNPJ aberto em jun/2026: junho é o 1º mês, jan–mai (CNPJ antigo) não entram", () => {
+    // Série tem jan–jun, mas o cutoff do Simples é junho (abertura do CNPJ atual).
+    const r = buildTaxEstimate({
+      series,
+      mesApuracao: "2026-06",
+      cutoffMonth: "2026-06",
+      proLaboreContabilRate: 0.28,
+    });
+    expect(r.estimativa.rbt12).toBe(168_000); // só junho: 14k × 12
+    expect(r.estimativa.rbt12Tipo).toBe("proporcionalizada");
+    expect(r.estimativa.mesesApurados).toBe(1); // 1º mês de atividade
+    expect(r.estimativa.faixa).toBe(1);
+    expect(r.estimativa.das).toBe(840);
+    // dasPorMes só tem junho em diante — jan–mai (CNPJ antigo) ficam de fora.
+    expect(r.dasPorMes["2026-06"]).toBe(840);
+    expect(r.dasPorMes["2026-05"]).toBeUndefined();
+    expect(r.dasPorMes["2026-01"]).toBeUndefined();
+  });
+
   it("ignora meses anteriores ao cutoff no cálculo da RBT12", () => {
     const withPre = [
       { month: "2025-11", receitaBruta: 0 },

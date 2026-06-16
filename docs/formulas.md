@@ -135,6 +135,13 @@ proporcionalizada (<12 meses) = (receita acumulada desde o início / meses apura
 
 O dashboard sinaliza se a RBT12 é **real** ou **proporcionalizada**.
 
+**Início do enquadramento:** a RBT12 conta a partir da abertura do **CNPJ atual**
+(`SIMPLES_NACIONAL_INICIO = "2026-06"` em `constants.ts`) — a Clasen abriu o CNPJ novo
+em jun/2026; antes operava sob outro CNPJ. Receita anterior a junho **não** entra na
+RBT12 deste CNPJ. Logo **junho/2026 é o 1º mês de atividade** (RBT12 = receita do mês ×
+12, proporcionalizada, 1 mês apurado). Esse marco é separado de `FINANCIAL_DATA_START`
+(jan/2026), que segue valendo para as demais agregações financeiras.
+
 ### Tabela do Anexo III
 
 | Faixa | RBT12 até | Alíquota nominal | Parcela a deduzir |
