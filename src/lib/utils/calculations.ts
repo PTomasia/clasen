@@ -34,11 +34,11 @@ export function calcularTotalPostsEquivalentes(
 }
 
 // ─── Unidades Operacionais (UO) ────────────────────────────────────────────────
-// Métrica gerencial INTERNA de carga operacional (não afeta $/post, que continua
-// na contagem cheia). Base: carrossel e reels valem 1, estático 0,5, tráfego 1.
+// Métrica gerencial INTERNA de carga operacional de SOCIAL MEDIA (não afeta $/post,
+// que continua na contagem cheia). Base: carrossel e reels valem 1, estático 0,5.
+// Tráfego NÃO entra: é um setor à parte, não consome a operação de social media.
 // O "redutor" é um peso por tipo (pesoCarrossel/pesoReels, default 1) ajustável por
 // plano — ex.: produção simplificada ("só design") pesa 0,5; reels médios, 0,75.
-// Estático fica fixo em 0,5; tráfego em 1.
 
 export function calcularUnidadesOperacionais(
   posts: PostComposition,
@@ -46,11 +46,11 @@ export function calcularUnidadesOperacionais(
 ): number {
   const pesoCarrossel = pesos?.pesoCarrossel ?? 1;
   const pesoReels = pesos?.pesoReels ?? 1;
+  // posts.trafego é intencionalmente ignorado (setor à parte, não é social media).
   return (
     posts.carrossel * pesoCarrossel +
     posts.reels * pesoReels +
-    posts.estatico * 0.5 +
-    (posts.trafego ?? 0)
+    posts.estatico * 0.5
   );
 }
 

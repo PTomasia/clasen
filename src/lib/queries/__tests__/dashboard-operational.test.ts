@@ -62,13 +62,13 @@ describe("aggregatePostsPorCliente", () => {
     expect(result.posts).toBe(6); // 4C + 2R
   });
 
-  it("posts são ponderados: estático conta 0,5 + tráfego conta 1", () => {
+  it("carga em UO: estático conta 0,5 e tráfego NÃO entra (setor à parte)", () => {
     const plans = [
-      plan({ postsCarrossel: 1, postsReels: 1, postsEstatico: 2, postsTrafego: 1 }),
+      plan({ postsCarrossel: 1, postsReels: 1, postsEstatico: 2, postsTrafego: 5 }),
     ];
     const result = aggregatePostsPorCliente(plans);
-    // 1C + 1R + 2E×0.5 + 1T = 1 + 1 + 1 + 1 = 4
-    expect(result.posts).toBe(4);
+    // 1C + 1R + 2E×0.5 = 3 (tráfego ignorado)
+    expect(result.posts).toBe(3);
   });
 
   it("ratio = posts/clientes arredondado em 1 casa", () => {

@@ -1255,7 +1255,7 @@ function PlanosHeroCard({
         </p>
         <p
           className="text-xs text-muted-foreground mt-1.5 cursor-help"
-          title="Carga operacional da carteira ativa em unidades operacionais (UO). Carrossel e reels valem 1 (ajustável pelo redutor), estático 0,5, tráfego 1. Teto desenhado: 30 clientes Essential = 120 UO."
+          title="Carga operacional da carteira ativa em unidades operacionais (UO) — só social media. Carrossel e reels valem 1 (ajustável pelo redutor), estático 0,5; tráfego não entra (setor à parte). Teto desenhado: 30 clientes Essential = 120 UO."
         >
           Carga{" "}
           <span className="tabular-nums font-medium text-foreground">

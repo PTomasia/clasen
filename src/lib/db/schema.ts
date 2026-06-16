@@ -53,7 +53,7 @@ export const subscriptionPlans = sqliteTable("subscription_plans", {
 
   // Redutor das unidades operacionais (UO): peso por tipo, ajustável por plano.
   // Default 1 (produção cheia); ex.: reels simplificado 0,75, "só design" 0,5.
-  // Estático fica fixo em 0,5 e tráfego em 1 (ver calcularUnidadesOperacionais).
+  // Estático fica fixo em 0,5; tráfego não entra na UO (ver calcularUnidadesOperacionais).
   pesoCarrossel: real("peso_carrossel").notNull().default(1),
   pesoReels: real("peso_reels").notNull().default(1),
 

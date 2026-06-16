@@ -115,7 +115,6 @@ export async function getAllPlans() {
           carrossel: plan.postsCarrossel,
           reels: plan.postsReels,
           estatico: plan.postsEstatico,
-          trafego: plan.postsTrafego,
         },
         { pesoCarrossel: plan.pesoCarrossel, pesoReels: plan.pesoReels }
       ),

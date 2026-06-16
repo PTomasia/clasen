@@ -14,6 +14,7 @@ import {
   calcularCustoPost,
   calcularMediana,
   calcularPermanenciaCliente,
+  calcularTotalPostsEquivalentes,
   calcularUnidadesOperacionais,
 } from "../utils/calculations";
 import { calculateGapsForPlan } from "../services/plans";
@@ -357,19 +358,27 @@ function monthLabelLower(yyyymm: string): string {
   return `${MONTH_LABELS_LOWER[Number(m) - 1]}/${y.slice(2)}`;
 }
 
-// Carga operacional do plano em UO: aplica o redutor (pesoCarrossel/pesoReels).
-// Estático conta 0,5 e tráfego 1 (ver calcularUnidadesOperacionais).
+// Posts ponderados da EVOLUÇÃO operacional (gráfico "Posts/mês", 12 meses).
+// Métrica histórica: estático conta 0,5 e tráfego conta 1, SEM redutor (os pesos
+// são do estado atual do plano e não se aplicam retroativamente a meses passados).
 function postsPonderados(p: Pick<PlanForOperational,
-  "postsCarrossel" | "postsReels" | "postsEstatico" | "postsTrafego"
-  | "pesoCarrossel" | "pesoReels">
+  "postsCarrossel" | "postsReels" | "postsEstatico" | "postsTrafego">
+): number {
+  const equivalentes = calcularTotalPostsEquivalentes({
+    carrossel: p.postsCarrossel,
+    reels: p.postsReels,
+    estatico: p.postsEstatico,
+  });
+  return equivalentes + p.postsTrafego;
+}
+
+// Carga operacional (UO) do plano: social media com redutor, SEM tráfego (setor à
+// parte). Usado no medidor de carga vs teto (instante presente).
+function unidadesOperacionaisPlano(p: Pick<PlanForOperational,
+  "postsCarrossel" | "postsReels" | "postsEstatico" | "pesoCarrossel" | "pesoReels">
 ): number {
   return calcularUnidadesOperacionais(
-    {
-      carrossel: p.postsCarrossel,
-      reels: p.postsReels,
-      estatico: p.postsEstatico,
-      trafego: p.postsTrafego,
-    },
+    { carrossel: p.postsCarrossel, reels: p.postsReels, estatico: p.postsEstatico },
     { pesoCarrossel: p.pesoCarrossel, pesoReels: p.pesoReels }
   );
 }
@@ -449,9 +458,10 @@ export function aggregatePostsPorCliente(
   const ativos = plans.filter((p) => p.endDate === null);
   const clientesSet = new Set(ativos.map((p) => p.clientId));
   const clientes = clientesSet.size;
-  // Arredonda em 2 casas para evitar resíduo de ponto flutuante ao somar pesos.
+  // Carga operacional em UO (social media, sem tráfego). Arredonda em 2 casas
+  // para evitar resíduo de ponto flutuante ao somar os pesos.
   const posts =
-    Math.round(ativos.reduce((sum, p) => sum + postsPonderados(p), 0) * 100) / 100;
+    Math.round(ativos.reduce((sum, p) => sum + unidadesOperacionaisPlano(p), 0) * 100) / 100;
   const ratio = clientes > 0 ? Math.round((posts / clientes) * 10) / 10 : null;
   const utilizacao = Math.round((posts / TETO_OPERACIONAL_UO) * 100);
   return { clientes, posts, ratio, teto: TETO_OPERACIONAL_UO, utilizacao };

@@ -163,15 +163,15 @@ describe("calcularUnidadesOperacionais", () => {
     ).toBe(7);
   });
 
-  it("tráfego conta 1 (entra na carga operacional)", () => {
+  it("tráfego NÃO entra (setor à parte, não é social media)", () => {
     expect(
       calcularUnidadesOperacionais({
         carrossel: 1,
         reels: 1,
         estatico: 2,
-        trafego: 1,
+        trafego: 5,
       })
-    ).toBe(4); // 1 + 1 + 2×0.5 + 1
+    ).toBe(3); // 1 + 1 + 2×0.5 (tráfego ignorado)
   });
 
   it("Essential desenhado: 2C + 2R(0,75) + 1E = 4,0 UO", () => {
@@ -210,8 +210,9 @@ describe("calcularUnidadesOperacionais", () => {
     ).toBe(2); // 4×0.5
   });
 
-  it("pesos omitidos equivalem a 1 (igual aos posts equivalentes + tráfego)", () => {
-    const posts = { carrossel: 4, reels: 2, estatico: 4, trafego: 0 };
+  it("pesos omitidos = posts equivalentes (ambos ignoram tráfego)", () => {
+    const posts = { carrossel: 4, reels: 2, estatico: 4, trafego: 3 };
+    expect(calcularUnidadesOperacionais(posts)).toBe(8); // 4 + 2 + 4×0.5
     expect(calcularUnidadesOperacionais(posts)).toBe(
       calcularTotalPostsEquivalentes(posts)
     );

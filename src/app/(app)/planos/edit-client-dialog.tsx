@@ -113,13 +113,12 @@ export function EditClientDialog({
     trafego: parseInt(postsTrafego) || 0,
   });
 
-  // Unidades operacionais preview (aplica o redutor pesoCarrossel/pesoReels)
+  // Unidades operacionais preview (social media, com redutor; tráfego não entra)
   const unidadesOperacionais = calcularUnidadesOperacionais(
     {
       carrossel: parseInt(postsCarrossel) || 0,
       reels: parseInt(postsReels) || 0,
       estatico: parseInt(postsEstatico) || 0,
-      trafego: parseInt(postsTrafego) || 0,
     },
     {
       pesoCarrossel: parseFloat(pesoCarrossel) || 1,
@@ -338,7 +337,7 @@ export function EditClientDialog({
                 Redutor (unidades operacionais)
                 <span
                   className="text-muted-foreground text-xs cursor-help"
-                  title="Peso por tipo para a carga operacional (UO). 1 = produção cheia; reduza para produções simplificadas (ex.: 'só design' = 0,5; reels médio = 0,75). Não afeta o $/post. Estático conta 0,5 e tráfego 1."
+                  title="Peso por tipo para a carga operacional (UO). 1 = produção cheia; reduza para produções simplificadas (ex.: 'só design' = 0,5; reels médio = 0,75). Não afeta o $/post. Estático conta 0,5; tráfego não entra (setor à parte)."
                 >
                   ⓘ
                 </span>

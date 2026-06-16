@@ -475,7 +475,7 @@ function CargaOperacionalCard({ carga }: { carga: PostsPorClienteResult }) {
           Carga operacional
           <span
             className="text-muted-foreground text-xs cursor-help"
-            title="Soma das unidades operacionais (UO) dos planos ativos vs teto de capacidade. Carrossel e reels valem 1 (ajustável pelo redutor no plano), estático 0,5, tráfego 1. Teto desenhado: 30 clientes Essential = 120 UO."
+            title="Soma das unidades operacionais (UO) dos planos ativos vs teto de capacidade — só social media. Carrossel e reels valem 1 (ajustável pelo redutor no plano), estático 0,5; tráfego não entra (setor à parte). Teto desenhado: 30 clientes Essential = 120 UO."
           >
             ⓘ
           </span>
