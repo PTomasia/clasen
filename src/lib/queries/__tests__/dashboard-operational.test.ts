@@ -20,6 +20,8 @@ function plan(overrides: Partial<PlanForOperational> = {}): PlanForOperational {
     postsReels: 0,
     postsEstatico: 0,
     postsTrafego: 0,
+    pesoCarrossel: 1,
+    pesoReels: 1,
     startDate: "2026-01-01",
     endDate: null,
     ...overrides,
@@ -31,7 +33,13 @@ function plan(overrides: Partial<PlanForOperational> = {}): PlanForOperational {
 describe("aggregatePostsPorCliente", () => {
   it("retorna 0/0/null quando não há planos ativos", () => {
     const result = aggregatePostsPorCliente([]);
-    expect(result).toEqual({ clientes: 0, posts: 0, ratio: null });
+    expect(result).toEqual({
+      clientes: 0,
+      posts: 0,
+      ratio: null,
+      teto: 120,
+      utilizacao: 0,
+    });
   });
 
   it("conta apenas planos ativos (endDate=null)", () => {
@@ -54,13 +62,13 @@ describe("aggregatePostsPorCliente", () => {
     expect(result.posts).toBe(6); // 4C + 2R
   });
 
-  it("posts são ponderados: estático conta 0,5 + tráfego conta 1", () => {
+  it("carga em UO: estático conta 0,5 e tráfego NÃO entra (setor à parte)", () => {
     const plans = [
-      plan({ postsCarrossel: 1, postsReels: 1, postsEstatico: 2, postsTrafego: 1 }),
+      plan({ postsCarrossel: 1, postsReels: 1, postsEstatico: 2, postsTrafego: 5 }),
     ];
     const result = aggregatePostsPorCliente(plans);
-    // 1C + 1R + 2E×0.5 + 1T = 1 + 1 + 1 + 1 = 4
-    expect(result.posts).toBe(4);
+    // 1C + 1R + 2E×0.5 = 3 (tráfego ignorado)
+    expect(result.posts).toBe(3);
   });
 
   it("ratio = posts/clientes arredondado em 1 casa", () => {
@@ -71,6 +79,40 @@ describe("aggregatePostsPorCliente", () => {
     ];
     const result = aggregatePostsPorCliente(plans);
     expect(result.ratio).toBeCloseTo(5.0, 1); // (6+4+5)/3 = 5
+  });
+
+  it("aplica o redutor (pesoCarrossel/pesoReels) na carga", () => {
+    // Essential desenhado: 2C + 2R(0,75) + 1E = 4,0 UO
+    const plans = [
+      plan({
+        postsCarrossel: 2,
+        postsReels: 2,
+        postsEstatico: 1,
+        postsTrafego: 0,
+        pesoReels: 0.75,
+      }),
+    ];
+    const result = aggregatePostsPorCliente(plans);
+    expect(result.posts).toBe(4);
+  });
+
+  it("expõe teto (120) e utilização em %", () => {
+    // 30 Essentials de 4,0 UO = 120 → 100%
+    const plans = Array.from({ length: 30 }, (_, i) =>
+      plan({
+        id: i + 1,
+        clientId: i + 1,
+        postsCarrossel: 2,
+        postsReels: 2,
+        postsEstatico: 1,
+        postsTrafego: 0,
+        pesoReels: 0.75,
+      })
+    );
+    const result = aggregatePostsPorCliente(plans);
+    expect(result.posts).toBe(120);
+    expect(result.teto).toBe(120);
+    expect(result.utilizacao).toBe(100);
   });
 });
 

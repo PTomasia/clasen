@@ -12,6 +12,13 @@ export function formatBRL(value: number): string {
   return brlFormatter.format(value).replace(/\u00a0/g, " ");
 }
 
+// ─── Formatação de Unidades Operacionais (UO) ──────────────────────────────────
+// Até 2 casas, vírgula decimal pt-BR. Ex.: 4 → "4", 1.5 → "1,5", 0.75 → "0,75".
+
+export function formatUO(value: number): string {
+  return value.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+}
+
 // ─── Formatação de Data ────────────────────────────────────────────────────────
 // ISO 8601 ('2024-01-15') → dd/MM/yyyy ('15/01/2024')
 

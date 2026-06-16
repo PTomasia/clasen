@@ -29,9 +29,10 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
-import { formatBRL, formatDate, formatMonth } from "@/lib/utils/formatting";
+import { formatBRL, formatDate, formatMonth, formatUO } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
 import { isDataPassada, type StatusPagamento } from "@/lib/utils/calculations";
+import { TETO_OPERACIONAL_UO } from "@/lib/constants";
 import { buildOverdueRows } from "@/lib/utils/overdue";
 import {
   sortPlans,
@@ -70,6 +71,9 @@ interface Plan {
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
+  pesoCarrossel: number;
+  pesoReels: number;
+  unidadesOperacionais: number;
   startDate: string;
   endDate: string | null;
   movementType: string | null;
@@ -392,6 +396,8 @@ export function PlanosClient({
       postsReels: next.postsReels,
       postsEstatico: next.postsEstatico,
       postsTrafego: next.postsTrafego,
+      pesoCarrossel: next.pesoCarrossel,
+      pesoReels: next.pesoReels,
       startDate: next.startDate,
       planNotes: next.notes,
     });
@@ -470,16 +476,19 @@ export function PlanosClient({
   // Cards de resumo — planos ativos
   const activePlans = useMemo(() => plans.filter((p) => p.status === "ativo"), [plans]);
   const postsAtuais = useMemo(() => {
-    return activePlans.reduce(
+    const acc = activePlans.reduce(
       (acc, p) => ({
         conteudo: acc.conteudo + p.postsCarrossel + p.postsReels + p.postsEstatico,
         carrossel: acc.carrossel + p.postsCarrossel,
         reels: acc.reels + p.postsReels,
         estatico: acc.estatico + p.postsEstatico,
         trafego: acc.trafego + p.postsTrafego,
+        uo: acc.uo + p.unidadesOperacionais,
       }),
-      { conteudo: 0, carrossel: 0, reels: 0, estatico: 0, trafego: 0 }
+      { conteudo: 0, carrossel: 0, reels: 0, estatico: 0, trafego: 0, uo: 0 }
     );
+    // Arredonda a carga em 2 casas (evita resíduo de ponto flutuante ao somar pesos)
+    return { ...acc, uo: Math.round(acc.uo * 100) / 100 };
   }, [activePlans]);
   const activeTotal = useMemo(
     () => activePlans.reduce((sum, p) => sum + p.planValue, 0),
@@ -552,6 +561,8 @@ export function PlanosClient({
             postsReels={postsAtuais.reels}
             postsEstatico={postsAtuais.estatico}
             postsTrafego={postsAtuais.trafego}
+            cargaUO={postsAtuais.uo}
+            tetoUO={TETO_OPERACIONAL_UO}
             reajustes={
               targetCostPerPost && overdueAdjustments.length > 0
                 ? {
@@ -671,6 +682,7 @@ export function PlanosClient({
               <SortableHead label="Valor" sortKey="planValue" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
               <SortableHead label="$/post" sortKey="custoPost" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
               <TableHead className="text-center">Posts</TableHead>
+              <SortableHead label="UO" sortKey="unidadesOperacionais" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
               <SortableHead label="Perm." sortKey="permanencia" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
               <SortableHead label="Pgto" sortKey="statusPagamento" currentSort={sortKey} currentDirection={sortDirection} onSort={handleSort} />
               <TableHead>Último pgto</TableHead>
@@ -690,7 +702,7 @@ export function PlanosClient({
           <TableBody>
             {processedPlans.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={targetCostPerPost ? 11 : 10} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={targetCostPerPost ? 12 : 11} className="text-center text-muted-foreground py-8">
                   Nenhum plano encontrado
                 </TableCell>
               </TableRow>
@@ -750,6 +762,12 @@ export function PlanosClient({
                       plan.postsEstatico === 0 &&
                       plan.postsTrafego === 0 &&
                       "—"}
+                  </TableCell>
+                  <TableCell
+                    className="text-center text-sm tabular-nums text-muted-foreground cursor-help"
+                    title={`Unidades operacionais (carga). Redutor: carrossel ×${formatUO(plan.pesoCarrossel)}, reels ×${formatUO(plan.pesoReels)}.`}
+                  >
+                    {formatUO(plan.unidadesOperacionais)}
                   </TableCell>
                   <TableCell className="text-center">
                     {plan.permanencia}m
@@ -879,6 +897,8 @@ export function PlanosClient({
                                 postsReels: plan.postsReels,
                                 postsEstatico: plan.postsEstatico,
                                 postsTrafego: plan.postsTrafego,
+                                pesoCarrossel: plan.pesoCarrossel,
+                                pesoReels: plan.pesoReels,
                                 startDate: plan.startDate,
                                 planNotes: plan.notes,
                               }),
@@ -1104,6 +1124,8 @@ function PlanosHeroCard({
   postsReels,
   postsEstatico,
   postsTrafego,
+  cargaUO,
+  tetoUO,
   reajustes,
   custoPostMedio,
   targetCostPerPost,
@@ -1116,6 +1138,8 @@ function PlanosHeroCard({
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
+  cargaUO: number;
+  tetoUO: number;
   reajustes: {
     count: number;
     receitaComVencidos: number;
@@ -1228,6 +1252,22 @@ function PlanosHeroCard({
           <span className="tabular-nums" title="Estáticos">{postsEstatico}E</span>
           {") · "}
           <span className="tabular-nums">{postsTrafego}</span> tráfego
+        </p>
+        <p
+          className="text-xs text-muted-foreground mt-1.5 cursor-help"
+          title="Carga operacional da carteira ativa em unidades operacionais (UO) — só social media. Carrossel e reels valem 1 (ajustável pelo redutor), estático 0,5; tráfego não entra (setor à parte). Teto desenhado: 30 clientes Essential = 120 UO."
+        >
+          Carga{" "}
+          <span className="tabular-nums font-medium text-foreground">
+            {formatUO(cargaUO)}
+          </span>
+          {" / "}
+          <span className="tabular-nums">{tetoUO}</span> UO
+          {" ("}
+          <span className="tabular-nums">
+            {Math.round((cargaUO / tetoUO) * 100)}%
+          </span>
+          {")"}
         </p>
       </div>
 

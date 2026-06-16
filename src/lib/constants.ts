@@ -15,6 +15,12 @@ export const PLAN_TYPES = [
   "Site",
 ] as const;
 
+// Teto de capacidade operacional, em unidades operacionais (UO). Desenhado como
+// 30 clientes Essential (2 carrosséis + 2 reels + 1 estático, reels a 0,75 em
+// média) = 30 × 4,0 UO = 120. Métrica gerencial interna (ver
+// calcularUnidadesOperacionais). Pode migrar para agency_settings no futuro.
+export const TETO_OPERACIONAL_UO = 120;
+
 // Classificação estratégica da carteira de clientes.
 // Premium: proteger e desenvolver · Essencial: manter e evoluir ·
 // Manutenção: baixo volume, regra clara · Legado: preço antigo, observar transição ·

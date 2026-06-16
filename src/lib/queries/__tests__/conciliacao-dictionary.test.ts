@@ -44,6 +44,8 @@ function createTestDb() {
       posts_reels INTEGER NOT NULL DEFAULT 0,
       posts_estatico INTEGER NOT NULL DEFAULT 0,
       posts_trafego INTEGER NOT NULL DEFAULT 0,
+      peso_carrossel REAL NOT NULL DEFAULT 1,
+      peso_reels REAL NOT NULL DEFAULT 1,
       start_date TEXT NOT NULL,
       end_date TEXT,
       last_adjustment_date TEXT,

@@ -51,6 +51,12 @@ export const subscriptionPlans = sqliteTable("subscription_plans", {
   postsEstatico: integer("posts_estatico").notNull().default(0),
   postsTrafego: integer("posts_trafego").notNull().default(0),
 
+  // Redutor das unidades operacionais (UO): peso por tipo, ajustável por plano.
+  // Default 1 (produção cheia); ex.: reels simplificado 0,75, "só design" 0,5.
+  // Estático fica fixo em 0,5; tráfego não entra na UO (ver calcularUnidadesOperacionais).
+  pesoCarrossel: real("peso_carrossel").notNull().default(1),
+  pesoReels: real("peso_reels").notNull().default(1),
+
   // Datas
   startDate: text("start_date").notNull(), // ISO 8601: '2024-01-15'
   endDate: text("end_date"), // NULL = plano ativo

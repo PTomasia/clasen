@@ -18,9 +18,22 @@ export interface CreatePlanInput {
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
+  pesoCarrossel?: number;
+  pesoReels?: number;
   startDate: string;
   movementType?: string;
   notes?: string;
+}
+
+// ─── Redutor de unidades operacionais ──────────────────────────────────────────
+// Peso por tipo (carrossel/reels). Default 1; deve ser > 0. Sem teto superior —
+// produção mais pesada pode valer > 1.
+
+function assertPesoUO(peso: number | undefined, tipo: string): void {
+  if (peso == null) return;
+  if (!(peso > 0)) {
+    throw new Error(`peso do ${tipo} deve ser maior que zero`);
+  }
 }
 
 export interface RecordPaymentInput {
@@ -52,6 +65,8 @@ export async function createPlan(db: any, input: CreatePlanInput) {
   }
 
   assertBillingDays(input.billingCycleDays, input.billingCycleDays2);
+  assertPesoUO(input.pesoCarrossel, "carrossel");
+  assertPesoUO(input.pesoReels, "reels");
 
   // Criar ou reutilizar cliente
   let clientId = input.clientId;
@@ -95,6 +110,8 @@ export async function createPlan(db: any, input: CreatePlanInput) {
       postsReels: input.postsReels,
       postsEstatico: input.postsEstatico,
       postsTrafego: input.postsTrafego,
+      pesoCarrossel: input.pesoCarrossel ?? 1,
+      pesoReels: input.pesoReels ?? 1,
       startDate: input.startDate,
       movementType: input.movementType ?? null,
       nextPaymentDate,
@@ -282,6 +299,8 @@ export interface UpdatePlanInput {
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
+  pesoCarrossel?: number;
+  pesoReels?: number;
   startDate?: string;
   notes?: string;
 }
@@ -296,6 +315,8 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
   }
 
   assertBillingDays(input.billingCycleDays, input.billingCycleDays2);
+  assertPesoUO(input.pesoCarrossel, "carrossel");
+  assertPesoUO(input.pesoReels, "reels");
 
   const existing = await db
     .select()
@@ -332,6 +353,9 @@ export async function updatePlan(db: any, input: UpdatePlanInput) {
       postsReels: input.postsReels,
       postsEstatico: input.postsEstatico,
       postsTrafego: input.postsTrafego,
+      // Redutor UO: só sobrescreve quando informado (preserva valor existente).
+      ...(input.pesoCarrossel !== undefined ? { pesoCarrossel: input.pesoCarrossel } : {}),
+      ...(input.pesoReels !== undefined ? { pesoReels: input.pesoReels } : {}),
       ...(input.startDate ? { startDate: input.startDate } : {}),
       ...(recalculatedNext !== undefined ? { nextPaymentDate: recalculatedNext } : {}),
       notes: input.notes?.trim() || null,

@@ -7,6 +7,7 @@ export type SortKey =
   | "planType"
   | "planValue"
   | "custoPost"
+  | "unidadesOperacionais"
   | "permanencia"
   | "statusPagamento"
   | "billingCycleDays"
@@ -19,6 +20,7 @@ export interface PlanRow {
   planType: string;
   planValue: number;
   custoPost: number | null;
+  unidadesOperacionais: number;
   permanencia: number;
   statusPagamento: StatusPagamento;
   billingCycleDays: number | null;

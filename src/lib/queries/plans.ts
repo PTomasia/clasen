@@ -6,6 +6,7 @@ import {
   calcularPermanencia,
   calcularProximoVencimento,
   calcularStatusPagamento,
+  calcularUnidadesOperacionais,
 } from "../utils/calculations";
 import { calcularProximoReajuste, calcularSugestaoReajuste } from "../utils/adjustments";
 import {
@@ -109,6 +110,14 @@ export async function getAllPlans() {
         estatico: plan.postsEstatico,
         trafego: plan.postsTrafego,
       }),
+      unidadesOperacionais: calcularUnidadesOperacionais(
+        {
+          carrossel: plan.postsCarrossel,
+          reels: plan.postsReels,
+          estatico: plan.postsEstatico,
+        },
+        { pesoCarrossel: plan.pesoCarrossel, pesoReels: plan.pesoReels }
+      ),
       permanencia: calcularPermanencia(plan.startDate, plan.endDate),
       statusPagamento: calcularStatusPagamento(effectiveNextPayment, gaps.length),
       gapsCount: gaps.length,

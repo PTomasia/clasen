@@ -21,8 +21,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { updateClientAction, updatePlanAction } from "@/lib/actions/plans";
-import { calcularCustoPost } from "@/lib/utils/calculations";
-import { formatBRL } from "@/lib/utils/formatting";
+import { calcularCustoPost, calcularUnidadesOperacionais } from "@/lib/utils/calculations";
+import { formatBRL, formatUO } from "@/lib/utils/formatting";
 
 import { ORIGINS as CONTACT_ORIGINS, PLAN_TYPES } from "@/lib/constants";
 
@@ -41,6 +41,8 @@ export interface EditDialogData {
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
+  pesoCarrossel: number;
+  pesoReels: number;
   startDate: string;
   planNotes: string | null;
 }
@@ -97,10 +99,12 @@ export function EditClientDialog({
   const [postsReels, setPostsReels] = useState(data.postsReels.toString());
   const [postsEstatico, setPostsEstatico] = useState(data.postsEstatico.toString());
   const [postsTrafego, setPostsTrafego] = useState(data.postsTrafego.toString());
+  const [pesoCarrossel, setPesoCarrossel] = useState(data.pesoCarrossel.toString());
+  const [pesoReels, setPesoReels] = useState(data.pesoReels.toString());
   const [startDate, setStartDate] = useState(data.startDate);
   const [planNotes, setPlanNotes] = useState(data.planNotes ?? "");
 
-  // $/post preview
+  // $/post preview (sempre na contagem cheia — não sofre o redutor)
   const custoPost = calcularCustoPost({
     valor: parseFloat(planValue) || 0,
     carrossel: parseInt(postsCarrossel) || 0,
@@ -108,6 +112,19 @@ export function EditClientDialog({
     estatico: parseInt(postsEstatico) || 0,
     trafego: parseInt(postsTrafego) || 0,
   });
+
+  // Unidades operacionais preview (social media, com redutor; tráfego não entra)
+  const unidadesOperacionais = calcularUnidadesOperacionais(
+    {
+      carrossel: parseInt(postsCarrossel) || 0,
+      reels: parseInt(postsReels) || 0,
+      estatico: parseInt(postsEstatico) || 0,
+    },
+    {
+      pesoCarrossel: parseFloat(pesoCarrossel) || 1,
+      pesoReels: parseFloat(pesoReels) || 1,
+    }
+  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,6 +147,8 @@ export function EditClientDialog({
           postsReels: parseInt(postsReels) || 0,
           postsEstatico: parseInt(postsEstatico) || 0,
           postsTrafego: parseInt(postsTrafego) || 0,
+          pesoCarrossel: parseFloat(pesoCarrossel) || 1,
+          pesoReels: parseFloat(pesoReels) || 1,
           startDate: startDate || undefined,
           notes: planNotes || undefined,
         }),
@@ -310,6 +329,32 @@ export function EditClientDialog({
                   $/post: {formatBRL(custoPost)}
                 </p>
               )}
+            </div>
+
+            {/* Redutor — unidades operacionais (métrica gerencial interna) */}
+            <div className="space-y-1">
+              <Label className="flex items-center gap-1.5">
+                Redutor (unidades operacionais)
+                <span
+                  className="text-muted-foreground text-xs cursor-help"
+                  title="Peso por tipo para a carga operacional (UO). 1 = produção cheia; reduza para produções simplificadas (ex.: 'só design' = 0,5; reels médio = 0,75). Não afeta o $/post. Estático conta 0,5; tráfego não entra (setor à parte)."
+                >
+                  ⓘ
+                </span>
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Carrossel ×</Label>
+                  <Input type="number" min="0" step="0.05" value={pesoCarrossel} onChange={(e) => setPesoCarrossel(e.target.value)} />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Reels ×</Label>
+                  <Input type="number" min="0" step="0.05" value={pesoReels} onChange={(e) => setPesoReels(e.target.value)} />
+                </div>
+              </div>
+              <p className="text-sm text-primary font-medium">
+                UO deste plano: {formatUO(unidadesOperacionais)}
+              </p>
             </div>
 
             <div className="space-y-1">
