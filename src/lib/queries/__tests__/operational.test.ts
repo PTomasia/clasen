@@ -12,59 +12,41 @@ import type { CheckPeriod } from "../../constants";
 
 describe("aggregateCargaPlanejada", () => {
   const plan = (over: Partial<PlanForCarga> = {}): PlanForCarga => ({
+    status: "ativo",
     postsCarrossel: 2,
     postsReels: 2,
     postsEstatico: 1,
     postsTrafego: 1,
     pesoCarrossel: 1,
     pesoReels: 0.75,
-    startDate: "2026-01-01",
-    endDate: null,
     ...over,
   });
 
-  it("soma planos ativos no mês e calcula UO com pesos", () => {
+  it("soma planos ativos e calcula UO com pesos (mesma carteira do Planos)", () => {
     const carga = aggregateCargaPlanejada({
       plans: [plan(), plan()],
       avulsosCount: 3,
-      month: "2026-06",
     });
     expect(carga.carrosseis).toBe(4);
     expect(carga.reels).toBe(4);
     expect(carga.estaticos).toBe(2);
     expect(carga.criativosTrafego).toBe(2);
-    expect(carga.postsTotais).toBe(12); // 4+4+2+2
+    // "Posts totais" = conteúdo (carrossel+reels+estático), SEM tráfego — igual ao Planos
+    expect(carga.postsTotais).toBe(10); // 4+4+2
     // UO por plano = 2*1 + 2*0.75 + 1*0.5 = 4,0 → 2 planos = 8,0
     expect(carga.unidadesOperacionais).toBe(8);
     expect(carga.avulsos).toBe(3);
   });
 
-  it("exclui plano encerrado antes do mês", () => {
+  it("exclui planos cancelados (predecessor de reajuste / encerrado vira 'cancelado')", () => {
     const carga = aggregateCargaPlanejada({
-      plans: [plan({ endDate: "2026-05-31" })],
+      plans: [plan(), plan({ status: "cancelado" })],
       avulsosCount: 0,
-      month: "2026-06",
     });
-    expect(carga.postsTotais).toBe(0);
-    expect(carga.unidadesOperacionais).toBe(0);
-  });
-
-  it("exclui plano que começa depois do mês", () => {
-    const carga = aggregateCargaPlanejada({
-      plans: [plan({ startDate: "2026-07-01" })],
-      avulsosCount: 0,
-      month: "2026-06",
-    });
-    expect(carga.postsTotais).toBe(0);
-  });
-
-  it("inclui plano encerrado dentro do mês", () => {
-    const carga = aggregateCargaPlanejada({
-      plans: [plan({ endDate: "2026-06-20" })],
-      avulsosCount: 0,
-      month: "2026-06",
-    });
-    expect(carga.postsTotais).toBe(6);
+    // só o plano ativo conta — sem double-count do cancelado
+    expect(carga.postsTotais).toBe(5); // 2+2+1 de um único plano ativo
+    expect(carga.carrosseis).toBe(2);
+    expect(carga.unidadesOperacionais).toBe(4);
   });
 });
 

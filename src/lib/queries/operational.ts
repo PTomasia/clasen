@@ -44,14 +44,13 @@ function periodRank(p: OperationalCheckRow["period"]): number {
 // mês), não a produção realizada. Usada para pré-preencher o check (editável).
 
 export interface PlanForCarga {
+  status: string;
   postsCarrossel: number;
   postsReels: number;
   postsEstatico: number;
   postsTrafego: number;
   pesoCarrossel: number;
   pesoReels: number;
-  startDate: string;
-  endDate: string | null;
 }
 
 export interface CargaPlanejada {
@@ -64,20 +63,17 @@ export interface CargaPlanejada {
   avulsos: number;
 }
 
-// Plano "ativo no mês": startDate ≤ último dia do mês E (endDate null OU ≥ 1º dia).
-// Mesma regra de aggregateOperationalEvolution (queries/dashboard.ts).
+// Mesma definição da página Planos (planos-client.tsx): carteira ATIVA por
+// status (`status === "ativo"`). Isso já exclui predecessores de reajuste — que
+// viram "cancelado" — e demais cancelados, sem double-count. "Posts totais" =
+// conteúdo (carrossel + reels + estático), SEM tráfego (setor à parte, igual ao
+// "conteúdo" do Planos). UO usa os pesos por plano.
 export function aggregateCargaPlanejada(input: {
   plans: PlanForCarga[];
   avulsosCount: number;
-  month: string; // YYYY-MM
 }): CargaPlanejada {
-  const { plans, avulsosCount, month } = input;
-  const firstDay = `${month}-01`;
-  const lastDay = lastDayOfMonth(month);
-
-  const active = plans.filter(
-    (p) => p.startDate <= lastDay && (p.endDate === null || p.endDate >= firstDay)
-  );
+  const { plans, avulsosCount } = input;
+  const ativos = plans.filter((p) => p.status === "ativo");
 
   let carrosseis = 0;
   let reels = 0;
@@ -85,7 +81,7 @@ export function aggregateCargaPlanejada(input: {
   let criativosTrafego = 0;
   let uo = 0;
 
-  for (const p of active) {
+  for (const p of ativos) {
     carrosseis += p.postsCarrossel;
     reels += p.postsReels;
     estaticos += p.postsEstatico;
@@ -97,7 +93,7 @@ export function aggregateCargaPlanejada(input: {
   }
 
   return {
-    postsTotais: carrosseis + reels + estaticos + criativosTrafego,
+    postsTotais: carrosseis + reels + estaticos, // conteúdo, sem tráfego (igual ao Planos)
     unidadesOperacionais: round2(uo),
     carrosseis,
     reels,
@@ -120,17 +116,16 @@ export async function getCargaPlanejada(database: any, month: string): Promise<C
   ).length;
 
   const plans: PlanForCarga[] = allPlans.map((p: any) => ({
+    status: p.status,
     postsCarrossel: p.postsCarrossel,
     postsReels: p.postsReels,
     postsEstatico: p.postsEstatico,
     postsTrafego: p.postsTrafego,
     pesoCarrossel: p.pesoCarrossel,
     pesoReels: p.pesoReels,
-    startDate: p.startDate,
-    endDate: p.endDate,
   }));
 
-  return aggregateCargaPlanejada({ plans, avulsosCount, month });
+  return aggregateCargaPlanejada({ plans, avulsosCount });
 }
 
 // ─── Seleção do check mais recente ───────────────────────────────────────────────
