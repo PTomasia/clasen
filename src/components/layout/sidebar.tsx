@@ -13,6 +13,7 @@ import {
   X,
   UserCheck,
   GitMerge,
+  Activity,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -45,9 +46,15 @@ const navigation: NavGroup[] = [
       { name: "Despesas", href: "/despesas", icon: Receipt, sprint: 5 },
     ],
   },
+  {
+    label: "Gestão Interna",
+    items: [
+      { name: "Operacional", href: "/operacional", icon: Activity, sprint: 7 },
+    ],
+  },
 ];
 
-const CURRENT_SPRINT = 6;
+const CURRENT_SPRINT = 7;
 
 export function Sidebar() {
   const pathname = usePathname();

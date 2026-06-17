@@ -183,3 +183,55 @@ export const appNotes = sqliteTable("app_notes", {
     .notNull()
     .default(sql`(datetime('now'))`),
 });
+
+// ─── Operational Checks (Sprint 7) ──────────────────────────────────────────────
+// Check rápido de saúde operacional, preenchido pela Gabi 2x/mês (meio e fim).
+// Acompanha a transição da Gabi de executora para diretora criativa/conteúdo.
+// Um registro por (reference_month, period). Arrays (gargalos, clientes pesadas,
+// motivos) são guardados como JSON text — serializados na camada service.
+export const operationalChecks = sqliteTable("operational_checks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  referenceMonth: text("reference_month").notNull(), // YYYY-MM
+  period: text("period").notNull(), // meio_mes | fim_mes
+
+  // Notas 1-5 (autoavaliação da Gabi)
+  notaExecucaoDireta: integer("nota_execucao_direta").notNull(),
+  notaRevisao: integer("nota_revisao").notNull(),
+  notaDirecaoCriativa: integer("nota_direcao_criativa").notNull(),
+  notaEnergia: integer("nota_energia").notNull(),
+  notaCapacidade: integer("nota_capacidade").notNull(),
+
+  // Execução da Gabi (qualitativo). Intensidade com que a Gabi executou entregas
+  // diretamente, como ordinal 1-5 (1=Nada … 5=Muito). Não é contagem.
+  entregasExecutadasGabi: integer("entregas_executadas_gabi"),
+
+  // Seleções (JSON serializado na service)
+  gargalos: text("gargalos"), // JSON string[] (até 3)
+  clientesPesadasIds: text("clientes_pesadas_ids"), // JSON number[] (ids de clients)
+  motivosPeso: text("motivos_peso"), // JSON string[]
+  comentarioClientesPesadas: text("comentario_clientes_pesadas"),
+  comentario: text("comentario"),
+
+  // Carga planejada/contratada do mês (snapshot pré-preenchido dos planos+avulsos,
+  // editável). MVP: representa carga PLANEJADA, não produção real concluída.
+  postsTotais: integer("posts_totais"),
+  unidadesOperacionais: real("unidades_operacionais"),
+  carrosseis: integer("carrosseis"),
+  reels: integer("reels"),
+  estaticos: integer("estaticos"),
+  criativosTrafego: integer("criativos_trafego"),
+  avulsos: integer("avulsos"),
+
+  // Revisão e retrabalho (qualitativo, ordinal 1-5: 1=Nada … 5=Muito). Não é contagem.
+  copysDevolvidas: integer("copys_devolvidas"),
+  designsRefeitos: integer("designs_refeitos"),
+  postsRevisadosGabi: integer("posts_revisados_gabi"),
+  postsRevisadosPedro: integer("posts_revisados_pedro"),
+
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
