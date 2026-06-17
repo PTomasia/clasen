@@ -5,6 +5,7 @@ import {
   derivarStatusAgenda,
   sugerirDecisoes,
   avaliarDependencia,
+  getPendingChecks,
   type NotasOperacionais,
 } from "../operational-metrics";
 
@@ -192,5 +193,46 @@ describe("avaliarDependencia", () => {
 
   it("notas iguais indica estabilidade", () => {
     expect(avaliarDependencia(check({}), check({})).toLowerCase()).toContain("estável");
+  });
+});
+
+// ─── getPendingChecks ──────────────────────────────────────────────────────────
+
+describe("getPendingChecks", () => {
+  const d = (s: string) => new Date(`${s}T12:00:00`);
+
+  it("dias 1-14: lembra do fim do mês anterior se faltando", () => {
+    expect(getPendingChecks([], d("2026-07-05"))).toEqual([
+      { month: "2026-06", period: "fim_mes" },
+    ]);
+  });
+
+  it("dias 1-14: não lembra se o fim do mês anterior já existe", () => {
+    expect(
+      getPendingChecks([{ referenceMonth: "2026-06", period: "fim_mes" }], d("2026-07-05"))
+    ).toEqual([]);
+  });
+
+  it("dia 15+: lembra do meio do mês atual se faltando", () => {
+    expect(getPendingChecks([], d("2026-06-20"))).toEqual([
+      { month: "2026-06", period: "meio_mes" },
+    ]);
+  });
+
+  it("dia 15+: não lembra se o meio do mês atual já existe", () => {
+    expect(
+      getPendingChecks([{ referenceMonth: "2026-06", period: "meio_mes" }], d("2026-06-20"))
+    ).toEqual([]);
+  });
+
+  it("handoff exatamente no dia 15", () => {
+    expect(getPendingChecks([], d("2026-06-14"))[0].period).toBe("fim_mes");
+    expect(getPendingChecks([], d("2026-06-15"))[0].period).toBe("meio_mes");
+  });
+
+  it("vira o ano corretamente (janeiro → dezembro anterior)", () => {
+    expect(getPendingChecks([], d("2026-01-05"))).toEqual([
+      { month: "2025-12", period: "fim_mes" },
+    ]);
   });
 });
