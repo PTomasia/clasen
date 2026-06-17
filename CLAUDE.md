@@ -68,13 +68,13 @@ components (thin UI) → lib/actions/ (validation) → lib/services/ (business l
 
 - `lib/actions/` — Server Actions, input validation, thin wrappers over services
 - `lib/services/` — All writes and domain operations (create, update, delete, pay)
-- `lib/queries/` — Read aggregations: `dashboard.ts`, `unit-economics.ts`, `profit-and-loss.ts`
+- `lib/queries/` — Read aggregations: `dashboard.ts`, `unit-economics.ts`, `profit-and-loss.ts`, `operacional.ts`
 - `lib/utils/` — Pure calculation functions ($/post, tenure, mediana, status derivation)
 - `lib/constants.ts` — Shared enums: `PLAN_TYPES`, `ORIGINS`, `CATEGORIES`, etc.
 
 ## Database Schema
 
-7 tables in `src/lib/db/schema.ts`:
+9 tables in `src/lib/db/schema.ts`:
 - `clients` — profiles; **status is derived** (active = has plan with `end_date IS NULL`)
 - `subscription_plans` — main recurring contracts; `billing_cycle_days` = due day of month (e.g. `10` = day 10), NOT an interval
 - `plan_payments` — payment history per plan/month (enables MRR tracking)
@@ -82,6 +82,8 @@ components (thin UI) → lib/actions/ (validation) → lib/services/ (business l
 - `one_time_revenues` — one-off project revenue (nullable `clientId`)
 - `marketing_monthly` — monthly acquisition metrics (CAC, ROAS) keyed by `YYYY-MM`
 - `expenses` — monthly costs, `fixo` or `variavel` category
+- `app_notes` — quick owner notes about app improvements (sidebar panel)
+- `operational_checks` — operational-health checks (Sprint 7); 1 row per `(reference_month, period)`; ratings 1-5 + qualitative levels; JSON arrays for gargalos / heavy-clients / reasons
 
 Migrations in `src/lib/db/migrations/`. After schema changes run `db:generate` then `db:push`.
 
@@ -107,9 +109,14 @@ Critical formulas validated in `docs/formulas.md`:
 
 Full acquisition formulas (CAC, LTV, ROAS, churn) are in `docs/formulas.md`.
 
+Operational health (Sprint 7, `lib/utils/operational-metrics.ts`):
+- **Operational score** = mean of 5 ratings 1-5 (execução direta, revisão, direção criativa, energia, capacidade). Bands: ≥4.3 saudável · 3.5–4.2 boa · 2.8–3.4 limite · 2.0–2.7 contenção · <2.0 crítico
+- **Status da agenda** = base from `capacidade` rating, with floors that ONLY worsen it: score<2.8 → ≥contenção; UO>120 → ≥atenção; execução direta ≤2 → ≥atenção (=1 → ≥contenção)
+- **Carga planejada** (prefill in `lib/queries/operacional.ts`) mirrors the Planos hero card: plans with `status === "ativo"`; "posts totais" = carrossel+reels+estático (tráfego excluded); UO via per-plan `pesoCarrossel`/`pesoReels`
+
 ## Sprint Roadmap
 
-Full specs in `docs/sprints/`. Status as of 2026-04-22:
+Full specs in `docs/sprints/`. Status as of 2026-06-17:
 
 | Sprint | Módulo | Status |
 |--------|--------|--------|
@@ -120,6 +127,7 @@ Full specs in `docs/sprints/`. Status as of 2026-04-22:
 | 4 | Receitas Avulsas + Aquisição & Unit Economics (CAC, LTV, ROAS, churn) | ✅ concluído |
 | 5 | Despesas (P&L, resultado líquido mensal) | ✅ concluído |
 | 6 | Tributação — DAS Simples Nacional estimado (Anexo III + Fator R) | ✅ concluído |
+| 7 | Operacional (saúde operacional: checks meio/fim do mês, score, status da agenda, gráficos, relatório MD) | ✅ concluído |
 
 ## Domain Language
 
