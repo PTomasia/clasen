@@ -6,6 +6,8 @@ import {
   calcScoreOperacional,
   interpretarScore,
   derivarStatusAgenda,
+  getPendingChecks,
+  type PendingCheck,
 } from "../utils/operational-metrics";
 import {
   getOperationalChecks,
@@ -260,4 +262,19 @@ export async function getOperationalPageData(): Promise<OperationalPageData> {
     evolution: buildEvolutionSeries(checks),
     activeClients,
   };
+}
+
+// Lembrete de check pendente (banner global no layout). Leve: só lê mês+período.
+export async function getCheckReminders(): Promise<PendingCheck[]> {
+  const checks = await db
+    .select({
+      referenceMonth: schema.operationalChecks.referenceMonth,
+      period: schema.operationalChecks.period,
+    })
+    .from(schema.operationalChecks)
+    .all();
+  return getPendingChecks(
+    checks.map((c) => ({ referenceMonth: c.referenceMonth, period: c.period as PendingCheck["period"] })),
+    new Date()
+  );
 }

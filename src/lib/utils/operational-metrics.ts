@@ -2,11 +2,13 @@
 // agenda, decisões sugeridas e leitura de dependência da Gabi. Sem I/O — testável
 // isoladamente. A persistência fica em lib/services/operational.ts.
 
+import { format, subMonths } from "date-fns";
 import {
   TETO_OPERACIONAL_UO,
   SCORE_BANDS,
   type ScoreBandKey,
   type AgendaStatus,
+  type CheckPeriod,
 } from "../constants";
 
 // ─── Score operacional ─────────────────────────────────────────────────────────
@@ -181,4 +183,34 @@ export function avaliarDependencia(
     return "Não — a dependência da Gabi aumentou: as notas de execução, revisão e direção criativa pioraram em relação ao período anterior.";
   }
   return "Estável — sem mudança relevante na dependência da Gabi em relação ao período anterior.";
+}
+
+// ─── Lembrete de check pendente ─────────────────────────────────────────────────
+// Handoff no dia 15, sem sobreposição (no máximo um lembrete por vez):
+//  • dias 1-14  → lembra do FIM do mês ANTERIOR (que acabou de passar), se faltando;
+//  • dia 15+    → lembra do MEIO do mês ATUAL, se faltando.
+// Mantém-se "bounded": não insiste em meses antigos nem em checks fora da janela.
+
+export interface PendingCheck {
+  month: string; // YYYY-MM
+  period: CheckPeriod;
+}
+
+export function getPendingChecks(
+  checks: ReadonlyArray<{ referenceMonth: string; period: CheckPeriod }>,
+  today: Date
+): PendingCheck[] {
+  const day = today.getDate();
+  const currentMonth = format(today, "yyyy-MM");
+  const prevMonth = format(subMonths(today, 1), "yyyy-MM");
+  const has = (month: string, period: CheckPeriod) =>
+    checks.some((c) => c.referenceMonth === month && c.period === period);
+
+  const pending: PendingCheck[] = [];
+  if (day < 15) {
+    if (!has(prevMonth, "fim_mes")) pending.push({ month: prevMonth, period: "fim_mes" });
+  } else {
+    if (!has(currentMonth, "meio_mes")) pending.push({ month: currentMonth, period: "meio_mes" });
+  }
+  return pending;
 }
