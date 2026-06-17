@@ -100,7 +100,7 @@ describe("createOrUpdateOperationalCheck", () => {
     expect(row.motivosPeso).toEqual([]);
   });
 
-  it("guarda carga planejada e retrabalho", async () => {
+  it("guarda carga planejada (numérica) e execução/retrabalho (ordinal qualitativo 1-5)", async () => {
     const row = await createOrUpdateOperationalCheck(
       db,
       baseInput({
@@ -111,16 +111,21 @@ describe("createOrUpdateOperationalCheck", () => {
         estaticos: 50,
         criativosTrafego: 12,
         avulsos: 3,
-        entregasExecutadasGabi: 8,
-        copysDevolvidas: 4,
-        designsRefeitos: 2,
-        postsRevisadosGabi: 60,
-        postsRevisadosPedro: 20,
+        entregasExecutadasGabi: 2, // Pouco
+        copysDevolvidas: 1, // Nada
+        designsRefeitos: 1, // Nada
+        postsRevisadosGabi: 4, // Bastante
+        postsRevisadosPedro: 3, // Médio
       })
     );
     expect(row.unidadesOperacionais).toBe(96.5);
-    expect(row.entregasExecutadasGabi).toBe(8);
-    expect(row.postsRevisadosPedro).toBe(20);
+    expect(row.entregasExecutadasGabi).toBe(2);
+    expect(row.postsRevisadosPedro).toBe(3);
+  });
+
+  it("rejeita nível qualitativo de execução/retrabalho fora de 1-5", async () => {
+    await expect(createOrUpdateOperationalCheck(db, baseInput({ entregasExecutadasGabi: 6 }))).rejects.toThrow();
+    await expect(createOrUpdateOperationalCheck(db, baseInput({ postsRevisadosPedro: 0 }))).rejects.toThrow();
   });
 
   it("rejeita nota fora de 1-5", async () => {

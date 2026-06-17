@@ -222,3 +222,28 @@ export const RATING_DESCRIPTIONS: Record<RatingKey, Record<1 | 2 | 3 | 4 | 5, st
     5: "Tranquilo",
   },
 };
+
+// Escala qualitativa (Nada→Muito) para execução da Gabi e retrabalho. A Gabi
+// responde por intensidade, não por contagem. Armazenada como ordinal 1-5 nas
+// colunas integer existentes (sem migration).
+export const NIVEL_QUALITATIVO_VALUES = [1, 2, 3, 4, 5] as const;
+
+export const NIVEL_QUALITATIVO_LABELS: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: "Nada",
+  2: "Pouco",
+  3: "Médio",
+  4: "Bastante",
+  5: "Muito",
+};
+
+// Rótulos dos campos de execução/retrabalho (escala qualitativa). Fonte única
+// para o formulário, o card e o relatório.
+export const EXECUCAO_RETRABALHO_LABELS = {
+  entregasExecutadasGabi: "Entregas executadas pela Gabi",
+  copysDevolvidas: "Copys devolvidas p/ refação",
+  designsRefeitos: "Designs refeitos",
+  postsRevisadosGabi: "Posts revisados pela Gabi",
+  postsRevisadosPedro: "Posts revisados pelo Pedro",
+} as const;
+
+export type ExecucaoRetrabalhoKey = keyof typeof EXECUCAO_RETRABALHO_LABELS;

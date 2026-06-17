@@ -28,8 +28,12 @@ import {
   MOTIVOS_PESO,
   RATING_LABELS,
   RATING_DESCRIPTIONS,
+  NIVEL_QUALITATIVO_VALUES,
+  NIVEL_QUALITATIVO_LABELS,
+  EXECUCAO_RETRABALHO_LABELS,
   type CheckPeriod,
   type RatingKey,
+  type ExecucaoRetrabalhoKey,
 } from "@/lib/constants";
 
 // ─── Subcomponentes ─────────────────────────────────────────────────────────────
@@ -123,8 +127,43 @@ function NumberField({
   );
 }
 
+// Escala qualitativa (Nada→Muito), ordinal 1-5. Toque no nível já selecionado limpa.
+function QualScale({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number | null;
+  onChange: (n: number | null) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="flex gap-1">
+        {NIVEL_QUALITATIVO_VALUES.map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(value === n ? null : n)}
+            className={cn(
+              "flex-1 h-8 px-0.5 rounded-lg border text-[11px] font-medium transition-colors",
+              value === n
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background border-border text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {NIVEL_QUALITATIVO_LABELS[n]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Estado dos campos numéricos ─────────────────────────────────────────────────
 
+// Carga planejada/contratada — numérica, pré-preenchida dos planos (editável).
 const NUM_KEYS = [
   "postsTotais",
   "unidadesOperacionais",
@@ -133,13 +172,17 @@ const NUM_KEYS = [
   "estaticos",
   "criativosTrafego",
   "avulsos",
+] as const;
+type NumKey = (typeof NUM_KEYS)[number];
+
+// Execução da Gabi e retrabalho — escala qualitativa (ordinal 1-5).
+const QUALI_KEYS = [
   "entregasExecutadasGabi",
   "copysDevolvidas",
   "designsRefeitos",
   "postsRevisadosGabi",
   "postsRevisadosPedro",
 ] as const;
-type NumKey = (typeof NUM_KEYS)[number];
 
 function toggle<T>(arr: T[], item: T): T[] {
   return arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
@@ -183,6 +226,13 @@ export function OperationalCheckDialog({
   const [comentarioClientes, setComentarioClientes] = useState("");
   const [comentario, setComentario] = useState("");
   const [nums, setNums] = useState<Record<string, string>>({});
+  const [quali, setQuali] = useState<Record<ExecucaoRetrabalhoKey, number | null>>({
+    entregasExecutadasGabi: null,
+    copysDevolvidas: null,
+    designsRefeitos: null,
+    postsRevisadosGabi: null,
+    postsRevisadosPedro: null,
+  });
 
   function setNum(k: NumKey, v: string) {
     setNums((prev) => ({ ...prev, [k]: v }));
@@ -192,6 +242,9 @@ export function OperationalCheckDialog({
     if (v === undefined || v === "") return null;
     const n = Number(v);
     return Number.isNaN(n) ? null : n;
+  }
+  function setQual(k: ExecucaoRetrabalhoKey, n: number | null) {
+    setQuali((prev) => ({ ...prev, [k]: n }));
   }
 
   // Pré-preenche os campos de carga planejada a partir dos planos + avulsos do mês.
@@ -247,6 +300,13 @@ export function OperationalCheckDialog({
         filled[k] = v == null ? "" : String(v);
       }
       setNums(filled);
+      setQuali({
+        entregasExecutadasGabi: editing.entregasExecutadasGabi,
+        copysDevolvidas: editing.copysDevolvidas,
+        designsRefeitos: editing.designsRefeitos,
+        postsRevisadosGabi: editing.postsRevisadosGabi,
+        postsRevisadosPedro: editing.postsRevisadosPedro,
+      });
     } else {
       const m = currentMonth();
       setPeriod("meio_mes");
@@ -258,6 +318,13 @@ export function OperationalCheckDialog({
       setComentarioClientes("");
       setComentario("");
       setNums({});
+      setQuali({
+        entregasExecutadasGabi: null,
+        copysDevolvidas: null,
+        designsRefeitos: null,
+        postsRevisadosGabi: null,
+        postsRevisadosPedro: null,
+      });
       // Puxa a carga planejada do mês corrente como sugestão editável.
       startPull(async () => {
         const carga = await getCargaPlanejadaAction(m);
@@ -277,7 +344,7 @@ export function OperationalCheckDialog({
         notaDirecaoCriativa: notas.direcaoCriativa,
         notaEnergia: notas.energia,
         notaCapacidade: notas.capacidade,
-        entregasExecutadasGabi: numVal("entregasExecutadasGabi"),
+        entregasExecutadasGabi: quali.entregasExecutadasGabi,
         gargalos,
         clientesPesadasIds,
         motivosPeso,
@@ -290,10 +357,10 @@ export function OperationalCheckDialog({
         estaticos: numVal("estaticos"),
         criativosTrafego: numVal("criativosTrafego"),
         avulsos: numVal("avulsos"),
-        copysDevolvidas: numVal("copysDevolvidas"),
-        designsRefeitos: numVal("designsRefeitos"),
-        postsRevisadosGabi: numVal("postsRevisadosGabi"),
-        postsRevisadosPedro: numVal("postsRevisadosPedro"),
+        copysDevolvidas: quali.copysDevolvidas,
+        designsRefeitos: quali.designsRefeitos,
+        postsRevisadosGabi: quali.postsRevisadosGabi,
+        postsRevisadosPedro: quali.postsRevisadosPedro,
       });
     });
   }
@@ -449,18 +516,24 @@ export function OperationalCheckDialog({
             </div>
           </div>
 
-          {/* Carga da Gabi + retrabalho */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Execução da Gabi e retrabalho
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <NumberField label="Entregas executadas pela Gabi" value={nums.entregasExecutadasGabi ?? ""} onChange={(v) => setNum("entregasExecutadasGabi", v)} />
-              <NumberField label="Copys devolvidas p/ refação" value={nums.copysDevolvidas ?? ""} onChange={(v) => setNum("copysDevolvidas", v)} />
-              <NumberField label="Designs refeitos" value={nums.designsRefeitos ?? ""} onChange={(v) => setNum("designsRefeitos", v)} />
-              <NumberField label="Posts revisados pela Gabi" value={nums.postsRevisadosGabi ?? ""} onChange={(v) => setNum("postsRevisadosGabi", v)} />
-              <NumberField label="Posts revisados pelo Pedro" value={nums.postsRevisadosPedro ?? ""} onChange={(v) => setNum("postsRevisadosPedro", v)} />
+          {/* Execução da Gabi e retrabalho — escala qualitativa */}
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Execução da Gabi e retrabalho
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Responda por intensidade (Nada → Muito). Toque de novo para limpar. Tudo opcional.
+              </p>
             </div>
+            {QUALI_KEYS.map((k) => (
+              <QualScale
+                key={k}
+                label={EXECUCAO_RETRABALHO_LABELS[k]}
+                value={quali[k]}
+                onChange={(n) => setQual(k, n)}
+              />
+            ))}
           </div>
 
           {/* Comentário geral */}

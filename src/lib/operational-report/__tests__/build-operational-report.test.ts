@@ -13,7 +13,7 @@ function check(over: Partial<OperationalCheckRow> = {}): OperationalCheckRow {
     notaDirecaoCriativa: 4,
     notaEnergia: 4,
     notaCapacidade: 4,
-    entregasExecutadasGabi: 5,
+    entregasExecutadasGabi: 2, // Pouco
     gargalos: ["Copy", "Briefing"],
     clientesPesadasIds: [1, 2],
     motivosPeso: ["Retrabalho de copy", "Urgência"],
@@ -26,10 +26,10 @@ function check(over: Partial<OperationalCheckRow> = {}): OperationalCheckRow {
     estaticos: 50,
     criativosTrafego: 12,
     avulsos: 3,
-    copysDevolvidas: 4,
-    designsRefeitos: 2,
-    postsRevisadosGabi: 60,
-    postsRevisadosPedro: 20,
+    copysDevolvidas: 1, // Nada
+    designsRefeitos: 1, // Nada
+    postsRevisadosGabi: 4, // Bastante
+    postsRevisadosPedro: 3, // Médio
     createdAt: "2026-06-30 10:00:00",
     updatedAt: "2026-06-30 10:00:00",
     ...over,
@@ -69,6 +69,14 @@ describe("buildOperationalReportMarkdown", () => {
     expect(md).toContain("4");
     expect(md).toContain("120"); // posts totais
     expect(md).toContain("96,5"); // UO formatada pt-BR
+  });
+
+  it("mostra execução e retrabalho como rótulos qualitativos (não números)", () => {
+    const md = buildOperationalReportMarkdown({ now, check: check() });
+    expect(md).toContain("Entregas executadas pela Gabi: Pouco");
+    expect(md).toContain("Copys devolvidas para refação: Nada");
+    expect(md).toContain("Posts revisados pela Gabi: Bastante");
+    expect(md).toContain("Posts revisados pelo Pedro: Médio");
   });
 
   it("resolve nomes das clientes pesadas quando fornecidos", () => {

@@ -9,6 +9,7 @@ import {
   CHECK_PERIOD_LABELS,
   RATING_DESCRIPTIONS,
   AGENDA_STATUS_LABELS,
+  NIVEL_QUALITATIVO_LABELS,
   type AgendaStatus,
 } from "../constants";
 import { formatMonth, formatUO } from "../utils/formatting";
@@ -32,6 +33,12 @@ export interface BuildOperationalReportInput {
 
 function nFmt(value: number | null | undefined): string {
   return value == null ? "—" : String(value);
+}
+
+// Ordinal 1-5 da escala qualitativa → rótulo (Nada…Muito).
+function qualFmt(value: number | null | undefined): string {
+  if (value == null) return "—";
+  return NIVEL_QUALITATIVO_LABELS[value as 1 | 2 | 3 | 4 | 5] ?? String(value);
 }
 
 function uoFmt(value: number | null | undefined): string {
@@ -147,7 +154,7 @@ export function buildOperationalReportMarkdown(input: BuildOperationalReportInpu
     [
       "## 3. Carga da Gabi",
       "",
-      `Entregas executadas pela Gabi: ${nFmt(check.entregasExecutadasGabi)}`,
+      `Entregas executadas pela Gabi: ${qualFmt(check.entregasExecutadasGabi)}`,
       `Nota de execução direta: ${nota(check, "execucaoDireta", check.notaExecucaoDireta)}`,
       `Nota de revisão: ${nota(check, "revisao", check.notaRevisao)}`,
       `Nota de direção criativa: ${nota(check, "direcaoCriativa", check.notaDirecaoCriativa)}`,
@@ -159,10 +166,10 @@ export function buildOperationalReportMarkdown(input: BuildOperationalReportInpu
     [
       "## 4. Revisão e retrabalho",
       "",
-      `Copys devolvidas para refação: ${nFmt(check.copysDevolvidas)}`,
-      `Designs refeitos: ${nFmt(check.designsRefeitos)}`,
-      `Posts revisados pela Gabi: ${nFmt(check.postsRevisadosGabi)}`,
-      `Posts revisados pelo Pedro: ${nFmt(check.postsRevisadosPedro)}`,
+      `Copys devolvidas para refação: ${qualFmt(check.copysDevolvidas)}`,
+      `Designs refeitos: ${qualFmt(check.designsRefeitos)}`,
+      `Posts revisados pela Gabi: ${qualFmt(check.postsRevisadosGabi)}`,
+      `Posts revisados pelo Pedro: ${qualFmt(check.postsRevisadosPedro)}`,
     ].join("\n"),
 
     // 5. Gargalos

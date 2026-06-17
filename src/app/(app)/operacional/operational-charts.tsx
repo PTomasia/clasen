@@ -10,17 +10,26 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { OperationalEvolutionPoint } from "@/lib/queries/operational";
+import { NIVEL_QUALITATIVO_LABELS } from "@/lib/constants";
+
+// Mapeia o ordinal 1-5 da escala qualitativa para o rótulo (Nada…Muito).
+function nivelLabel(v: number | null): string {
+  if (v == null) return "—";
+  return NIVEL_QUALITATIVO_LABELS[v as 1 | 2 | 3 | 4 | 5] ?? String(v);
+}
 
 function ChartTooltip({
   active,
   payload,
   label,
   unit,
+  valueFormatter,
 }: {
   active?: boolean;
   payload?: { value: number | null; color: string }[];
   label?: string;
   unit?: string;
+  valueFormatter?: (v: number) => string;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const v = payload[0]?.value;
@@ -28,7 +37,7 @@ function ChartTooltip({
     <div className="bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs">
       <p className="font-semibold mb-0.5">{label}</p>
       <p className="font-mono" style={{ color: payload[0]?.color }}>
-        {v == null ? "—" : `${v}${unit ?? ""}`}
+        {v == null ? "—" : valueFormatter ? valueFormatter(v) : `${v}${unit ?? ""}`}
       </p>
     </div>
   );
@@ -42,6 +51,8 @@ function MiniLineChart({
   color,
   domain,
   unit,
+  valueFormatter,
+  yTickFormatter,
 }: {
   title: string;
   hint?: string;
@@ -50,6 +61,8 @@ function MiniLineChart({
   color: string;
   domain?: [number | string, number | string];
   unit?: string;
+  valueFormatter?: (v: number) => string;
+  yTickFormatter?: (v: number) => string;
 }) {
   return (
     <div className="bg-card border rounded-lg p-4">
@@ -68,10 +81,12 @@ function MiniLineChart({
           <YAxis
             domain={domain ?? [0, "auto"]}
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-            allowDecimals
-            width={36}
+            allowDecimals={!yTickFormatter}
+            ticks={yTickFormatter ? [1, 2, 3, 4, 5] : undefined}
+            tickFormatter={yTickFormatter}
+            width={yTickFormatter ? 60 : 36}
           />
-          <Tooltip content={<ChartTooltip unit={unit} />} />
+          <Tooltip content={<ChartTooltip unit={unit} valueFormatter={valueFormatter} />} />
           <Line
             type="monotone"
             dataKey={dataKey}
@@ -107,10 +122,13 @@ export function OperationalCharts({ data }: { data: OperationalEvolutionPoint[] 
       />
       <MiniLineChart
         title="Entregas executadas pela Gabi"
-        hint="Quantidade de entregas que a Gabi produziu diretamente no período."
+        hint="Intensidade com que a Gabi executou entregas diretamente (Nada → Muito). Menos é melhor para a transição dela."
         data={data}
         dataKey="entregasGabi"
         color="#b45309"
+        domain={[1, 5]}
+        valueFormatter={nivelLabel}
+        yTickFormatter={nivelLabel}
       />
       <MiniLineChart
         title="Unidades operacionais"

@@ -159,12 +159,12 @@ describe("buildEvolutionSeries", () => {
         notaDirecaoCriativa: 5,
         notaEnergia: 5,
         notaCapacidade: 5,
-        entregasExecutadasGabi: 8,
+        entregasExecutadasGabi: 3, // ordinal qualitativo (Médio)
         unidadesOperacionais: 96.5,
       }),
     ]);
     expect(series[0].score).toBe(5);
-    expect(series[0].entregasGabi).toBe(8);
+    expect(series[0].entregasGabi).toBe(3);
     expect(series[0].unidadesOperacionais).toBe(96.5);
     expect(series[0].capacidade).toBe(5);
     expect(series[0].label).toBe("jun/26");

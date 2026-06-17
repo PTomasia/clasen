@@ -21,6 +21,7 @@ import {
   AGENDA_STATUS_LABELS,
   CHECK_PERIOD_LABELS,
   RATING_DESCRIPTIONS,
+  NIVEL_QUALITATIVO_LABELS,
   type AgendaStatus,
 } from "@/lib/constants";
 import { deleteOperationalCheckAction } from "@/lib/actions/operational";
@@ -160,8 +161,14 @@ export function OperacionalClient({ data }: { data: OperationalPageData }) {
             />
             <Card
               label="Entregas da Gabi"
-              value={metrics.entregasExecutadasGabi ?? "—"}
-              sub="Executadas diretamente"
+              value={
+                <span className="text-base">
+                  {metrics.entregasExecutadasGabi == null
+                    ? "—"
+                    : NIVEL_QUALITATIVO_LABELS[metrics.entregasExecutadasGabi as 1 | 2 | 3 | 4 | 5]}
+                </span>
+              }
+              sub="Executou diretamente"
             />
             <Card
               label="Gargalo principal"

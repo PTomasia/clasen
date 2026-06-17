@@ -201,8 +201,8 @@ export const operationalChecks = sqliteTable("operational_checks", {
   notaEnergia: integer("nota_energia").notNull(),
   notaCapacidade: integer("nota_capacidade").notNull(),
 
-  // Carga da Gabi (manual). Unifica "entregas executadas pela Gabi" (autoavaliação)
-  // e "posts feitos diretamente pela Gabi" (produção) — são o mesmo dado.
+  // Execução da Gabi (qualitativo). Intensidade com que a Gabi executou entregas
+  // diretamente, como ordinal 1-5 (1=Nada … 5=Muito). Não é contagem.
   entregasExecutadasGabi: integer("entregas_executadas_gabi"),
 
   // Seleções (JSON serializado na service)
@@ -222,7 +222,7 @@ export const operationalChecks = sqliteTable("operational_checks", {
   criativosTrafego: integer("criativos_trafego"),
   avulsos: integer("avulsos"),
 
-  // Revisão e retrabalho (manual)
+  // Revisão e retrabalho (qualitativo, ordinal 1-5: 1=Nada … 5=Muito). Não é contagem.
   copysDevolvidas: integer("copys_devolvidas"),
   designsRefeitos: integer("designs_refeitos"),
   postsRevisadosGabi: integer("posts_revisados_gabi"),

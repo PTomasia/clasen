@@ -134,8 +134,8 @@ const NOTA_FIELDS: Array<[keyof OperationalCheckInput, string]> = [
   ["notaCapacidade", "nota de capacidade"],
 ];
 
+// Carga planejada — numérica (>= 0), pré-preenchida dos planos.
 const NUMERIC_FIELDS: Array<[keyof OperationalCheckInput, string]> = [
-  ["entregasExecutadasGabi", "entregas executadas pela Gabi"],
   ["postsTotais", "posts totais"],
   ["unidadesOperacionais", "unidades operacionais"],
   ["carrosseis", "carrosséis"],
@@ -143,6 +143,11 @@ const NUMERIC_FIELDS: Array<[keyof OperationalCheckInput, string]> = [
   ["estaticos", "estáticos"],
   ["criativosTrafego", "criativos de tráfego"],
   ["avulsos", "avulsos"],
+];
+
+// Execução da Gabi e retrabalho — qualitativo (ordinal 1-5 ou null).
+const QUALI_FIELDS: Array<[keyof OperationalCheckInput, string]> = [
+  ["entregasExecutadasGabi", "entregas executadas pela Gabi"],
   ["copysDevolvidas", "copys devolvidas"],
   ["designsRefeitos", "designs refeitos"],
   ["postsRevisadosGabi", "posts revisados pela Gabi"],
@@ -170,6 +175,13 @@ function validateInput(input: OperationalCheckInput): void {
     if (v == null) continue;
     if (typeof v !== "number" || Number.isNaN(v) || v < 0) {
       throw new Error(`${label} não pode ser negativo`);
+    }
+  }
+  for (const [field, label] of QUALI_FIELDS) {
+    const v = input[field] as number | null | undefined;
+    if (v == null) continue;
+    if (!Number.isInteger(v) || v < 1 || v > 5) {
+      throw new Error(`${label} deve ser um nível entre 1 e 5`);
     }
   }
 }
