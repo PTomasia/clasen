@@ -27,6 +27,8 @@ import {
   MoreHorizontal,
   AlertTriangle,
   CheckCircle2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatBRL, formatDate, formatMonth, formatUO } from "@/lib/utils/formatting";
@@ -34,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { isDataPassada, type StatusPagamento } from "@/lib/utils/calculations";
 import { TETO_OPERACIONAL_UO } from "@/lib/constants";
 import { buildOverdueRows } from "@/lib/utils/overdue";
+import { buildOverdueMarkdown, buildOverdueWhatsApp } from "@/lib/utils/overdue-export";
 import {
   sortPlans,
   filterPlans,
@@ -1293,6 +1296,40 @@ function PlanosHeroCard({
 
 // ─── Painel: Pagamentos atrasados ─────────────────────────────────────────────
 
+/** Botão que copia um texto (gerado on-demand) pro clipboard, com feedback "Copiado!". */
+function CopyButton({
+  getText,
+  title,
+  label,
+}: {
+  getText: () => string;
+  title: string;
+  label: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(getText());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard indisponível (http/browser antigo) — silencioso */
+    }
+  }
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+      onClick={handleCopy}
+      title={title}
+    >
+      {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+      {copied ? "Copiado!" : label}
+    </Button>
+  );
+}
+
 function OverduePaymentsPanel({
   plans,
   onPay,
@@ -1310,9 +1347,21 @@ function OverduePaymentsPanel({
         <AlertTriangle size={18} className="text-accent" />
         <h2 className="font-semibold">Pagamentos atrasados</h2>
         {overdueRows.length > 0 && (
-          <span className="ml-auto text-sm font-mono font-semibold text-accent">
-            {overdueRows.length}
-          </span>
+          <div className="ml-auto flex items-center gap-1">
+            <CopyButton
+              getText={() => buildOverdueMarkdown(overdueRows)}
+              title="Copiar em markdown pra colar no ChatGPT e cruzar com o extrato bancário"
+              label="ChatGPT"
+            />
+            <CopyButton
+              getText={() => buildOverdueWhatsApp(overdueRows)}
+              title="Copiar texto simples pra mandar pra sócia no WhatsApp"
+              label="WhatsApp"
+            />
+            <span className="ml-1 text-sm font-mono font-semibold text-accent">
+              {overdueRows.length}
+            </span>
+          </div>
         )}
       </div>
 

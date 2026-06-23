@@ -1,0 +1,1 @@
+ALTER TABLE `expenses` ADD `expense_type` text;

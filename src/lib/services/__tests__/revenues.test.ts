@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import {
   createRevenue,
   updateRevenue,
+  updateRevenueProduct,
   deleteRevenue,
   getRevenues,
   getRevenuesSummary,
@@ -44,6 +45,7 @@ function createTestDb() {
       date TEXT NOT NULL,
       amount REAL NOT NULL,
       product TEXT NOT NULL,
+      description TEXT,
       channel TEXT,
       campaign TEXT,
       is_paid INTEGER NOT NULL DEFAULT 1,
@@ -104,6 +106,64 @@ describe("createRevenue", () => {
     await expect(
       createRevenue(db, { date: "2026-04-10", amount: 100, product: "  " })
     ).rejects.toThrow("produto");
+  });
+
+  it("grava description quando fornecida e expõe em getRevenues", async () => {
+    await createRevenue(db, {
+      date: "2026-04-10",
+      amount: 150,
+      product: "Avulso",
+      description: "Victoria Maria Da Silva E Souza",
+    });
+    const rows = await getRevenues(db);
+    expect(rows[0].description).toBe("Victoria Maria Da Silva E Souza");
+  });
+
+  it("description ausente → null", async () => {
+    await createRevenue(db, { date: "2026-04-10", amount: 150, product: "PDF" });
+    const rows = await getRevenues(db);
+    expect(rows[0].description).toBeNull();
+  });
+
+  it("propaga description para todas as parcelas", async () => {
+    await createRevenue(db, {
+      date: "2026-04-10",
+      amount: 300,
+      product: "Pacote",
+      description: "Cliente X",
+      installmentsTotal: 3,
+    });
+    const rows = await getRevenues(db);
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.description === "Cliente X")).toBe(true);
+  });
+});
+
+describe("updateRevenueProduct (edição inline)", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("troca só o produto, preservando os demais campos", async () => {
+    const rev = await createRevenue(db, {
+      date: "2026-04-10",
+      amount: 150,
+      product: "Avulso",
+      description: "Fulana",
+      isPaid: true,
+    });
+    await updateRevenueProduct(db, rev.id, "Carrossel avulso");
+    const rows = await getRevenues(db);
+    expect(rows[0].product).toBe("Carrossel avulso");
+    expect(rows[0].description).toBe("Fulana");
+    expect(rows[0].amount).toBe(150);
+    expect(rows[0].isPaid).toBe(true);
+  });
+
+  it("rejeita produto vazio", async () => {
+    const rev = await createRevenue(db, { date: "2026-04-10", amount: 150, product: "X" });
+    await expect(updateRevenueProduct(db, rev.id, "  ")).rejects.toThrow("produto");
   });
 });
 

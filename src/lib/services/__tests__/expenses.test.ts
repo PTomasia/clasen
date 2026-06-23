@@ -13,7 +13,9 @@ import {
   getRecurringToLaunch,
   launchRecurringExpenses,
   createExpenseInstallments,
+  updateExpenseType,
 } from "../expenses";
+import { expenseClassLabel } from "../../constants";
 
 function createTestDb() {
   const sqlite = new Database(":memory:");
@@ -25,6 +27,7 @@ function createTestDb() {
       month TEXT NOT NULL,
       description TEXT NOT NULL,
       category TEXT NOT NULL DEFAULT 'variavel',
+      expense_type TEXT,
       amount REAL NOT NULL,
       is_paid INTEGER NOT NULL DEFAULT 1,
       is_recurring INTEGER NOT NULL DEFAULT 0,
@@ -417,5 +420,88 @@ describe("createExpenseInstallments", () => {
         installmentsTotal: 3,
       })
     ).rejects.toThrow("mês");
+  });
+});
+
+describe("expenseType (tipo + classe superior)", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("grava expenseType no create e expõe em getExpenses", async () => {
+    await createExpense(db, {
+      month: "2026-06",
+      description: "Designer freelancer",
+      category: "variavel",
+      expenseType: "designer",
+      amount: 800,
+    });
+    const rows = await getExpenses(db);
+    expect(rows[0].expenseType).toBe("designer");
+  });
+
+  it("sem expenseType → null", async () => {
+    await createExpense(db, { month: "2026-06", description: "X", category: "fixo", amount: 100 });
+    const rows = await getExpenses(db);
+    expect(rows[0].expenseType).toBeNull();
+  });
+
+  it("rejeita tipo inválido", async () => {
+    await expect(
+      createExpense(db, {
+        month: "2026-06",
+        description: "X",
+        category: "fixo",
+        // @ts-expect-error tipo inválido proposital
+        expenseType: "inexistente",
+        amount: 100,
+      })
+    ).rejects.toThrow("tipo de despesa");
+  });
+
+  it("updateExpenseType troca o tipo e aceita null pra limpar", async () => {
+    const e = await createExpense(db, {
+      month: "2026-06",
+      description: "X",
+      category: "fixo",
+      expenseType: "sistemas",
+      amount: 100,
+    });
+    await updateExpenseType(db, e.id, "trafego");
+    let rows = await getExpenses(db);
+    expect(rows[0].expenseType).toBe("trafego");
+
+    await updateExpenseType(db, e.id, null);
+    rows = await getExpenses(db);
+    expect(rows[0].expenseType).toBeNull();
+  });
+
+  it("classe superior é derivada do tipo (não armazenada)", () => {
+    expect(expenseClassLabel("designer")).toBe("Produção de conteúdo");
+    expect(expenseClassLabel("copywriter")).toBe("Produção de conteúdo");
+    expect(expenseClassLabel("reels")).toBe("Produção de conteúdo");
+    expect(expenseClassLabel("trafego")).toBe("Aquisição");
+    expect(expenseClassLabel("impulsionar")).toBe("Aquisição");
+    expect(expenseClassLabel("administrativo")).toBe("Administrativo");
+    expect(expenseClassLabel("burocratico")).toBe("Administrativo");
+    expect(expenseClassLabel("investimento_permanente")).toBe("Investimentos");
+    expect(expenseClassLabel("capacitacao")).toBe("Investimentos");
+    expect(expenseClassLabel("imposto")).toBe("Impostos");
+    expect(expenseClassLabel("sistemas")).toBe("Sistemas & ferramentas");
+    expect(expenseClassLabel(null)).toBeNull();
+  });
+
+  it("preserva expenseType ao duplicar", async () => {
+    const e = await createExpense(db, {
+      month: "2026-06",
+      description: "Canva",
+      category: "fixo",
+      expenseType: "sistemas",
+      amount: 50,
+    });
+    await duplicateExpense(db, e.id, "2026-07");
+    const rows = await getExpenses(db, { month: "2026-07" });
+    expect(rows[0].expenseType).toBe("sistemas");
   });
 });

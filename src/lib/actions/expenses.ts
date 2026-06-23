@@ -5,13 +5,19 @@ import { db } from "../db";
 import {
   createExpense as createExpenseService,
   updateExpense as updateExpenseService,
+  updateExpenseType as updateExpenseTypeService,
   deleteExpense as deleteExpenseService,
   togglePaidExpense as togglePaidService,
   duplicateExpense as duplicateExpenseService,
   launchRecurringExpenses as launchRecurringService,
   createExpenseInstallments as createExpenseInstallmentsService,
 } from "../services/expenses";
-import type { CreateExpenseInput, UpdateExpenseInput, CreateExpenseInstallmentsInput } from "../services/expenses";
+import type {
+  CreateExpenseInput,
+  UpdateExpenseInput,
+  CreateExpenseInstallmentsInput,
+  ExpenseType,
+} from "../services/expenses";
 import { REVALIDATE_PATHS } from "../constants";
 
 function revalidateAll() {
@@ -28,6 +34,11 @@ export async function createExpenseAction(input: CreateExpenseInput) {
 
 export async function updateExpenseAction(id: number, input: UpdateExpenseInput) {
   await updateExpenseService(db as any, id, input);
+  revalidateAll();
+}
+
+export async function updateExpenseTypeAction(id: number, expenseType: ExpenseType | null) {
+  await updateExpenseTypeService(db as any, id, expenseType);
   revalidateAll();
 }
 

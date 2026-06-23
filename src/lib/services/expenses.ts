@@ -1,9 +1,14 @@
 import { eq, desc, and } from "drizzle-orm";
 import { addMonths, format } from "date-fns";
 import * as schema from "../db/schema";
-import { EXPENSE_CATEGORIES, type ExpenseCategory } from "../constants";
+import {
+  EXPENSE_CATEGORIES,
+  EXPENSE_TYPES,
+  type ExpenseCategory,
+  type ExpenseType,
+} from "../constants";
 
-export type { ExpenseCategory };
+export type { ExpenseCategory, ExpenseType };
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -11,6 +16,7 @@ export interface CreateExpenseInput {
   month: string; // YYYY-MM
   description: string;
   category: ExpenseCategory;
+  expenseType?: ExpenseType | null;
   amount: number;
   isPaid?: boolean;
   isRecurring?: boolean;
@@ -22,6 +28,7 @@ export interface CreateExpenseInstallmentsInput {
   month: string; // YYYY-MM — mês da primeira parcela
   description: string;
   category: ExpenseCategory;
+  expenseType?: ExpenseType | null;
   amount: number; // valor por parcela
   installmentsTotal: number; // N parcelas (2..60)
   notes?: string | null;
@@ -31,6 +38,7 @@ export interface UpdateExpenseInput {
   month: string;
   description: string;
   category: ExpenseCategory;
+  expenseType?: ExpenseType | null;
   amount: number;
   isPaid: boolean;
   isRecurring?: boolean;
@@ -43,6 +51,7 @@ export interface ExpenseRow {
   month: string;
   description: string;
   category: ExpenseCategory;
+  expenseType: ExpenseType | null;
   amount: number;
   isPaid: boolean;
   isRecurring: boolean;
@@ -72,6 +81,7 @@ function toRow(r: any): ExpenseRow {
     month: r.month,
     description: r.description,
     category: r.category as ExpenseCategory,
+    expenseType: (r.expenseType ?? null) as ExpenseType | null,
     amount: r.amount,
     isPaid: !!r.isPaid,
     isRecurring: !!r.isRecurring,
@@ -89,6 +99,7 @@ function validateInput(input: {
   month: string;
   description: string;
   category: string;
+  expenseType?: string | null;
   amount: number;
 }): void {
   if (!/^\d{4}-\d{2}$/.test(input.month)) {
@@ -99,6 +110,12 @@ function validateInput(input: {
   }
   if (!(EXPENSE_CATEGORIES as readonly string[]).includes(input.category)) {
     throw new Error("categoria inválida (use 'fixo', 'variavel' ou 'tributos')");
+  }
+  if (
+    input.expenseType != null &&
+    !(EXPENSE_TYPES as readonly string[]).includes(input.expenseType)
+  ) {
+    throw new Error("tipo de despesa inválido");
   }
   if (!input.amount || input.amount <= 0) {
     throw new Error("valor deve ser maior que zero");
@@ -119,6 +136,7 @@ export async function createExpense(
       month: input.month,
       description: input.description.trim(),
       category: input.category,
+      expenseType: input.expenseType ?? null,
       amount: input.amount,
       isPaid: input.isPaid ?? true,
       isRecurring: input.isRecurring ?? false,
@@ -154,6 +172,7 @@ export async function updateExpense(
       month: input.month,
       description: input.description.trim(),
       category: input.category,
+      expenseType: input.expenseType ?? null,
       amount: input.amount,
       isPaid: input.isPaid,
       isRecurring: input.isRecurring ?? false,
@@ -279,6 +298,7 @@ export async function duplicateExpense(
       month: targetMonth,
       description: existing.description,
       category: existing.category,
+      expenseType: existing.expenseType ?? null,
       amount: existing.amount,
       isPaid: false, // duplicata começa como pendente
       isRecurring: existing.isRecurring,
@@ -364,6 +384,7 @@ export async function createExpenseInstallments(
         month: parcMonth,
         description: input.description.trim(),
         category: input.category,
+        expenseType: input.expenseType ?? null,
         amount: input.amount,
         isPaid: false,
         isRecurring: false,
@@ -397,6 +418,7 @@ export async function launchRecurringExpenses(
         month: targetMonth,
         description: template.description,
         category: template.category,
+        expenseType: template.expenseType ?? null,
         amount: template.amount,
         isPaid: false,
         isRecurring: true,
@@ -409,4 +431,33 @@ export async function launchRecurringExpenses(
   }
 
   return created;
+}
+
+// ─── updateExpenseType (classificação inline) ─────────────────────────────────
+// Atualiza só o tipo de despesa — usado na edição inline na tabela. Passar null
+// limpa o tipo. A classe superior é derivada do tipo (ver constants), não armazenada.
+
+export async function updateExpenseType(
+  db: any,
+  id: number,
+  expenseType: ExpenseType | null
+): Promise<void> {
+  if (
+    expenseType != null &&
+    !(EXPENSE_TYPES as readonly string[]).includes(expenseType)
+  ) {
+    throw new Error("tipo de despesa inválido");
+  }
+  const existing = await db
+    .select()
+    .from(schema.expenses)
+    .where(eq(schema.expenses.id, id))
+    .get();
+  if (!existing) throw new Error("despesa não encontrada");
+
+  await db
+    .update(schema.expenses)
+    .set({ expenseType })
+    .where(eq(schema.expenses.id, id))
+    .run();
 }
