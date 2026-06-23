@@ -5,6 +5,7 @@ import { db } from "../db";
 import {
   createRevenue as createRevenueService,
   updateRevenue as updateRevenueService,
+  updateRevenueProduct as updateRevenueProductService,
   deleteRevenue as deleteRevenueService,
 } from "../services/revenues";
 import type {
@@ -30,6 +31,11 @@ export async function updateRevenueAction(
   input: UpdateRevenueInput
 ) {
   await updateRevenueService(db as any, revenueId, input);
+  revalidateAll();
+}
+
+export async function updateRevenueProductAction(revenueId: number, product: string) {
+  await updateRevenueProductService(db as any, revenueId, product);
   revalidateAll();
 }
 

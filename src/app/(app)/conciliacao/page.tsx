@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileJson } from "lucide-react";
+import { FileJson, History } from "lucide-react";
 import { db } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import { eq, isNull } from "drizzle-orm";
@@ -45,13 +45,22 @@ export default async function ConciliacaoPage() {
             Cole o extrato do banco para identificar e registrar pagamentos automaticamente
           </p>
         </div>
-        <Link
-          href="/conciliacao/json"
-          className={buttonVariants({ variant: "outline" })}
-        >
-          <FileJson size={16} className="mr-1.5" />
-          Importar JSON do ChatGPT
-        </Link>
+        <div className="flex gap-2 flex-wrap">
+          <Link
+            href="/conciliacao/lancamentos"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <History size={16} className="mr-1.5" />
+            Ver lançamentos
+          </Link>
+          <Link
+            href="/conciliacao/json"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <FileJson size={16} className="mr-1.5" />
+            Importar JSON do ChatGPT
+          </Link>
+        </div>
       </div>
 
       <ConciliacaoClient

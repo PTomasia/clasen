@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,10 +21,46 @@ import {
 } from "@/components/ui/table";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { formatBRL, formatDate } from "@/lib/utils/formatting";
+import { REVENUE_PRODUCTS } from "@/lib/constants";
 import type { RevenueRow, RevenuesSummary } from "@/lib/services/revenues";
+import { updateRevenueProductAction } from "@/lib/actions/revenues";
 import { RevenueDialog } from "./revenue-dialog";
 import { DeleteRevenueDialog } from "./delete-revenue-dialog";
 import { EditClientQuickDialog } from "../clientes/edit-client-quick-dialog";
+
+/** Select inline pra reclassificar o produto direto na tabela, sem abrir o dialog. */
+function InlineProductSelect({ id, product }: { id: number; product: string }) {
+  const [value, setValue] = useState(product);
+  const [, startTransition] = useTransition();
+
+  const options = useMemo(() => {
+    const base = REVENUE_PRODUCTS.filter((p) => p !== "Outro") as string[];
+    return base.includes(value) ? base : [value, ...base];
+  }, [value]);
+
+  function handleChange(next: string | null) {
+    if (!next || next === value) return;
+    setValue(next);
+    startTransition(async () => {
+      await updateRevenueProductAction(id, next);
+    });
+  }
+
+  return (
+    <Select value={value} onValueChange={handleChange}>
+      <SelectTrigger className="h-8 w-[170px] border-transparent bg-transparent px-2 font-medium hover:border-input">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((p) => (
+          <SelectItem key={p} value={p}>
+            {p}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 interface Props {
   revenues: RevenueRow[];
@@ -55,6 +91,7 @@ export function RevenuesClient({ revenues, summary, clients }: Props) {
         const s = search.toLowerCase();
         const hit =
           r.product.toLowerCase().includes(s) ||
+          (r.description?.toLowerCase().includes(s) ?? false) ||
           (r.clientName?.toLowerCase().includes(s) ?? false) ||
           (r.channel?.toLowerCase().includes(s) ?? false) ||
           (r.campaign?.toLowerCase().includes(s) ?? false);
@@ -168,6 +205,7 @@ export function RevenuesClient({ revenues, summary, clients }: Props) {
             <TableRow>
               <TableHead>Data</TableHead>
               <TableHead>Produto</TableHead>
+              <TableHead>Descrição</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Canal</TableHead>
               <TableHead className="text-right">Valor</TableHead>
@@ -178,7 +216,7 @@ export function RevenuesClient({ revenues, summary, clients }: Props) {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   Nenhuma receita avulsa registrada.
                 </TableCell>
               </TableRow>
@@ -187,12 +225,20 @@ export function RevenuesClient({ revenues, summary, clients }: Props) {
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{formatDate(r.date)}</TableCell>
                   <TableCell className="font-medium">
-                    {r.product}
-                    {r.installmentsTotal && r.installmentNumber && (
-                      <span className="ml-1.5 text-xs text-muted-foreground font-normal">
-                        {r.installmentNumber}/{r.installmentsTotal}x
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      <InlineProductSelect id={r.id} product={r.product} />
+                      {r.installmentsTotal && r.installmentNumber && (
+                        <span className="text-xs text-muted-foreground font-normal">
+                          {r.installmentNumber}/{r.installmentsTotal}x
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell
+                    className="text-muted-foreground text-sm max-w-[200px] truncate"
+                    title={r.description ?? ""}
+                  >
+                    {r.description ?? ""}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {r.clientName ?? <span className="italic">—</span>}

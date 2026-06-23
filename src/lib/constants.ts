@@ -80,6 +80,80 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   tributos: "Tributos",
 };
 
+// ─── Tipo de despesa (classificação operacional) ───────────────────────────────
+// Eixo ORTOGONAL a category (fixo/variável/tributos): diz QUAL área a despesa
+// atende. Não afeta o P&L (que continua agregando por category). Cada tipo mapeia
+// pra uma "classe superior" derivada — não selecionável por si só (ver mapa abaixo).
+export const EXPENSE_TYPES = [
+  "designer",
+  "copywriter",
+  "reels",
+  "trafego",
+  "impulsionar",
+  "sistemas",
+  "administrativo",
+  "burocratico",
+  "investimento_permanente",
+  "capacitacao",
+  "imposto",
+] as const;
+export type ExpenseType = (typeof EXPENSE_TYPES)[number];
+
+export const EXPENSE_TYPE_LABELS: Record<ExpenseType, string> = {
+  designer: "Designer",
+  copywriter: "Copywriter",
+  reels: "Reels",
+  trafego: "Tráfego",
+  impulsionar: "Impulsionar",
+  sistemas: "Sistemas",
+  administrativo: "Administrativo",
+  burocratico: "Burocrático",
+  investimento_permanente: "Investimento permanente",
+  capacitacao: "Capacitação",
+  imposto: "Imposto",
+};
+
+// Classe superior — derivada do tipo, exibida mas não selecionável diretamente.
+export const EXPENSE_CLASSES = [
+  "producao",
+  "aquisicao",
+  "sistemas",
+  "administrativo",
+  "investimentos",
+  "impostos",
+] as const;
+export type ExpenseClass = (typeof EXPENSE_CLASSES)[number];
+
+export const EXPENSE_CLASS_LABELS: Record<ExpenseClass, string> = {
+  producao: "Produção de conteúdo",
+  aquisicao: "Aquisição",
+  sistemas: "Sistemas & ferramentas",
+  administrativo: "Administrativo",
+  investimentos: "Investimentos",
+  impostos: "Impostos",
+};
+
+export const EXPENSE_TYPE_TO_CLASS: Record<ExpenseType, ExpenseClass> = {
+  designer: "producao",
+  copywriter: "producao",
+  reels: "producao",
+  trafego: "aquisicao",
+  impulsionar: "aquisicao",
+  sistemas: "sistemas",
+  administrativo: "administrativo",
+  burocratico: "administrativo",
+  investimento_permanente: "investimentos",
+  capacitacao: "investimentos",
+  imposto: "impostos",
+};
+
+/** Label da classe superior derivada de um tipo de despesa (null se sem tipo). */
+export function expenseClassLabel(type: string | null | undefined): string | null {
+  if (!type) return null;
+  const cls = EXPENSE_TYPE_TO_CLASS[type as ExpenseType];
+  return cls ? EXPENSE_CLASS_LABELS[cls] : null;
+}
+
 // Produtos comuns de receita avulsa
 // Corte temporal: agregações financeiras só consideram dados a partir desta data
 export const FINANCIAL_DATA_START = "2026-01-01";

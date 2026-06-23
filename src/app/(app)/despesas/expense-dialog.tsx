@@ -25,9 +25,19 @@ import {
   createExpenseInstallmentsAction,
 } from "@/lib/actions/expenses";
 import type { ExpenseRow } from "@/lib/services/expenses";
-import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/constants";
+import {
+  EXPENSE_CATEGORIES,
+  EXPENSE_CATEGORY_LABELS,
+  EXPENSE_TYPES,
+  EXPENSE_TYPE_LABELS,
+  expenseClassLabel,
+  type ExpenseCategory,
+  type ExpenseType,
+} from "@/lib/constants";
 
 type PaymentMode = "avista" | "parcelado";
+
+const NO_TYPE = "__none__";
 
 export function ExpenseDialog({
   open,
@@ -47,6 +57,7 @@ export function ExpenseDialog({
   const [month, setMonth] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<ExpenseCategory>("fixo");
+  const [expenseType, setExpenseType] = useState<ExpenseType | "">("");
   const [amount, setAmount] = useState("");
   const [isPaid, setIsPaid] = useState(true);
   const [isRecurring, setIsRecurring] = useState(false);
@@ -62,6 +73,7 @@ export function ExpenseDialog({
       setMonth(editing.month);
       setDescription(editing.description);
       setCategory(editing.category);
+      setExpenseType(editing.expenseType ?? "");
       setAmount(String(editing.amount));
       setIsPaid(editing.isPaid);
       setIsRecurring(editing.isRecurring ?? false);
@@ -72,6 +84,7 @@ export function ExpenseDialog({
       setMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
       setDescription("");
       setCategory("fixo");
+      setExpenseType("");
       setAmount("");
       setIsPaid(true);
       setIsRecurring(defaultIsRecurring);
@@ -89,6 +102,7 @@ export function ExpenseDialog({
           month,
           description,
           category,
+          expenseType: expenseType || null,
           amount: parseFloat(amount),
           installmentsTotal: parseInt(installmentsTotal, 10),
           notes: notes.trim() || null,
@@ -101,6 +115,7 @@ export function ExpenseDialog({
       month,
       description,
       category,
+      expenseType: expenseType || null,
       amount: parseFloat(amount),
       isPaid,
       isRecurring,
@@ -178,6 +193,31 @@ export function ExpenseDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Tipo (opcional)</Label>
+            <Select
+              value={expenseType || NO_TYPE}
+              onValueChange={(v) => setExpenseType(v === NO_TYPE ? "" : (v as ExpenseType))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Sem tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_TYPE}>Sem tipo</SelectItem>
+                {EXPENSE_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {EXPENSE_TYPE_LABELS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {expenseType && (
+              <p className="text-xs text-muted-foreground">
+                Classe: {expenseClassLabel(expenseType)}
+              </p>
+            )}
           </div>
 
           {/* Modo de pagamento — só na criação */}

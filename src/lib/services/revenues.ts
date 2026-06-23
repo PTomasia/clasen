@@ -11,6 +11,7 @@ export interface CreateRevenueInput {
   date: string; // YYYY-MM-DD — primeira parcela se parcelado
   amount: number; // total (dividido por N internamente se parcelado)
   product: string;
+  description?: string | null; // nome no extrato / quem pagou (vem da conciliação)
   channel?: string | null;
   campaign?: string | null;
   isPaid?: boolean;
@@ -23,6 +24,7 @@ export interface UpdateRevenueInput {
   date: string;
   amount: number;
   product: string;
+  description?: string | null;
   channel?: string | null;
   campaign?: string | null;
   isPaid: boolean;
@@ -59,6 +61,7 @@ export async function createRevenue(db: any, input: CreateRevenueInput) {
         date: input.date,
         amount: input.amount,
         product: input.product.trim(),
+        description: input.description?.trim() || null,
         channel: input.channel?.trim() || null,
         campaign: input.campaign?.trim() || null,
         isPaid: input.isPaid ?? true,
@@ -78,6 +81,7 @@ export async function createRevenue(db: any, input: CreateRevenueInput) {
   const common = {
     clientId: resolvedClientId,
     product: input.product.trim(),
+    description: input.description?.trim() || null,
     channel: input.channel?.trim() || null,
     campaign: input.campaign?.trim() || null,
     isPaid: false, // parcelas começam como não pagas
@@ -128,6 +132,7 @@ export async function updateRevenue(
       date: input.date,
       amount: input.amount,
       product: input.product.trim(),
+      description: input.description?.trim() || null,
       channel: input.channel?.trim() || null,
       campaign: input.campaign?.trim() || null,
       isPaid: input.isPaid,
@@ -141,6 +146,30 @@ export async function updateRevenue(
     .from(schema.oneTimeRevenues)
     .where(eq(schema.oneTimeRevenues.id, revenueId))
     .get();
+}
+
+// ─── updateRevenueProduct ─────────────────────────────────────────────────────
+// Atualização leve de um único campo — usada na edição inline do produto na tabela.
+
+export async function updateRevenueProduct(
+  db: any,
+  revenueId: number,
+  product: string
+) {
+  if (!product?.trim()) throw new Error("produto é obrigatório");
+
+  const existing = await db
+    .select()
+    .from(schema.oneTimeRevenues)
+    .where(eq(schema.oneTimeRevenues.id, revenueId))
+    .get();
+  if (!existing) throw new Error("receita não encontrada");
+
+  await db
+    .update(schema.oneTimeRevenues)
+    .set({ product: product.trim() })
+    .where(eq(schema.oneTimeRevenues.id, revenueId))
+    .run();
 }
 
 // ─── deleteRevenue ────────────────────────────────────────────────────────────
@@ -161,6 +190,7 @@ export interface RevenueRow {
   date: string;
   amount: number;
   product: string;
+  description: string | null;
   channel: string | null;
   campaign: string | null;
   isPaid: boolean;
@@ -187,6 +217,7 @@ export async function getRevenues(db: any): Promise<RevenueRow[]> {
     date: r.date,
     amount: r.amount,
     product: r.product,
+    description: r.description ?? null,
     channel: r.channel,
     campaign: r.campaign,
     isPaid: !!r.isPaid,

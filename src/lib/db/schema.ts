@@ -117,6 +117,7 @@ export const oneTimeRevenues = sqliteTable("one_time_revenues", {
   date: text("date").notNull(),
   amount: real("amount").notNull(),
   product: text("product").notNull(), // Carrossel, PDF, Arte p/ trafego, etc.
+  description: text("description"), // texto livre — nome no extrato / quem pagou (vem da conciliação)
   channel: text("channel"), // WhatsApp, Instagram, etc.
   campaign: text("campaign"),
   isPaid: integer("is_paid", { mode: "boolean" }).notNull().default(true),
@@ -155,6 +156,9 @@ export const expenses = sqliteTable("expenses", {
   month: text("month").notNull(), // YYYY-MM
   description: text("description").notNull(),
   category: text("category").notNull().default("variavel"), // fixo, variavel
+  // Tipo de despesa (classificação operacional, ortogonal a category): designer,
+  // copywriter, tráfego, sistemas, etc. Deriva uma "classe superior" (ver constants).
+  expenseType: text("expense_type"),
   amount: real("amount").notNull(),
   isPaid: integer("is_paid", { mode: "boolean" }).notNull().default(true),
   // Recorrência (5.1): template para lançamento manual no mês seguinte

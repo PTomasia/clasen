@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +44,14 @@ import {
 import type { ExpenseRow, ExpensesSummary } from "@/lib/services/expenses";
 import type { PnLData, PnLRow } from "@/lib/queries/profit-and-loss";
 import type { TaxEstimateData } from "@/lib/queries/tax-estimate";
-import { type ExpenseCategory } from "@/lib/constants";
+import {
+  EXPENSE_CATEGORY_LABELS,
+  EXPENSE_TYPES,
+  EXPENSE_TYPE_LABELS,
+  expenseClassLabel,
+  type ExpenseCategory,
+  type ExpenseType,
+} from "@/lib/constants";
 import { ExpenseDialog } from "./expense-dialog";
 import { DeleteExpenseDialog } from "./delete-expense-dialog";
 import {
@@ -52,7 +59,52 @@ import {
   duplicateExpenseAction,
   launchRecurringExpensesAction,
   createExpenseAction,
+  updateExpenseTypeAction,
 } from "@/lib/actions/expenses";
+
+const NO_TYPE = "__none__";
+
+/** Select inline pra classificar o tipo da despesa direto na tabela. */
+function InlineExpenseTypeSelect({
+  id,
+  expenseType,
+}: {
+  id: number;
+  expenseType: ExpenseType | null;
+}) {
+  const [value, setValue] = useState<string>(expenseType ?? NO_TYPE);
+  const [, startTransition] = useTransition();
+
+  function handleChange(next: string | null) {
+    if (!next || next === value) return;
+    setValue(next);
+    const typed = next === NO_TYPE ? null : (next as ExpenseType);
+    startTransition(async () => {
+      await updateExpenseTypeAction(id, typed);
+    });
+  }
+
+  const cls = value === NO_TYPE ? null : expenseClassLabel(value);
+
+  return (
+    <div className="space-y-0.5">
+      <Select value={value} onValueChange={handleChange}>
+        <SelectTrigger className="h-8 w-[160px] border-transparent bg-transparent px-2 text-sm hover:border-input">
+          <SelectValue placeholder="Classificar" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_TYPE}>Sem tipo</SelectItem>
+          {EXPENSE_TYPES.map((t) => (
+            <SelectItem key={t} value={t}>
+              {EXPENSE_TYPE_LABELS[t]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {cls && <p className="px-2 text-[10px] text-muted-foreground">{cls}</p>}
+    </div>
+  );
+}
 
 interface Props {
   expenses: ExpenseRow[];
@@ -1031,6 +1083,7 @@ function ExpensesTableDetalhada({
             <SortableHead label="Mês" sortKey="month" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
             <SortableHead label="Descrição" sortKey="description" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
             <SortableHead label="Categoria" sortKey="category" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
+            <TableHead>Tipo</TableHead>
             <SortableHead label="Valor" sortKey="amount" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} className="text-right" />
             {showPercentage && <TableHead className="text-right">% mês</TableHead>}
             <SortableHead label="Status" sortKey="isPaid" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
@@ -1040,7 +1093,7 @@ function ExpensesTableDetalhada({
         <TableBody>
           {filtered.length === 0 && activePreviews.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={showPercentage ? 7 : 6} className="text-center text-muted-foreground py-8">
+              <TableCell colSpan={showPercentage ? 8 : 7} className="text-center text-muted-foreground py-8">
                 Nenhuma despesa encontrada.
               </TableCell>
             </TableRow>
@@ -1079,11 +1132,16 @@ function ExpensesTableDetalhada({
                         className={
                           e.category === "fixo"
                             ? "border-primary/30 text-primary bg-primary/5"
-                            : "border-muted-foreground/30 text-muted-foreground"
+                            : e.category === "tributos"
+                              ? "border-amber-500/40 text-amber-700 bg-amber-500/5"
+                              : "border-muted-foreground/30 text-muted-foreground"
                         }
                       >
-                        {e.category === "fixo" ? "Fixo" : "Variável"}
+                        {EXPENSE_CATEGORY_LABELS[e.category]}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <InlineExpenseTypeSelect id={e.id} expenseType={e.expenseType} />
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">{formatBRL(e.amount)}</TableCell>
                     {showPercentage && (
@@ -1154,9 +1212,10 @@ function ExpensesTableDetalhada({
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground italic">
-                      {e.category === "fixo" ? "Fixo" : "Variável"}
+                      {EXPENSE_CATEGORY_LABELS[e.category]}
                     </Badge>
                   </TableCell>
+                  <TableCell />
                   <TableCell className="text-right font-mono italic text-muted-foreground tabular-nums">
                     {formatBRL(e.amount)}
                   </TableCell>

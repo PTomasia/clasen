@@ -1,0 +1,1 @@
+ALTER TABLE `one_time_revenues` ADD `description` text;

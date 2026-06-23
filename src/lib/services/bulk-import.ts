@@ -25,6 +25,7 @@ export type EntryStatus =
   | "ready"
   | "low_confidence"
   | "duplicate_warning"
+  | "amount_mismatch"
   | "ambiguous"
   | "unknown_client"
   | "no_active_plan"
@@ -58,15 +59,23 @@ export interface CandidateClient {
   name: string;
 }
 
+export interface CandidatePlan {
+  id: number;
+  planType: string;
+  planValue: number;
+}
+
 export interface PreviewItem {
   index: number;
   entry: NormalizedEntry;
   status: EntryStatus;
   reason: string;
-  /** Resolvido para ready/duplicate_warning/low_confidence */
+  /** Resolvido para ready/duplicate_warning/low_confidence/amount_mismatch */
   clientId?: number | null;
-  /** Candidatos para `ambiguous` */
+  /** Candidatos de cliente para `ambiguous` (nome casa com vários clientes) */
   candidates?: CandidateClient[];
+  /** Candidatos de plano para `ambiguous` (cliente tem 2+ planos ativos) */
+  planCandidates?: CandidatePlan[];
   /** Resolvido para plan_payment */
   planId?: number | null;
   /** ID do registro existente em caso de duplicate_warning */
@@ -87,7 +96,9 @@ export interface Decision {
   include: boolean;
   /** Para `ambiguous` e `unknown_client`: usar este cliente */
   clientIdOverride?: number | null;
-  /** Para `unknown_client`: criar um novo cliente com `entry.clientName` */
+  /** Para `ambiguous` por plano (cliente com 2+ planos ativos): usar este plano */
+  planIdOverride?: number | null;
+  /** Para `unknown_client` e `ambiguous` (avulsa): criar um novo cliente com `entry.clientName` */
   createClient?: boolean;
   /** Para `no_active_plan`: aplicar como receita avulsa em vez de plano */
   applyAsRevenue?: boolean;
@@ -475,9 +486,17 @@ export async function resolveClientByName(
 async function findActivePlanForClient(
   db: any,
   clientId: number
-): Promise<{ status: "found"; planId: number } | { status: "none" } | { status: "multiple"; planIds: number[] }> {
+): Promise<
+  | { status: "found"; planId: number; planValue: number }
+  | { status: "none" }
+  | { status: "multiple"; plans: CandidatePlan[] }
+> {
   const plans = (await db
-    .select({ id: schema.subscriptionPlans.id })
+    .select({
+      id: schema.subscriptionPlans.id,
+      planType: schema.subscriptionPlans.planType,
+      planValue: schema.subscriptionPlans.planValue,
+    })
     .from(schema.subscriptionPlans)
     .where(
       and(
@@ -485,11 +504,11 @@ async function findActivePlanForClient(
         sql`${schema.subscriptionPlans.endDate} IS NULL`
       )
     )
-    .all()) as Array<{ id: number }>;
+    .all()) as CandidatePlan[];
 
   if (plans.length === 0) return { status: "none" };
-  if (plans.length > 1) return { status: "multiple", planIds: plans.map((p) => p.id) };
-  return { status: "found", planId: plans[0].id };
+  if (plans.length > 1) return { status: "multiple", plans };
+  return { status: "found", planId: plans[0].id, planValue: plans[0].planValue };
 }
 
 // ─── Detecção de duplicatas ───────────────────────────────────────────────────
@@ -563,6 +582,11 @@ async function findDuplicateExpense(
 
 export const LOW_CONFIDENCE_THRESHOLD = 90;
 
+/** Formata valor em BRL para mensagens de aviso (ex: "R$ 280,00"). */
+function fmtBRL(n: number): string {
+  return `R$ ${n.toFixed(2).replace(".", ",")}`;
+}
+
 export async function resolveBulkImport(
   db: any,
   rawJson: string
@@ -613,6 +637,7 @@ export async function resolveBulkImport(
     ready: 0,
     low_confidence: 0,
     duplicate_warning: 0,
+    amount_mismatch: 0,
     ambiguous: 0,
     unknown_client: 0,
     no_active_plan: 0,
@@ -689,16 +714,15 @@ async function resolveOne(
         candidates: res.candidates,
       };
     } else {
-      // unknown
-      if (entry.type === "plan_payment") {
-        return {
-          index,
-          entry,
-          status: "unknown_client",
-          reason: `Cliente "${entry.clientName}" não encontrado`,
-        };
-      }
-      // one_time_revenue pode ser sem cliente → segue com clientId = null
+      // unknown — vale para plan_payment e one_time_revenue:
+      // o GPT identificou um pagador mas o nome não casou com nenhum cadastro.
+      // Pedro decide: criar cliente novo, vincular a um existente, ou (avulsa) seguir sem cliente.
+      return {
+        index,
+        entry,
+        status: "unknown_client",
+        reason: `Cliente "${entry.clientName}" não encontrado`,
+      };
     }
   } else if (entry.type === "plan_payment") {
     return { index, entry, status: "error", reason: "plan_payment sem clientName" };
@@ -721,8 +745,9 @@ async function resolveOne(
         index,
         entry,
         status: "ambiguous",
-        reason: `Cliente tem ${planRes.planIds.length} planos ativos — escolher um`,
+        reason: `Cliente tem ${planRes.plans.length} planos ativos — escolher um`,
         clientId,
+        planCandidates: planRes.plans,
       };
     }
     const planId = planRes.planId;
@@ -744,6 +769,16 @@ async function resolveOne(
         entry,
         status: "low_confidence",
         reason: `Confiança ${entry.confidence}% — revisar`,
+        clientId,
+        planId,
+      };
+    }
+    if (Math.abs(entry.amount - planRes.planValue) >= 0.01) {
+      return {
+        index,
+        entry,
+        status: "amount_mismatch",
+        reason: `Valor ${fmtBRL(entry.amount)} diverge do plano (${fmtBRL(planRes.planValue)})`,
         clientId,
         planId,
       };
@@ -890,6 +925,7 @@ async function applyOne(
         date: entry.date!,
         amount: entry.amount,
         product: entry.product ?? entry.description ?? "Avulso",
+        description: entry.description,
         channel: entry.channel ?? entry.bank,
         notes,
         isPaid: true,
@@ -904,8 +940,9 @@ async function applyOne(
     if (!clientId) throw new Error("plan_payment sem clientId");
     if (!entry.date) throw new Error("plan_payment sem date");
 
-    // Resolver planId (preview pode não ter resolvido se item era no_active_plan/ambiguous antes da decisão)
-    let planId = item.planId ?? null;
+    // Resolver planId (preview pode não ter resolvido se item era no_active_plan/ambiguous antes da decisão).
+    // planIdOverride vem da escolha do Pedro quando o cliente tem 2+ planos ativos.
+    let planId = decision?.planIdOverride ?? item.planId ?? null;
     if (!planId) {
       const res = await findActivePlanForClient(db, clientId);
       if (res.status === "found") planId = res.planId;
@@ -930,6 +967,7 @@ async function applyOne(
       date: entry.date,
       amount: entry.amount,
       product: entry.product ?? "Avulso",
+      description: entry.description,
       channel: entry.channel ?? entry.bank,
       campaign: entry.campaign,
       notes,

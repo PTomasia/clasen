@@ -49,6 +49,7 @@ const STATUS_LABELS: Record<EntryStatus, string> = {
   ready: "Pronto",
   low_confidence: "Confiança baixa",
   duplicate_warning: "Duplicata?",
+  amount_mismatch: "Valor diverge",
   ambiguous: "Ambíguo",
   unknown_client: "Cliente novo",
   no_active_plan: "Sem plano ativo",
@@ -60,6 +61,7 @@ const STATUS_COLORS: Record<EntryStatus, string> = {
   ready: "border-success/50 text-success bg-success/5",
   low_confidence: "border-destructive/30 text-destructive bg-destructive/5",
   duplicate_warning: "border-yellow-500/50 text-yellow-700 bg-yellow-500/5",
+  amount_mismatch: "border-amber-500/50 text-amber-700 bg-amber-500/5",
   ambiguous: "border-orange-500/50 text-orange-700 bg-orange-500/5",
   unknown_client: "border-muted-foreground/30 text-muted-foreground bg-muted/30",
   no_active_plan: "border-muted-foreground/30 text-muted-foreground bg-muted/30",
@@ -72,6 +74,9 @@ const TYPE_LABELS: Record<string, string> = {
   one_time_revenue: "Avulso",
   expense: "Despesa",
 };
+
+/** Valor sentinela no Select de cliente ambíguo (avulsa) para criar um cliente novo. */
+const CREATE_VALUE = "__create__";
 
 function downloadBlob(filename: string, content: string, mime = "text/markdown") {
   const blob = new Blob([content], { type: mime });
@@ -319,6 +324,7 @@ export function JsonImportClient() {
                   <CountBadge label="Prontos" count={preview.counts.ready} color="bg-success/10 text-success" />
                   <CountBadge label="Confiança baixa" count={preview.counts.low_confidence} color="bg-destructive/10 text-destructive" />
                   <CountBadge label="Duplicatas" count={preview.counts.duplicate_warning} color="bg-yellow-500/10 text-yellow-700" />
+                  <CountBadge label="Valor diverge" count={preview.counts.amount_mismatch} color="bg-amber-500/10 text-amber-700" />
                   <CountBadge label="Ambíguos" count={preview.counts.ambiguous} color="bg-orange-500/10 text-orange-700" />
                   <CountBadge label="Sem cadastro" count={preview.counts.unknown_client} color="bg-muted text-muted-foreground" />
                   <CountBadge label="Sem plano ativo" count={preview.counts.no_active_plan} color="bg-muted text-muted-foreground" />
@@ -540,14 +546,57 @@ function RowItem({
       </TableCell>
       <TableCell>
         {/* Decisões inline por status */}
-        {item.status === "ambiguous" && item.candidates && (
+
+        {/* Ambíguo por PLANO: cliente tem 2+ planos ativos → escolher qual */}
+        {item.status === "ambiguous" && item.planCandidates && (
           <Select
-            value={decision.clientIdOverride ? String(decision.clientIdOverride) : ""}
+            value={decision.planIdOverride ? String(decision.planIdOverride) : ""}
             onValueChange={(v) =>
-              setDecision(item.index, { clientIdOverride: v ? Number(v) : null }, item.status)
+              setDecision(
+                item.index,
+                { planIdOverride: v ? Number(v) : null, include: v ? true : decision.include },
+                item.status
+              )
             }
           >
-            <SelectTrigger className="h-8 text-xs w-[180px]">
+            <SelectTrigger className="h-8 text-xs w-[200px]">
+              <SelectValue placeholder="Escolher plano" />
+            </SelectTrigger>
+            <SelectContent>
+              {item.planCandidates.map((p) => (
+                <SelectItem key={p.id} value={String(p.id)}>
+                  {p.planType} — {formatBRL(p.planValue)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Ambíguo por CLIENTE: nome casa com vários → escolher (avulsa pode criar novo) */}
+        {item.status === "ambiguous" && item.candidates && (
+          <Select
+            value={
+              decision.createClient
+                ? CREATE_VALUE
+                : decision.clientIdOverride
+                  ? String(decision.clientIdOverride)
+                  : ""
+            }
+            onValueChange={(v) =>
+              v === CREATE_VALUE
+                ? setDecision(
+                    item.index,
+                    { createClient: true, clientIdOverride: null, include: true },
+                    item.status
+                  )
+                : setDecision(
+                    item.index,
+                    { clientIdOverride: v ? Number(v) : null, createClient: false },
+                    item.status
+                  )
+            }
+          >
+            <SelectTrigger className="h-8 text-xs w-[200px]">
               <SelectValue placeholder="Escolher cliente" />
             </SelectTrigger>
             <SelectContent>
@@ -556,26 +605,39 @@ function RowItem({
                   {c.name}
                 </SelectItem>
               ))}
+              {item.entry.type === "one_time_revenue" && item.entry.clientName && (
+                <SelectItem value={CREATE_VALUE}>➕ Criar “{item.entry.clientName}”</SelectItem>
+              )}
             </SelectContent>
           </Select>
         )}
-        {item.status === "unknown_client" && (
-          <div className="flex gap-1">
+
+        {/* Cliente novo (nome não casou). Avulsa: criar/sem cliente. Plano: cadastrar antes. */}
+        {item.status === "unknown_client" &&
+          (item.entry.type === "one_time_revenue" ? (
             <label className="flex items-center gap-1 text-xs">
               <input
                 type="checkbox"
                 checked={!!decision.createClient}
                 onChange={(e) =>
-                  setDecision(item.index, { createClient: e.target.checked }, item.status)
+                  setDecision(
+                    item.index,
+                    { createClient: e.target.checked, include: e.target.checked || decision.include },
+                    item.status
+                  )
                 }
                 className="h-3.5 w-3.5"
               />
-              criar
+              criar {item.entry.clientName ? `“${item.entry.clientName}”` : "cliente"}
             </label>
-          </div>
-        )}
-        {item.status === "no_active_plan" && (
-          <label className="flex items-center gap-1 text-xs">
+          ) : (
+            <span className="block max-w-[200px] text-[10px] leading-tight text-muted-foreground">
+              cadastre a cliente + plano em <strong>Planos</strong> antes de conciliar
+            </span>
+          ))}
+
+        {(item.status === "no_active_plan" || item.status === "amount_mismatch") && (
+          <label className="flex items-center gap-1 text-xs" title="Registrar como receita avulsa em vez de pagamento de plano">
             <input
               type="checkbox"
               checked={!!decision.applyAsRevenue}

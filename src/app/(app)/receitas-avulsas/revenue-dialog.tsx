@@ -45,6 +45,7 @@ export function RevenueDialog({
   const [amount, setAmount] = useState("");
   const [product, setProduct] = useState<string>("Arte para tráfego");
   const [productCustom, setProductCustom] = useState("");
+  const [description, setDescription] = useState("");
   const [channel, setChannel] = useState("");
   const [campaign, setCampaign] = useState("");
   const [isPaid, setIsPaid] = useState(true);
@@ -68,6 +69,7 @@ export function RevenueDialog({
       const isStandard = (REVENUE_PRODUCTS as readonly string[]).includes(editing.product);
       setProduct(isStandard ? editing.product : "Outro");
       setProductCustom(isStandard ? "" : editing.product);
+      setDescription(editing.description ?? "");
       setChannel(editing.channel ?? "");
       setCampaign(editing.campaign ?? "");
       setIsPaid(editing.isPaid);
@@ -82,6 +84,7 @@ export function RevenueDialog({
       setAmount("");
       setProduct("Arte para tráfego");
       setProductCustom("");
+      setDescription("");
       setChannel("");
       setCampaign("");
       setIsPaid(true);
@@ -101,6 +104,7 @@ export function RevenueDialog({
       installmentsTotal: installmentMode === "parcelado" ? parseInt(installmentsTotal) || 2 : null,
       amount: parseFloat(amount),
       product: productFinal,
+      description: description.trim() || null,
       channel: channel.trim() || null,
       campaign: campaign.trim() || null,
       isPaid,
@@ -174,6 +178,16 @@ export function RevenueDialog({
                 required
               />
             )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="description">Descrição (opcional)</Label>
+            <Input
+              id="description"
+              placeholder="Quem pagou / nome no extrato"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
 
           <div className="space-y-1.5">

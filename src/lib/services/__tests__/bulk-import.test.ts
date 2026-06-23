@@ -87,6 +87,7 @@ function createTestDb() {
       date TEXT NOT NULL,
       amount REAL NOT NULL,
       product TEXT NOT NULL,
+      description TEXT,
       channel TEXT,
       campaign TEXT,
       is_paid INTEGER NOT NULL DEFAULT 1,
@@ -102,6 +103,7 @@ function createTestDb() {
       month TEXT NOT NULL,
       description TEXT NOT NULL,
       category TEXT NOT NULL DEFAULT 'variavel',
+      expense_type TEXT,
       amount REAL NOT NULL,
       is_paid INTEGER NOT NULL DEFAULT 1,
       is_recurring INTEGER NOT NULL DEFAULT 0,
@@ -696,6 +698,268 @@ describe("applyBulkImport", () => {
     const payments = await db.select().from(schema.planPayments).all();
     expect(payments).toHaveLength(1);
     expect(payments[0].planId).toBe(r1.planId);
+  });
+});
+
+// ─── Melhorias: planos múltiplos, valor divergente, cliente novo em avulsa ──────
+
+async function addPlanToClient(
+  db: ReturnType<typeof createTestDb>,
+  clientId: number,
+  planType: string,
+  planValue: number
+): Promise<number> {
+  const { plan } = await createPlan(db, {
+    clientId,
+    planType,
+    planValue,
+    billingCycleDays: 10,
+    postsCarrossel: 0,
+    postsReels: 0,
+    postsEstatico: 0,
+    postsTrafego: 1,
+    startDate: "2026-01-01",
+  });
+  return plan.id;
+}
+
+describe("plan_payment com cliente de múltiplos planos ativos", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(async () => {
+    db = createTestDb();
+  });
+
+  it("cliente com 2 planos ativos → ambiguous com planCandidates", async () => {
+    const { clientId } = await seedClientWithPlan(db, "Dois Planos", 400);
+    await addPlanToClient(db, clientId, "Tráfego", 800);
+    const json = JSON.stringify({
+      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 400, clientName: "Dois Planos" }],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.ambiguous).toBe(1);
+    const item = preview.items.find((i) => i.status === "ambiguous");
+    expect(item?.planCandidates?.length).toBe(2);
+    expect(item?.planCandidates?.map((p) => p.planValue).sort((a, b) => a - b)).toEqual([400, 800]);
+    // não deve preencher candidates de cliente nesse caso
+    expect(item?.candidates).toBeUndefined();
+  });
+
+  it("planIdOverride aplica o pagamento no plano escolhido", async () => {
+    const { clientId } = await seedClientWithPlan(db, "Dois Planos", 400);
+    const trafegoId = await addPlanToClient(db, clientId, "Tráfego", 800);
+    const json = JSON.stringify({
+      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 800, clientName: "Dois Planos" }],
+    });
+    const preview = await resolveBulkImport(db, json);
+    const item = preview.items.find((i) => i.status === "ambiguous")!;
+    const decisions: Decision[] = [{ index: item.index, include: true, planIdOverride: trafegoId }];
+    const result = await applyBulkImport(db, preview, decisions, "2026-05-18");
+    expect(result.applied).toBe(1);
+    const payments = await db.select().from(schema.planPayments).all();
+    expect(payments).toHaveLength(1);
+    expect(payments[0].planId).toBe(trafegoId);
+  });
+});
+
+describe("plan_payment com valor divergente do plano (amount_mismatch)", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(async () => {
+    db = createTestDb();
+  });
+
+  it("valor abaixo do plano → amount_mismatch (não ready)", async () => {
+    await seedClientWithPlan(db, "Victoria Maria", 400);
+    const json = JSON.stringify({
+      entries: [
+        { type: "plan_payment", date: "2026-05-28", amount: 280, clientName: "Victoria Maria", confidence: 90 },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.amount_mismatch).toBe(1);
+    expect(preview.counts.ready).toBe(0);
+    const item = preview.items.find((i) => i.status === "amount_mismatch");
+    expect(item?.planId).toBeTruthy();
+    expect(item?.reason).toMatch(/diverge/i);
+  });
+
+  it("valor acima do plano → amount_mismatch e grava o valor pago real ao aplicar", async () => {
+    await seedClientWithPlan(db, "Victoria Maria", 400);
+    const json = JSON.stringify({
+      entries: [
+        { type: "plan_payment", date: "2026-06-12", amount: 450, clientName: "Victoria Maria", confidence: 98 },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    const item = preview.items.find((i) => i.status === "amount_mismatch")!;
+    const decisions: Decision[] = [{ index: item.index, include: true }];
+    const result = await applyBulkImport(db, preview, decisions, "2026-05-18");
+    expect(result.applied).toBe(1);
+    const payments = await db.select().from(schema.planPayments).all();
+    expect(payments[0].amount).toBe(450);
+  });
+
+  it("amount_mismatch com applyAsRevenue → grava em one_time_revenues (não como pagamento)", async () => {
+    const { planId } = await seedClientWithPlan(db, "Victoria Maria", 400);
+    const json = JSON.stringify({
+      entries: [
+        { type: "plan_payment", date: "2026-06-12", amount: 450, clientName: "Victoria Maria", product: "Extra", confidence: 98 },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    const item = preview.items.find((i) => i.status === "amount_mismatch")!;
+    const decisions: Decision[] = [{ index: item.index, include: true, applyAsRevenue: true }];
+    const result = await applyBulkImport(db, preview, decisions, "2026-05-18");
+    expect(result.applied).toBe(1);
+    const revenues = await db.select().from(schema.oneTimeRevenues).all();
+    expect(revenues).toHaveLength(1);
+    expect(revenues[0].amount).toBe(450);
+    // não deve ter gravado pagamento de plano
+    const payments = await db.select().from(schema.planPayments).where(eq(schema.planPayments.planId, planId)).all();
+    expect(payments).toHaveLength(0);
+  });
+
+  it("valor exato continua ready (sem mismatch)", async () => {
+    await seedClientWithPlan(db, "Exata", 400);
+    const json = JSON.stringify({
+      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 400, clientName: "Exata" }],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.ready).toBe(1);
+    expect(preview.counts.amount_mismatch).toBe(0);
+  });
+
+  it("duplicata tem prioridade sobre mismatch", async () => {
+    const { planId } = await seedClientWithPlan(db, "Dup", 400);
+    await recordPayment(db, { planId, paymentDate: "2026-04-05", amount: 280, status: "pago" });
+    const json = JSON.stringify({
+      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 280, clientName: "Dup" }],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.duplicate_warning).toBe(1);
+    expect(preview.counts.amount_mismatch).toBe(0);
+  });
+
+  it("confiança baixa tem prioridade sobre mismatch", async () => {
+    await seedClientWithPlan(db, "BaixaConf", 400);
+    const json = JSON.stringify({
+      entries: [
+        { type: "plan_payment", date: "2026-04-05", amount: 280, clientName: "BaixaConf", confidence: 70 },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.low_confidence).toBe(1);
+    expect(preview.counts.amount_mismatch).toBe(0);
+  });
+});
+
+describe("one_time_revenue com cliente novo", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(async () => {
+    db = createTestDb();
+  });
+
+  it("avulsa com clientName não-cadastrado → unknown_client (não ready silencioso)", async () => {
+    const json = JSON.stringify({
+      entries: [
+        { type: "one_time_revenue", date: "2026-04-05", amount: 100, clientName: "Desconhecida", product: "Carrossel" },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.unknown_client).toBe(1);
+    expect(preview.counts.ready).toBe(0);
+  });
+
+  it("avulsa SEM clientName → ready sem cliente (comportamento preservado)", async () => {
+    const json = JSON.stringify({
+      entries: [{ type: "one_time_revenue", date: "2026-04-05", amount: 100, product: "Carrossel" }],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.ready).toBe(1);
+    expect(preview.items[0].clientId == null).toBe(true);
+  });
+
+  it("avulsa unknown_client com createClient → cria e vincula o cliente", async () => {
+    const json = JSON.stringify({
+      entries: [
+        { type: "one_time_revenue", date: "2026-04-05", amount: 100, clientName: "Nova Avulsa", product: "Carrossel" },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    const item = preview.items[0];
+    const decisions: Decision[] = [{ index: item.index, include: true, createClient: true }];
+    const result = await applyBulkImport(db, preview, decisions, "2026-05-18");
+    expect(result.applied).toBe(1);
+    const clients = await db.select().from(schema.clients).all();
+    const nova = clients.find((c) => c.name === "Nova Avulsa");
+    expect(nova).toBeDefined();
+    const revenues = await db.select().from(schema.oneTimeRevenues).all();
+    expect(revenues[0].clientId).toBe(nova!.id);
+  });
+
+  it("avulsa unknown_client incluída sem criar → grava receita sem cliente", async () => {
+    const json = JSON.stringify({
+      entries: [
+        { type: "one_time_revenue", date: "2026-04-05", amount: 100, clientName: "Sem Vínculo", product: "Carrossel" },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    const item = preview.items[0];
+    const decisions: Decision[] = [{ index: item.index, include: true }];
+    const result = await applyBulkImport(db, preview, decisions, "2026-05-18");
+    expect(result.applied).toBe(1);
+    const revenues = await db.select().from(schema.oneTimeRevenues).all();
+    expect(revenues[0].clientId == null).toBe(true);
+  });
+
+  it("avulsa ambígua com createClient → cria novo em vez de usar candidato", async () => {
+    await seedClientWithPlan(db, "Maria Silva", 800);
+    await seedClientWithPlan(db, "Maria Souza", 600);
+    const json = JSON.stringify({
+      entries: [
+        { type: "one_time_revenue", date: "2026-04-05", amount: 150, clientName: "Maria", product: "Carrossel" },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    const item = preview.items.find((i) => i.status === "ambiguous")!;
+    const decisions: Decision[] = [{ index: item.index, include: true, createClient: true }];
+    const result = await applyBulkImport(db, preview, decisions, "2026-05-18");
+    expect(result.applied).toBe(1);
+    const clients = await db.select().from(schema.clients).all();
+    // "Maria" foi criado como novo cliente além das duas Marias
+    expect(clients.some((c) => c.name === "Maria")).toBe(true);
+  });
+});
+
+describe("one_time_revenue: description vinda da conciliação", () => {
+  let db: ReturnType<typeof createTestDb>;
+  beforeEach(async () => {
+    db = createTestDb();
+  });
+
+  it("grava o nome do extrato (description) na receita avulsa", async () => {
+    await seedClientWithPlan(db, "Victoria Maria", 400);
+    const json = JSON.stringify({
+      entries: [
+        {
+          type: "one_time_revenue",
+          date: "2026-06-12",
+          amount: 450,
+          clientName: "Victoria Maria",
+          description: "Victoria Maria Da Silva E Souza",
+          product: "Extra",
+        },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    const result = await applyBulkImport(
+      db,
+      preview,
+      [{ index: preview.items[0].index, include: true }],
+      "2026-05-18"
+    );
+    expect(result.applied).toBe(1);
+    const revenues = await db.select().from(schema.oneTimeRevenues).all();
+    expect(revenues[0].description).toBe("Victoria Maria Da Silva E Souza");
   });
 });
 

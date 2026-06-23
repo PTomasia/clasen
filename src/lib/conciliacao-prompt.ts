@@ -30,11 +30,12 @@ seguindo o schema abaixo.
    - \`"Dívida de ex-cliente"\` → ex-cliente pagando saldo antigo
    - \`"Desconsiderar — pessoal/operacional"\` → pix de pessoas físicas da empresa
      (Gabriela Eduarda Clasen, Pedro Tomasia, Ana Luiza Clasen)
-4. **Indique \`confianca_pct\`** (0-100):
-   - 95-100: nome no extrato bate exato OU alias confirmado
-   - 90-94: nome bate parcial (sobrenome, primeiro nome) e valor bate o plano
-   - 70-89: incerteza relevante — explique em \`observacao\`
+4. **Indique \`confianca_pct\`** (0-100). O sistema trata **qualquer valor abaixo de 90 como "revisar"** — a linha não entra automática, fica destacada pra eu conferir. Então seja honesto: na dúvida, use 89 ou menos.
+   - 95-100: nome no extrato bate exato (ou alias confirmado) **e** o valor bate o plano cadastrado
+   - 90-94: nome bate parcial (primeiro nome + sobrenome) **e** o valor bate o plano
+   - **≤ 89: use SEMPRE que houver qualquer ressalva** — sobrenome incompatível com o cadastro, valor diferente do plano (parcial ou a mais), dúvida de qual cliente é. Explique em \`observacao\`.
    - <70: não classifique como Plano recorrente; prefira Avulso ou Desconsiderar
+   - **Regra de ouro: se o valor não bate exatamente o plano cadastrado, nunca passe de 89** — mesmo que o nome bata. Pagamento parcial, valor a mais ou possível extra são casos de revisão.
 5. **Use o valor exato** (number, em reais, com decimais) em \`valor_brl\`.
 6. **Datas em ISO** (\`YYYY-MM-DD\`) em \`data\`.
 7. **Inclua o nome bruto do extrato** em \`nome_no_extrato\` para auditoria.

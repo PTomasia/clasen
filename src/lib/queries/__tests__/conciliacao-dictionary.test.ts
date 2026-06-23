@@ -75,6 +75,7 @@ function createTestDb() {
       month TEXT NOT NULL,
       description TEXT NOT NULL,
       category TEXT NOT NULL DEFAULT 'variavel',
+      expense_type TEXT,
       amount REAL NOT NULL,
       is_paid INTEGER NOT NULL DEFAULT 1,
       is_recurring INTEGER NOT NULL DEFAULT 0,
