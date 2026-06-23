@@ -590,6 +590,7 @@ export function PlanosClient({
             setPaymentTarget({ planId, defaultDate: dueDate })
           }
           onSkip={handleSkipMonth}
+          onOpenHistory={(planId, clientName) => setHistoryPlan({ planId, clientName })}
         />
       </div>
 
@@ -1334,10 +1335,12 @@ function OverduePaymentsPanel({
   plans,
   onPay,
   onSkip,
+  onOpenHistory,
 }: {
   plans: Plan[];
   onPay: (planId: number, dueDate: string) => void;
   onSkip: (planId: number, month: string) => void;
+  onOpenHistory: (planId: number, clientName: string) => void;
 }) {
   const overdueRows = useMemo(() => buildOverdueRows(plans), [plans]);
 
@@ -1384,7 +1387,14 @@ function OverduePaymentsPanel({
                 className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-accent"
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{row.clientName}</p>
+                <button
+                  type="button"
+                  onClick={() => onOpenHistory(row.planId, row.clientName)}
+                  className="block max-w-full truncate text-left text-sm font-semibold transition-colors hover:text-primary hover:underline"
+                  title="Ver histórico de pagamentos"
+                >
+                  {row.clientName}
+                </button>
                 <p className="text-xs text-muted-foreground">
                   {row.planType} · venceu {formatDate(row.dueDate)}
                 </p>
