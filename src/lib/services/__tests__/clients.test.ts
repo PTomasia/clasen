@@ -87,6 +87,7 @@ function createTestDb() {
       date TEXT NOT NULL,
       amount REAL NOT NULL,
       product TEXT NOT NULL,
+      description TEXT,
       channel TEXT,
       campaign TEXT,
       is_paid INTEGER NOT NULL DEFAULT 1,

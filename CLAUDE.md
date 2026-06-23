@@ -68,7 +68,7 @@ components (thin UI) → lib/actions/ (validation) → lib/services/ (business l
 
 - `lib/actions/` — Server Actions, input validation, thin wrappers over services
 - `lib/services/` — All writes and domain operations (create, update, delete, pay)
-- `lib/queries/` — Read aggregations: `dashboard.ts`, `unit-economics.ts`, `profit-and-loss.ts`, `operacional.ts`
+- `lib/queries/` — Read aggregations: `dashboard.ts`, `unit-economics.ts`, `profit-and-loss.ts`, `operacional.ts`, `lancamentos.ts` (pagamentos + receitas recentes p/ conferência)
 - `lib/utils/` — Pure calculation functions ($/post, tenure, mediana, status derivation)
 - `lib/constants.ts` — Shared enums: `PLAN_TYPES`, `ORIGINS`, `CATEGORIES`, etc.
 
@@ -79,9 +79,9 @@ components (thin UI) → lib/actions/ (validation) → lib/services/ (business l
 - `subscription_plans` — main recurring contracts; `billing_cycle_days` = due day of month (e.g. `10` = day 10), NOT an interval
 - `plan_payments` — payment history per plan/month (enables MRR tracking)
 - `agency_settings` — key/value global config
-- `one_time_revenues` — one-off project revenue (nullable `clientId`)
+- `one_time_revenues` — one-off project revenue (nullable `clientId`); `description` = quem pagou / nome no extrato (preenchido pela conciliação)
 - `marketing_monthly` — monthly acquisition metrics (CAC, ROAS) keyed by `YYYY-MM`
-- `expenses` — monthly costs, `fixo` or `variavel` category
+- `expenses` — monthly costs; `category` = `fixo`/`variavel`/`tributos` (usado no P&L); `expense_type` = classificação operacional ortogonal (designer, tráfego, etc.) que deriva uma **classe superior** via `EXPENSE_TYPE_TO_CLASS` em `constants.ts`
 - `app_notes` — quick owner notes about app improvements (sidebar panel)
 - `operational_checks` — operational-health checks (Sprint 7); 1 row per `(reference_month, period)`; ratings 1-5 + qualitative levels; JSON arrays for gargalos / heavy-clients / reasons
 
@@ -128,6 +128,17 @@ Full specs in `docs/sprints/`. Status as of 2026-06-17:
 | 5 | Despesas (P&L, resultado líquido mensal) | ✅ concluído |
 | 6 | Tributação — DAS Simples Nacional estimado (Anexo III + Fator R) | ✅ concluído |
 | 7 | Operacional (saúde operacional: checks meio/fim do mês, score, status da agenda, gráficos, relatório MD) | ✅ concluído |
+
+### Melhorias incrementais jun/2026 (PR #5, conciliação · cobrança · classificação)
+
+Ver `CHANGELOG.md` para detalhe. Resumo:
+- **Conciliação** (`/conciliacao/json`, `lib/services/bulk-import.ts`): seletor de plano quando o cliente tem 2+ planos ativos; status `amount_mismatch` (valor pago ≠ `plan_value`); criar/vincular cliente em receitas avulsas; prompt do ChatGPT força confiança ≤89 quando o valor não bate o plano.
+- **Cobrança de atrasados** (painel em `/planos`, `lib/utils/overdue-export.ts`): botões "ChatGPT" (markdown p/ cruzar com extrato) e "WhatsApp" (texto p/ cobrança); clique no nome abre o histórico de pagamentos.
+- **Lançamentos** (`/conciliacao/lancamentos`): lista cronológica de pagamentos de plano + receitas avulsas.
+- **Avulso**: coluna `description` + produto editável inline na tabela.
+- **Despesas**: `expense_type` + classe superior derivada (eixo ortogonal a `category`; não afeta o P&L).
+
+Migrations `0013` (one_time_revenues.description) e `0014` (expenses.expense_type) — ambas `ADD COLUMN` nullable, já aplicadas no Turso.
 
 ## Domain Language
 

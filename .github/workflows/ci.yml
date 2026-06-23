@@ -10,6 +10,13 @@ jobs:
   validate:
     runs-on: ubuntu-latest
 
+    # DB em memória para o CI: db/index.ts conecta no import (singleton). Os unit
+    # tests usam better-sqlite3 :memory: próprio, e as páginas são force-dynamic
+    # (não consultam o DB no build) — então basta a conexão não falhar. Sem isso,
+    # cai no default file:./database/dev.db e o dir nem existe no runner.
+    env:
+      TURSO_DATABASE_URL: ":memory:"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,5 +40,3 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          TURSO_DATABASE_URL: "file:./database/ci.db"
