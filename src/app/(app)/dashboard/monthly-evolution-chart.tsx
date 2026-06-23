@@ -207,6 +207,8 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
   const rows = range
     ? pnl.rows.slice(range.fromIdx, range.toIdx + 1)
     : pnl.rows;
+  // Hooks antes de qualquer return condicional (rules-of-hooks).
+  const { isVisible, toggle } = useSeriesToggle(SERIES_NAMES);
   const isEmpty = rows.every(
     (r) => r.receitaTotal === 0 && r.despesaTotal === 0
   );
@@ -222,8 +224,6 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
       </div>
     );
   }
-
-  const { isVisible, toggle } = useSeriesToggle(SERIES_NAMES);
 
   // Dois últimos meses com dados para os cards comparativos
   const withData = rows.filter(

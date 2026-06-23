@@ -1689,7 +1689,7 @@ function RepeatMonthPickerPopover({
         <div>
           <h3 className="text-base font-semibold">Repetir em outro mês</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            "{expense.description}" · {formatBRL(expense.amount)}
+            “{expense.description}” · {formatBRL(expense.amount)}
           </p>
         </div>
         <div className="space-y-1.5">
