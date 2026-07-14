@@ -95,4 +95,21 @@ describe("buildOverdueWhatsApp", () => {
     ]);
     expect(txt).toMatch(/Total em aberto:\s*R\$ 670,00/);
   });
+
+  it("cliente com 2 planos atrasados → distingue pelo tipo do plano", () => {
+    const txt = buildOverdueWhatsApp([
+      row({ planId: 1, clientName: "Dara", planType: "Essential", rowValue: 400, dueDate: "2026-05-10" }),
+      row({ planId: 2, clientName: "Dara", planType: "Tráfego", rowValue: 800, dueDate: "2026-05-15" }),
+    ]);
+    expect(txt).toContain("*Dara (Essential)*");
+    expect(txt).toContain("*Dara (Tráfego)*");
+    // conta pessoas, não planos: Dara 2× é 1 cliente em atraso
+    expect(txt).toContain("(1)");
+  });
+
+  it("cliente com 1 plano só → nome sem tipo (comportamento atual)", () => {
+    const txt = buildOverdueWhatsApp([row()]);
+    expect(txt).toContain("*Ana Silva*");
+    expect(txt).not.toContain("(Essential)");
+  });
 });
