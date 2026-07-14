@@ -740,17 +740,33 @@ async function resolveOne(
         clientId,
       };
     }
+    let planId: number;
+    let planValue: number;
+    let autoResolvedByValue = false;
     if (planRes.status === "multiple") {
-      return {
-        index,
-        entry,
-        status: "ambiguous",
-        reason: `Cliente tem ${planRes.plans.length} planos ativos — escolher um`,
-        clientId,
-        planCandidates: planRes.plans,
-      };
+      // Cliente com 2+ planos ativos: se o valor pago bate exatamente UM deles,
+      // resolve sozinho (ex: R$ 800 → plano Tráfego). Empate de valores ou valor
+      // que não bate nenhum → seletor manual (planCandidates).
+      const byValue = planRes.plans.filter(
+        (p) => Math.abs(p.planValue - entry.amount) < 0.01
+      );
+      if (byValue.length !== 1) {
+        return {
+          index,
+          entry,
+          status: "ambiguous",
+          reason: `Cliente tem ${planRes.plans.length} planos ativos — escolher um`,
+          clientId,
+          planCandidates: planRes.plans,
+        };
+      }
+      planId = byValue[0].id;
+      planValue = byValue[0].planValue;
+      autoResolvedByValue = true;
+    } else {
+      planId = planRes.planId;
+      planValue = planRes.planValue;
     }
-    const planId = planRes.planId;
     const dupId = await findDuplicatePlanPayment(db, planId, entry.date!, entry.amount);
     if (dupId !== null) {
       return {
@@ -773,17 +789,24 @@ async function resolveOne(
         planId,
       };
     }
-    if (Math.abs(entry.amount - planRes.planValue) >= 0.01) {
+    if (Math.abs(entry.amount - planValue) >= 0.01) {
       return {
         index,
         entry,
         status: "amount_mismatch",
-        reason: `Valor ${fmtBRL(entry.amount)} diverge do plano (${fmtBRL(planRes.planValue)})`,
+        reason: `Valor ${fmtBRL(entry.amount)} diverge do plano (${fmtBRL(planValue)})`,
         clientId,
         planId,
       };
     }
-    return { index, entry, status: "ready", reason: "OK", clientId, planId };
+    return {
+      index,
+      entry,
+      status: "ready",
+      reason: autoResolvedByValue ? "OK — plano identificado pelo valor" : "OK",
+      clientId,
+      planId,
+    };
   }
 
   // one_time_revenue

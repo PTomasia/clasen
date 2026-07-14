@@ -78,7 +78,15 @@ export function buildOverdueWhatsApp(rows: ReadonlyArray<OverdueRow>): string {
   if (rows.length === 0) return "Nenhum cliente em atraso no momento. ✅";
 
   const groups = groupByPlan(rows);
-  const lines: string[] = [`🔴 Clientes em atraso (${groups.length})`, ""];
+
+  // Cliente com 2+ planos atrasados aparece uma vez por plano — inclui o tipo
+  // pra distinguir as linhas. O título conta pessoas, não planos.
+  const porNome = new Map<string, number>();
+  for (const g of groups) {
+    porNome.set(g.clientName, (porNome.get(g.clientName) ?? 0) + 1);
+  }
+
+  const lines: string[] = [`🔴 Clientes em atraso (${porNome.size})`, ""];
   let total = 0;
   for (const g of groups) {
     const count = g.dueDates.length;
@@ -86,8 +94,12 @@ export function buildOverdueWhatsApp(rows: ReadonlyArray<OverdueRow>): string {
     total += valorAberto;
     const oldest = [...g.dueDates].sort()[0];
     const sufixo = count > 1 ? ` (${count} mensalidades)` : "";
+    const nome =
+      (porNome.get(g.clientName) ?? 0) > 1
+        ? `${g.clientName} (${g.planType})`
+        : g.clientName;
     lines.push(
-      `• *${g.clientName}* — ${formatBRL(valorAberto)} — desde ${diaMes(oldest)}${sufixo}`
+      `• *${nome}* — ${formatBRL(valorAberto)} — desde ${diaMes(oldest)}${sufixo}`
     );
   }
   lines.push("");

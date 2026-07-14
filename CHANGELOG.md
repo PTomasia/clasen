@@ -3,6 +3,21 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
+## PR #7 — Multiplanos: auto-resolve pelo valor na conciliação (2026-06-23)
+
+Suporte fino a cliente com 2 planos ativos (ex.: social media + tráfego na mesma cliente):
+
+- **Conciliação (bulk-import)**: quando o cliente tem 2+ planos ativos e o valor pago bate exatamente **um único** deles, o pagamento é resolvido sozinho nesse plano (status "Pronto", motivo *"OK — plano identificado pelo valor"*). O seletor manual só aparece quando os valores empatam ou o valor não bate nenhum plano. Duplicata/confiança continuam sendo checadas no plano identificado.
+- **WhatsApp de atrasados**: se a mesma cliente tem 2+ planos na lista, cada linha mostra o tipo do plano — `*Dara (Essential)*` / `*Dara (Tráfego)*` — e o título conta pessoas, não planos.
+
+Decisão de modelagem registrada: **não** cadastrar tráfego como cliente separado ("Dara - Tráfego") — quebraria matching por nome na conciliação e as métricas por cliente (ativos, churn, LTV, ICP). O modelo é 1 cliente → N planos.
+
+## PR #6 — CI verde confiável + registro das melhorias (2026-06-23, `83f0889`)
+
+- **CI consertado** (estava vermelho em todos os runs desde o #3): lint com política ajustada (`no-explicit-any` e regras advisórias do React Compiler → warning; `rules-of-hooks` segue erro), hook condicional corrigido no gráfico de evolução, `TURSO_DATABASE_URL=":memory:"` no workflow (steps de teste/build nunca tinham rodado).
+- Fix: test DB de `clients.test.ts` sem a coluna `description`.
+- Docs: CLAUDE.md atualizado + este CHANGELOG criado.
+
 ## PR #5 — Conciliação, cobrança de atrasados e classificação (2026-06-23, `e7f6f84`)
 
 ### Conciliação (bulk-import via JSON do ChatGPT)

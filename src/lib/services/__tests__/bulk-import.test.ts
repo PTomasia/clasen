@@ -729,11 +729,11 @@ describe("plan_payment com cliente de múltiplos planos ativos", () => {
     db = createTestDb();
   });
 
-  it("cliente com 2 planos ativos → ambiguous com planCandidates", async () => {
+  it("valor que não bate nenhum plano → ambiguous com planCandidates", async () => {
     const { clientId } = await seedClientWithPlan(db, "Dois Planos", 400);
     await addPlanToClient(db, clientId, "Tráfego", 800);
     const json = JSON.stringify({
-      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 400, clientName: "Dois Planos" }],
+      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 500, clientName: "Dois Planos" }],
     });
     const preview = await resolveBulkImport(db, json);
     expect(preview.counts.ambiguous).toBe(1);
@@ -748,7 +748,7 @@ describe("plan_payment com cliente de múltiplos planos ativos", () => {
     const { clientId } = await seedClientWithPlan(db, "Dois Planos", 400);
     const trafegoId = await addPlanToClient(db, clientId, "Tráfego", 800);
     const json = JSON.stringify({
-      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 800, clientName: "Dois Planos" }],
+      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 999, clientName: "Dois Planos" }],
     });
     const preview = await resolveBulkImport(db, json);
     const item = preview.items.find((i) => i.status === "ambiguous")!;
@@ -758,6 +758,55 @@ describe("plan_payment com cliente de múltiplos planos ativos", () => {
     const payments = await db.select().from(schema.planPayments).all();
     expect(payments).toHaveLength(1);
     expect(payments[0].planId).toBe(trafegoId);
+  });
+
+  it("valor bate exatamente um único plano → auto-resolve como ready nesse plano", async () => {
+    const { clientId, planId: socialId } = await seedClientWithPlan(db, "Dara", 400);
+    const trafegoId = await addPlanToClient(db, clientId, "Tráfego", 800);
+    const json = JSON.stringify({
+      entries: [
+        { type: "plan_payment", date: "2026-04-05", amount: 800, clientName: "Dara" },
+        { type: "plan_payment", date: "2026-04-06", amount: 400, clientName: "Dara" },
+      ],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.ready).toBe(2);
+    expect(preview.counts.ambiguous).toBe(0);
+    const p800 = preview.items.find((i) => i.entry.amount === 800);
+    const p400 = preview.items.find((i) => i.entry.amount === 400);
+    expect(p800?.planId).toBe(trafegoId);
+    expect(p400?.planId).toBe(socialId);
+    expect(p800?.reason).toMatch(/valor/i); // transparência: resolvido pelo valor
+
+    // ponta a ponta: cada pagamento cai no plano certo
+    const result = await applyBulkImport(db, preview, [], "2026-06-23");
+    expect(result.applied).toBe(2);
+    const payments = await db.select().from(schema.planPayments).all();
+    expect(payments.find((p) => p.amount === 800)?.planId).toBe(trafegoId);
+    expect(payments.find((p) => p.amount === 400)?.planId).toBe(socialId);
+  });
+
+  it("dois planos com o MESMO valor → continua ambiguous (empate)", async () => {
+    const { clientId } = await seedClientWithPlan(db, "Empate", 400);
+    await addPlanToClient(db, clientId, "Tráfego", 400);
+    const json = JSON.stringify({
+      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 400, clientName: "Empate" }],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.ambiguous).toBe(1);
+    expect(preview.items[0].planCandidates?.length).toBe(2);
+  });
+
+  it("auto-resolve ainda detecta duplicata no plano identificado", async () => {
+    const { clientId } = await seedClientWithPlan(db, "Dup Multi", 400);
+    const trafegoId = await addPlanToClient(db, clientId, "Tráfego", 800);
+    await recordPayment(db, { planId: trafegoId, paymentDate: "2026-04-05", amount: 800, status: "pago" });
+    const json = JSON.stringify({
+      entries: [{ type: "plan_payment", date: "2026-04-05", amount: 800, clientName: "Dup Multi" }],
+    });
+    const preview = await resolveBulkImport(db, json);
+    expect(preview.counts.duplicate_warning).toBe(1);
+    expect(preview.counts.ambiguous).toBe(0);
   });
 });
 
