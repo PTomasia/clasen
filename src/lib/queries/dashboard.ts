@@ -38,10 +38,20 @@ export interface DashboardData {
   ativosPlus3M: number; // qtd ativos com >3 meses
   // MRR
   mrr: MRRPoint[];
+  // Resumo mensal gerencial (tabela sob o gráfico de evolução operacional)
+  resumoMensal: ResumoMensalPoint[];
   // Alertas
   atrasados: AtrasadoRow[];
   // Próximos pagamentos
   upcoming: UpcomingRow[];
+}
+
+export interface ResumoMensalPoint {
+  month: string; // YYYY-MM
+  label: string; // "Jan/26"
+  contratado: number; // MRR (planos ativos no mês)
+  realizado: number; // pagamentos pago+pendente com paymentDate no mês
+  pagamentos: number; // nº de pagamentos reais (exclui skipped)
 }
 
 export interface MRRPoint {
@@ -149,8 +159,10 @@ export async function getDashboardData(): Promise<DashboardData> {
   const clientesAtivosSet = new Set(activePlans.map((p) => p.clientId));
   const clientesAtivos = clientesAtivosSet.size;
 
+  // Posts de CONTEÚDO (sem tráfego) — mesma definição do hero de /planos e da
+  // carga operacional. Tráfego não é post produzido; tem breakdown próprio em /planos.
   const postsAtivos = activePlans.reduce(
-    (sum, p) => sum + p.postsCarrossel + p.postsReels + p.postsEstatico + p.postsTrafego,
+    (sum, p) => sum + p.postsCarrossel + p.postsReels + p.postsEstatico,
     0
   );
 
@@ -211,6 +223,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   // pagamentos/conciliação. Vide aggregateMrr.
   const mrr = aggregateMrr({
     plans: allPlans,
+    today: now,
+    cutoff: FINANCIAL_DATA_START,
+  });
+
+  const resumoMensal = aggregateResumoMensal({
+    plans: allPlans,
+    payments: allPayments,
     today: now,
     cutoff: FINANCIAL_DATA_START,
   });
@@ -276,6 +295,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     permMedia3M,
     ativosPlus3M: ativosPlus3M.length,
     mrr,
+    resumoMensal,
     atrasados,
     upcoming,
   };
@@ -433,6 +453,43 @@ export function aggregateMrr(input: {
   }
 
   return result;
+}
+
+// ─── Aggregator: resumo mensal gerencial ──────────────────────────────────────
+// Uma linha por mês desde o cutoff: contratado (reusa aggregateMrr), realizado
+// (pagamentos pago+pendente com paymentDate no mês — mesma regra do fiscal) e
+// nº de pagamentos reais (exclui skipped). Clientes/posts por mês vêm de
+// aggregateOperationalEvolution e são combinados na UI pela chave month.
+
+export function aggregateResumoMensal(input: {
+  plans: PlanForMrr[];
+  payments: PaymentForMrr[];
+  today: Date;
+  cutoff: string;
+  monthsBack?: number;
+}): ResumoMensalPoint[] {
+  const { plans, payments, today, cutoff, monthsBack = 12 } = input;
+  const contratado = aggregateMrr({ plans, today, cutoff, monthsBack });
+  const cutoffMonth = cutoff.slice(0, 7);
+
+  return contratado
+    .filter((p) => p.month >= cutoffMonth)
+    .map((p) => {
+      const doMes = payments.filter(
+        (pay) =>
+          pay.paymentDate >= cutoff &&
+          pay.paymentDate.startsWith(p.month) &&
+          !pay.skipped &&
+          (pay.status === "pago" || pay.status === "pendente")
+      );
+      return {
+        month: p.month,
+        label: p.label,
+        contratado: p.value,
+        realizado: doMes.reduce((sum, pay) => sum + pay.amount, 0),
+        pagamentos: doMes.length,
+      };
+    });
 }
 
 // ─── Aggregator: posts por cliente (instante presente) ────────────────────────

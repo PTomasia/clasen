@@ -163,6 +163,58 @@ async function main() {
     console.log(`  ${m}: ${brl(value)} (${counted.length} planos)`);
   }
 
+  // ── 7. Consistência Planos × Dashboard ─────────────────────────────────────
+  // As duas telas usam critérios de "plano ativo" diferentes:
+  //   Planos:    status === "ativo"            (só status)
+  //   Dashboard: status === "ativo" && !endDate (ambos)
+  //   MRR/op.:   endDate === null               (só datas)
+  // E "posts": Dashboard soma COM tráfego; Planos mostra conteúdo (sem tráfego).
+  section("7. Consistência Planos × Dashboard (critérios diferentes)");
+  const b7 = issues;
+  const fullPlans = (await db.select().from(schema.subscriptionPlans).all()) as Array<{
+    id: number;
+    clientId: number;
+    planValue: number;
+    status: string;
+    endDate: string | null;
+    postsCarrossel: number;
+    postsReels: number;
+    postsEstatico: number;
+    postsTrafego: number;
+  }>;
+  const byStatus = fullPlans.filter((p) => p.status === "ativo");
+  const byBoth = fullPlans.filter((p) => p.status === "ativo" && !p.endDate);
+  const byDate = fullPlans.filter((p) => !p.endDate);
+  const receita = (arr: typeof fullPlans) => arr.reduce((s, p) => s + p.planValue, 0);
+  const clientes = (arr: typeof fullPlans) => new Set(arr.map((p) => p.clientId)).size;
+  console.log(
+    `  ativo por status (Planos):        ${byStatus.length} planos | ${clientes(byStatus)} clientes | ${brl(receita(byStatus))}`
+  );
+  console.log(
+    `  ativo status+endDate (Dashboard): ${byBoth.length} planos | ${clientes(byBoth)} clientes | ${brl(receita(byBoth))}`
+  );
+  console.log(
+    `  ativo por endDate (MRR/oper.):    ${byDate.length} planos | ${clientes(byDate)} clientes | ${brl(receita(byDate))}`
+  );
+  if (byStatus.length !== byBoth.length || byBoth.length !== byDate.length)
+    flag("os três critérios de 'ativo' divergem HOJE — números diferentes entre telas");
+  else console.log("  ✓ hoje os três critérios coincidem (dados saneados) — divergência é só risco latente");
+
+  const comTrafego = byBoth.reduce(
+    (s, p) => s + p.postsCarrossel + p.postsReels + p.postsEstatico + p.postsTrafego,
+    0
+  );
+  const semTrafego = byBoth.reduce(
+    (s, p) => s + p.postsCarrossel + p.postsReels + p.postsEstatico,
+    0
+  );
+  console.log(
+    `  posts/mês: Dashboard (com tráfego) = ${comTrafego} | Planos (conteúdo) = ${semTrafego} | tráfego = ${comTrafego - semTrafego}`
+  );
+  if (comTrafego !== semTrafego)
+    flag(`hero do Dashboard mostra ${comTrafego} "posts/mês" mas a definição da casa (Planos/UO) é ${semTrafego}`);
+  if (issues === b7) console.log("  ✓ posts consistentes");
+
   console.log(`\n${issues === 0 ? "✔ Nenhuma inconsistência" : `Total: ${issues} apontamento(s)`}`);
   process.exit(0);
 }
