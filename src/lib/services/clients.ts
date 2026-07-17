@@ -1,7 +1,7 @@
 import { eq, isNull, and, sql } from "drizzle-orm";
 import { parseISO } from "date-fns";
 import * as schema from "../db/schema";
-import { calcularCustoPost, calcularPermanenciaCliente } from "../utils/calculations";
+import { calcularCustoPost, calcularPermanenciaCliente, isPlanoAtivo } from "../utils/calculations";
 
 // ─── findOrCreateClient ────────────────────────────────────────────────────────
 // Match case-insensitive + trim para evitar duplicatas.
@@ -159,7 +159,7 @@ export async function getClientsList(
 
   return clients.map((client) => {
     const plans = allPlans.filter((p) => p.clientId === client.id);
-    const activePlans = plans.filter((p) => !p.endDate);
+    const activePlans = plans.filter(isPlanoAtivo);
     const status: "ativo" | "inativo" = activePlans.length > 0 ? "ativo" : "inativo";
 
     const permanencia = calcularPermanenciaCliente(client, plans, referenceDate) ?? 0;
@@ -235,7 +235,7 @@ export async function getClientDetail(
     .where(eq(schema.subscriptionPlans.clientId, clientId))
     .all();
 
-  const activePlans = plans.filter((p) => !p.endDate);
+  const activePlans = plans.filter(isPlanoAtivo);
   const status: "ativo" | "inativo" = activePlans.length > 0 ? "ativo" : "inativo";
 
   const permanencia = calcularPermanenciaCliente(client, plans, referenceDate) ?? 0;

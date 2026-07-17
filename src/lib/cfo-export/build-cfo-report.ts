@@ -1,7 +1,10 @@
 import type { PnLData, PnLRow } from "../queries/profit-and-loss";
+import type { ResumoMensalPoint } from "../queries/dashboard";
 import type { ExpenseRow } from "../services/expenses";
 import type { RevenueRow } from "../services/revenues";
 import type { TaxEstimateData } from "../queries/tax-estimate";
+import { expenseClassLabel } from "../constants";
+import { isPlanoAtivo } from "../utils/calculations";
 import { formatBRL, formatDate, formatMonth, formatPercentage } from "../utils/formatting";
 import {
   calcBreakevenPlanejado,
@@ -46,6 +49,7 @@ export interface BuildCfoReportInput {
   revenues: RevenueRow[];
   expenses: ExpenseRow[];
   tax?: TaxEstimateData; // estimativa Simples Nacional (DAS) do mês corrente
+  resumoMensal?: ResumoMensalPoint[]; // série contratado × realizado (dashboard)
   params?: FinancialParams;
 }
 
@@ -59,6 +63,7 @@ export function buildCfoReportMarkdown(input: BuildCfoReportInput): string {
   const sections = [
     renderHeader(input.now),
     renderRecorrente(input.plans),
+    renderContratadoRealizado(input.resumoMensal, input.now),
     renderReajustes(reajustes),
     renderAvulsas(input.revenues, input.now),
     renderDespesas(input.expenses, input.now),
@@ -85,7 +90,7 @@ function renderHeader(now: Date): string {
 // ─── Seção 1: Receita Recorrente Ativa (competência) ─────────────────────────
 
 function renderRecorrente(plans: PlanForCfoReport[]): string {
-  const ativos = plans.filter((p) => p.status === "ativo" && p.endDate === null);
+  const ativos = plans.filter(isPlanoAtivo);
 
   if (ativos.length === 0) {
     return [
@@ -143,6 +148,38 @@ function statusLabel(s: PlanForCfoReport["statusPagamento"]): string {
   if (s === "em_dia") return "em dia";
   if (s === "atrasado") return "atrasado";
   return "sem pagamento";
+}
+
+// ─── Contratado × Realizado (eficiência de cobrança, mês a mês) ──────────────
+
+function renderContratadoRealizado(
+  resumo: ResumoMensalPoint[] | undefined,
+  now: Date
+): string {
+  if (!resumo || resumo.length === 0) return "";
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const rows: string[][] = [
+    ["Mês", "Contratado (MRR)", "Realizado (recebido)", "% Recebido", "Pagamentos"],
+  ];
+  for (const r of resumo) {
+    const isCurrent = r.month === currentMonth;
+    const pct =
+      r.contratado > 0 ? `${((r.realizado / r.contratado) * 100).toFixed(0)}%` : "—";
+    rows.push([
+      r.label,
+      formatBRL(r.contratado),
+      formatBRL(r.realizado),
+      isCurrent ? "em curso" : pct,
+      String(r.pagamentos),
+    ]);
+  }
+
+  return [
+    mdHeader(2, "Contratado × Realizado (mês a mês)"),
+    "_Contratado = MRR do mês (planos ativos em algum dia do mês). Realizado = pagamentos registrados com data no mês (pago + pendente). **% Recebido abaixo de 100% em mês fechado indica inadimplência OU conciliação bancária pendente** — confira a conciliação antes de tratar como perda. O mês corrente aparece \"em curso\" (recebimentos ainda entrando)._",
+    mdTable(rows),
+  ].join("\n");
 }
 
 // ─── Seção 2: Resumo de Reajustes ─────────────────────────────────────────────
@@ -256,6 +293,29 @@ function renderDespesas(expenses: ExpenseRow[], now: Date): string {
     "",
     `**Total competência (3m)**: ${formatBRL(totalCompetencia)} • **Pago/caixa**: ${formatBRL(totalCaixa)} • **Pendente**: ${formatBRL(totalPendente)}`
   );
+
+  // Agregado por classe superior (expense_type → classe). Só aparece quando o
+  // Pedro já classificou alguma despesa; o legado sem tipo vira "Sem classificação".
+  const byClass = new Map<string, number>();
+  let semTipo = 0;
+  let classificadas = 0;
+  for (const e of recent) {
+    const cls = expenseClassLabel(e.expenseType);
+    if (cls) {
+      byClass.set(cls, (byClass.get(cls) ?? 0) + e.amount);
+      classificadas++;
+    } else {
+      semTipo += e.amount;
+    }
+  }
+  if (classificadas > 0) {
+    const parts = [...byClass.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([cls, total]) => `${cls}: ${formatBRL(total)}`);
+    if (semTipo > 0) parts.push(`Sem classificação: ${formatBRL(semTipo)}`);
+    lines.push("", `**Por classe (3m)**: ${parts.join(" • ")}`);
+  }
+
   return lines.join("\n");
 }
 
@@ -396,7 +456,7 @@ function renderResumoExecutivo(
   plans: PlanForCfoReport[],
   params: FinancialParams
 ): string {
-  const ativos = plans.filter((p) => p.status === "ativo" && p.endDate === null);
+  const ativos = plans.filter(isPlanoAtivo);
   const ticketMedio = ativos.length > 0 ? reajustes.mrrAtual / ativos.length : 0;
   const breakeven = calcBreakevenPlanejado(params);
   const respiro = calcRespiro(breakeven, params);

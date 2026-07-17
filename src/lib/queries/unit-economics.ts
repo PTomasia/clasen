@@ -10,7 +10,7 @@ import {
   calcularLTVPreditivo,
   calcularPayback,
 } from "../utils/unit-economics";
-import { calcularPermanenciaCliente } from "../utils/calculations";
+import { calcularPermanenciaCliente, isPlanoAtivo } from "../utils/calculations";
 import { getAdSpendMap } from "../services/marketing";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ export function aggregateUnitEconomics(input: {
     receitas.length > 0 ? receitas.reduce((a, b) => a + b, 0) / receitas.length : 0;
 
   // Ticket médio mensal: média de planValue dos planos atualmente ativos
-  const activePlans = plans.filter((p) => !p.endDate);
+  const activePlans = plans.filter(isPlanoAtivo);
   const ticketMedioMensal =
     activePlans.length > 0
       ? activePlans.reduce((s, p) => s + p.planValue, 0) / activePlans.length

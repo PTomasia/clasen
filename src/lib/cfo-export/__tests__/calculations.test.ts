@@ -212,10 +212,11 @@ describe("calcReajusteSummary", () => {
     };
   }
 
-  it("ignora planos cancelados / com endDate", () => {
+  it("ignora planos encerrados (endDate preenchida — definição canônica isPlanoAtivo)", () => {
     const plans = [
       plan({ id: 1, clientName: "Ana", planValue: 1_000 }),
-      plan({ id: 2, clientName: "Bia", planValue: 2_000, status: "cancelado" }),
+      // Encerrado de verdade: endDate é o fato; status é etiqueta redundante.
+      plan({ id: 2, clientName: "Bia", planValue: 2_000, status: "cancelado", endDate: "2026-02-15" }),
       plan({ id: 3, clientName: "Cris", planValue: 3_000, endDate: "2026-01-01" }),
     ];
     const r = calcReajusteSummary(plans);

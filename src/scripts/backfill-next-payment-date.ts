@@ -50,7 +50,16 @@ async function main() {
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error("Erro no backfill:", err);
-  process.exit(1);
-});
+// Só roda como CLI quando executado diretamente — sem o guard, o main() dispara
+// no import do teste (vitest), tenta conectar no Turso sem env e derruba o run
+// com unhandled rejection intermitente (mesmo padrão do backfill-skip).
+const isDirectRun =
+  import.meta.url === `file://${process.argv[1]}` ||
+  import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, "/") ?? "");
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error("Erro no backfill:", err);
+    process.exit(1);
+  });
+}

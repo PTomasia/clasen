@@ -16,6 +16,7 @@ import {
   calcularPermanenciaCliente,
   calcularTotalPostsEquivalentes,
   calcularUnidadesOperacionais,
+  isPlanoAtivo,
 } from "../utils/calculations";
 import { calculateGapsForPlan } from "../services/plans";
 import { getSetting } from "../services/settings";
@@ -38,10 +39,20 @@ export interface DashboardData {
   ativosPlus3M: number; // qtd ativos com >3 meses
   // MRR
   mrr: MRRPoint[];
+  // Resumo mensal gerencial (tabela sob o gráfico de evolução operacional)
+  resumoMensal: ResumoMensalPoint[];
   // Alertas
   atrasados: AtrasadoRow[];
   // Próximos pagamentos
   upcoming: UpcomingRow[];
+}
+
+export interface ResumoMensalPoint {
+  month: string; // YYYY-MM
+  label: string; // "Jan/26"
+  contratado: number; // MRR (planos ativos no mês)
+  realizado: number; // pagamentos pago+pendente com paymentDate no mês
+  pagamentos: number; // nº de pagamentos reais (exclui skipped)
 }
 
 export interface MRRPoint {
@@ -143,14 +154,16 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
 
   // ─── Planos ativos ─────────────────────────────────────────────────
-  const activePlans = allPlans.filter((p) => p.status === "ativo" && !p.endDate);
+  const activePlans = allPlans.filter(isPlanoAtivo);
 
   // KPIs
   const clientesAtivosSet = new Set(activePlans.map((p) => p.clientId));
   const clientesAtivos = clientesAtivosSet.size;
 
+  // Posts de CONTEÚDO (sem tráfego) — mesma definição do hero de /planos e da
+  // carga operacional. Tráfego não é post produzido; tem breakdown próprio em /planos.
   const postsAtivos = activePlans.reduce(
-    (sum, p) => sum + p.postsCarrossel + p.postsReels + p.postsEstatico + p.postsTrafego,
+    (sum, p) => sum + p.postsCarrossel + p.postsReels + p.postsEstatico,
     0
   );
 
@@ -187,7 +200,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     const tenure = calcularPermanenciaCliente(client, plans, now);
     if (tenure === null) continue;
 
-    const isAtivo = plans.some((p) => !p.endDate);
+    const isAtivo = plans.some(isPlanoAtivo);
     tenures.push({ clientId: client.id, tenure, isAtivo });
   }
 
@@ -207,9 +220,15 @@ export async function getDashboardData(): Promise<DashboardData> {
   const permMedia3M = Math.round(avg(ativosPlus3M));
 
   // ─── MRR últimos 12 meses ─────────────────────────────────────────
-  // Meses passados: realizado (pago + pendente). Mês corrente: contratado
-  // (soma planValue dos planos ativos no mês). Vide aggregateMrr.
+  // Contratado em todos os meses (planos ativos no mês) — não depende de
+  // pagamentos/conciliação. Vide aggregateMrr.
   const mrr = aggregateMrr({
+    plans: allPlans,
+    today: now,
+    cutoff: FINANCIAL_DATA_START,
+  });
+
+  const resumoMensal = aggregateResumoMensal({
     plans: allPlans,
     payments: allPayments,
     today: now,
@@ -277,6 +296,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     permMedia3M,
     ativosPlus3M: ativosPlus3M.length,
     mrr,
+    resumoMensal,
     atrasados,
     upcoming,
   };
@@ -336,7 +356,10 @@ export interface OperationalMonth {
   month: string; // YYYY-MM
   label: string; // "abr/26"
   clientesAtivos: number;
+  /** Carga ponderada em UO (carrossel/reels com peso, estático 0.5, sem tráfego) */
   postsTotal: number;
+  /** Quantidade bruta de posts de conteúdo (carrossel + reels + estático, sem tráfego) */
+  postsConteudo: number;
   ticketPorPost: number | null;
 }
 
@@ -383,21 +406,21 @@ function unidadesOperacionaisPlano(p: Pick<PlanForOperational,
   );
 }
 
-// ─── Aggregator: MRR híbrido 12 meses ─────────────────────────────────────────
-// Mês passado: soma plan_payments com status IN ('pago','pendente') no mês,
-//   respeitando cutoff. Skipped (amount=0) entra mas não soma.
-// Mês corrente: soma planValue dos planos ativos durante o mês, usando o
-//   mesmo filtro de aggregateOperationalEvolution.
+// ─── Aggregator: MRR contratado 12 meses ──────────────────────────────────────
+// TODOS os meses (passados e corrente): soma planValue dos planos ativos em
+// algum dia do mês (contratado). Não usa pagamentos — MRR mede contrato
+// recorrente, não caixa: conciliação atrasada ou inadimplência não alteram a
+// série (o realizado vive no P&L / DRE). Decisão do Pedro em jul/2026, após o
+// degrau de jun/26 (mês fechava e a série caía do contratado pro realizado).
+// Meses 100% antes do cutoff (FINANCIAL_DATA_START): zerados.
 
 export function aggregateMrr(input: {
   plans: PlanForMrr[];
-  payments: PaymentForMrr[];
   today: Date;
   cutoff: string;
   monthsBack?: number;
 }): MRRPoint[] {
-  const { plans, payments, today, cutoff, monthsBack = 12 } = input;
-  const currentYyyymm = format(today, "yyyy-MM");
+  const { plans, today, cutoff, monthsBack = 12 } = input;
   const result: MRRPoint[] = [];
 
   for (let i = monthsBack - 1; i >= 0; i--) {
@@ -413,11 +436,7 @@ export function aggregateMrr(input: {
 
     let value = 0;
 
-    if (lastDay < cutoff) {
-      // Mês inteiro antes do cutoff: zerado
-      value = 0;
-    } else if (yyyymm === currentYyyymm) {
-      // Mês corrente: soma planos ativos durante o mês (contratado).
+    if (lastDay >= cutoff) {
       const active = plans.filter(
         (p) =>
           p.startDate <= lastDay &&
@@ -432,15 +451,6 @@ export function aggregateMrr(input: {
       value = active
         .filter((p) => !successorKeys.has(`${p.clientId}|${p.startDate}`))
         .reduce((sum, p) => sum + p.planValue, 0);
-    } else {
-      // Mês passado: soma pagamentos realizados (pago + pendente)
-      value = payments
-        .filter((p) => {
-          if (p.paymentDate < cutoff) return false;
-          if (!p.paymentDate.startsWith(yyyymm)) return false;
-          return p.status === "pago" || p.status === "pendente";
-        })
-        .reduce((sum, p) => sum + p.amount, 0);
     }
 
     result.push({ month: yyyymm, label: monthLabel(yyyymm), value });
@@ -449,13 +459,50 @@ export function aggregateMrr(input: {
   return result;
 }
 
+// ─── Aggregator: resumo mensal gerencial ──────────────────────────────────────
+// Uma linha por mês desde o cutoff: contratado (reusa aggregateMrr), realizado
+// (pagamentos pago+pendente com paymentDate no mês — mesma regra do fiscal) e
+// nº de pagamentos reais (exclui skipped). Clientes/posts por mês vêm de
+// aggregateOperationalEvolution e são combinados na UI pela chave month.
+
+export function aggregateResumoMensal(input: {
+  plans: PlanForMrr[];
+  payments: PaymentForMrr[];
+  today: Date;
+  cutoff: string;
+  monthsBack?: number;
+}): ResumoMensalPoint[] {
+  const { plans, payments, today, cutoff, monthsBack = 12 } = input;
+  const contratado = aggregateMrr({ plans, today, cutoff, monthsBack });
+  const cutoffMonth = cutoff.slice(0, 7);
+
+  return contratado
+    .filter((p) => p.month >= cutoffMonth)
+    .map((p) => {
+      const doMes = payments.filter(
+        (pay) =>
+          pay.paymentDate >= cutoff &&
+          pay.paymentDate.startsWith(p.month) &&
+          !pay.skipped &&
+          (pay.status === "pago" || pay.status === "pendente")
+      );
+      return {
+        month: p.month,
+        label: p.label,
+        contratado: p.value,
+        realizado: doMes.reduce((sum, pay) => sum + pay.amount, 0),
+        pagamentos: doMes.length,
+      };
+    });
+}
+
 // ─── Aggregator: posts por cliente (instante presente) ────────────────────────
 // Considera apenas planos ativos (endDate=null). Cliente com 2 planos = 1.
 
 export function aggregatePostsPorCliente(
   plans: PlanForOperational[]
 ): PostsPorClienteResult {
-  const ativos = plans.filter((p) => p.endDate === null);
+  const ativos = plans.filter(isPlanoAtivo);
   const clientesSet = new Set(ativos.map((p) => p.clientId));
   const clientes = clientesSet.size;
   // Carga operacional em UO (social media, sem tráfego). Arredonda em 2 casas
@@ -505,6 +552,11 @@ export function aggregateOperationalEvolution(input: {
       0
     );
 
+    const postsConteudo = activeInMonth.reduce(
+      (sum, p) => sum + p.postsCarrossel + p.postsReels + p.postsEstatico,
+      0
+    );
+
     const mrrMonth = activeInMonth.reduce((sum, p) => sum + p.planValue, 0);
     const ticketPorPost =
       postsTotal > 0 ? Math.round((mrrMonth / postsTotal) * 100) / 100 : null;
@@ -514,6 +566,7 @@ export function aggregateOperationalEvolution(input: {
       label: monthLabelLower(yyyymm),
       clientesAtivos,
       postsTotal,
+      postsConteudo,
       ticketPorPost,
     });
   }

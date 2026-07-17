@@ -19,8 +19,16 @@ import { Calendar, BarChart3, Info, Landmark } from "lucide-react";
 import type { TaxEstimateData } from "@/lib/queries/tax-estimate";
 
 const MRR_VS_RECEITA_HINT =
-  "O MRR do mês corrente soma os planos ativos em qualquer dia do mês (inclui quem saiu no meio do mês e usa o valor pré-reajuste). A Receita bruta mensal é uma foto dos planos ativos hoje — por isso os dois podem divergir.";
+  "O MRR é o CONTRATADO: soma os planos ativos em qualquer dia de cada mês (quem saiu no meio do mês conta; no mês de reajuste vale o valor antigo). Não depende de pagamentos — inadimplência ou conciliação atrasada não mudam a curva; o realizado fica no P&L. A Receita bruta mensal é uma foto dos planos ativos hoje — por isso os dois podem divergir.";
 import { EmptyState } from "@/components/shared/empty-state";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type {
   DashboardData,
   OperationalMonth,
@@ -29,6 +37,106 @@ import type {
 import type { PnLData } from "@/lib/queries/profit-and-loss";
 import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
+
+const RESUMO_MENSAL_HINT =
+  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos registrados com data no mês (pago + pendente) — conciliação atrasada reduz este número, não o contratado. % Recebido = realizado ÷ contratado. Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima (estático 0,5 + tráfego 1, sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga). Ticket médio = contratado ÷ clientes.";
+
+// Tabela gerencial mensal: operação (clientes, posts) → contrato (MRR, ticket)
+// → caixa (realizado, % recebido, nº de pagamentos). Mais recente no topo.
+function ResumoMensalTable({
+  resumo,
+  evolution,
+}: {
+  resumo: DashboardData["resumoMensal"];
+  evolution: OperationalMonth[];
+}) {
+  if (resumo.length === 0) return null;
+  const opByMonth = new Map(evolution.map((e) => [e.month, e]));
+  const currentMonth = resumo[resumo.length - 1]?.month;
+  const rows = [...resumo].reverse();
+
+  return (
+    <div className="bg-card border rounded-lg overflow-x-auto">
+      <div className="flex items-center gap-2 p-4 pb-3">
+        <h2 className="font-semibold">Resumo mensal</h2>
+        <span className="text-muted-foreground/60 cursor-help" title={RESUMO_MENSAL_HINT}>
+          <Info size={14} />
+        </span>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Mês</TableHead>
+            <TableHead className="text-right">Clientes</TableHead>
+            <TableHead className="text-right">Posts</TableHead>
+            <TableHead className="text-right">Posts equiv.</TableHead>
+            <TableHead className="text-right">Contratado</TableHead>
+            <TableHead className="text-right">Ticket médio</TableHead>
+            <TableHead className="text-right">Realizado</TableHead>
+            <TableHead className="text-right">% Recebido</TableHead>
+            <TableHead className="text-right">Pagtos</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => {
+            const op = opByMonth.get(r.month);
+            const isCurrent = r.month === currentMonth;
+            const ticketMedio =
+              op && op.clientesAtivos > 0 ? r.contratado / op.clientesAtivos : null;
+            const pct = r.contratado > 0 ? (r.realizado / r.contratado) * 100 : null;
+            return (
+              <TableRow key={r.month} className={isCurrent ? "bg-primary/[0.03]" : undefined}>
+                <TableCell className="font-medium whitespace-nowrap">
+                  {r.label}
+                  {isCurrent && (
+                    <span className="ml-1.5 text-[10px] text-muted-foreground font-normal">
+                      em curso
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {op?.clientesAtivos ?? "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {op?.postsConteudo ?? "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {op ? formatUO(op.postsTotal) : "—"}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatBRL(r.contratado)}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                  {ticketMedio !== null ? formatBRL(ticketMedio) : "—"}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatBRL(r.realizado)}
+                </TableCell>
+                <TableCell
+                  className={cn(
+                    "text-right font-mono tabular-nums",
+                    isCurrent || pct === null
+                      ? "text-muted-foreground"
+                      : pct >= 95
+                        ? "text-success"
+                        : pct >= 80
+                          ? "text-amber-600"
+                          : "text-destructive"
+                  )}
+                >
+                  {pct === null ? "—" : `${pct.toFixed(0)}%`}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {r.pagamentos}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 function HeroKPI({
   label,
@@ -609,6 +717,9 @@ export function DashboardClient({
 
       {/* Evolução operacional: clientes, posts, ticket/post */}
       <OperationalEvolutionChart data={operational.evolution} range={chartRange} />
+
+      {/* Resumo mensal gerencial */}
+      <ResumoMensalTable resumo={data.resumoMensal} evolution={operational.evolution} />
 
       {/* Próximos 7 dias */}
       <div>
