@@ -197,6 +197,48 @@ function buildInput() {
   return { now: NOW, pnl, plans, revenues, expenses };
 }
 
+describe("buildCfoReportMarkdown — Contratado × Realizado", () => {
+  const resumoMensal = [
+    { month: "2026-03", label: "Mar/26", contratado: 3200, realizado: 3200, pagamentos: 2 },
+    { month: "2026-04", label: "Abr/26", contratado: 3200, realizado: 1600, pagamentos: 1 },
+    { month: "2026-05", label: "Mai/26", contratado: 3550, realizado: 3200, pagamentos: 2 },
+  ];
+
+  it("renderiza a série com % recebido e marca o mês corrente como em curso", () => {
+    const md = buildCfoReportMarkdown({ ...buildInput(), resumoMensal });
+    expect(md).toContain("Contratado × Realizado");
+    expect(md).toContain("Mar/26");
+    expect(md).toContain("100%"); // março integral
+    expect(md).toContain("50%"); // abril pela metade
+    expect(md).toContain("em curso"); // maio é o mês corrente (NOW = 04/05)
+    expect(md).toContain("conciliação"); // ressalva metodológica presente
+  });
+
+  it("sem resumoMensal a seção não aparece (compatibilidade)", () => {
+    const md = buildCfoReportMarkdown(buildInput());
+    expect(md).not.toContain("Contratado × Realizado");
+  });
+});
+
+describe("buildCfoReportMarkdown — despesas por classe", () => {
+  it("agrega por classe superior e mostra 'sem classificação' para o legado", () => {
+    const input = buildInput();
+    input.expenses[0] = { ...input.expenses[0], expenseType: "designer" }; // 2500 → Produção
+    input.expenses[1] = { ...input.expenses[1], expenseType: "impulsionar" }; // 800 → Aquisição
+    // expenses[2] segue sem tipo (300)
+    const md = buildCfoReportMarkdown(input);
+    expect(md).toContain("Por classe (3m)");
+    expect(md).toContain("Produção de conteúdo: R$ 2.500,00");
+    expect(md).toContain("Aquisição: R$ 800,00");
+    expect(md).toContain("Sem classificação: R$ 300,00");
+  });
+
+  it("sem nenhuma despesa classificada, a linha por classe não aparece", () => {
+    const md = buildCfoReportMarkdown(buildInput());
+    expect(md).not.toContain("Por classe (3m)");
+  });
+});
+
 describe("buildCfoReportMarkdown", () => {
   it("inclui cabeçalho com data formatada e contexto da Clasen + competência/caixa", () => {
     const md = buildCfoReportMarkdown(buildInput());
