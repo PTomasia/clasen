@@ -4,6 +4,7 @@ import type { ExpenseRow } from "../services/expenses";
 import type { RevenueRow } from "../services/revenues";
 import type { TaxEstimateData } from "../queries/tax-estimate";
 import { expenseClassLabel } from "../constants";
+import { isPlanoAtivo } from "../utils/calculations";
 import { formatBRL, formatDate, formatMonth, formatPercentage } from "../utils/formatting";
 import {
   calcBreakevenPlanejado,
@@ -89,7 +90,7 @@ function renderHeader(now: Date): string {
 // ─── Seção 1: Receita Recorrente Ativa (competência) ─────────────────────────
 
 function renderRecorrente(plans: PlanForCfoReport[]): string {
-  const ativos = plans.filter((p) => p.status === "ativo" && p.endDate === null);
+  const ativos = plans.filter(isPlanoAtivo);
 
   if (ativos.length === 0) {
     return [
@@ -455,7 +456,7 @@ function renderResumoExecutivo(
   plans: PlanForCfoReport[],
   params: FinancialParams
 ): string {
-  const ativos = plans.filter((p) => p.status === "ativo" && p.endDate === null);
+  const ativos = plans.filter(isPlanoAtivo);
   const ticketMedio = ativos.length > 0 ? reajustes.mrrAtual / ativos.length : 0;
   const breakeven = calcBreakevenPlanejado(params);
   const respiro = calcRespiro(breakeven, params);

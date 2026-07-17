@@ -134,6 +134,18 @@ export function calcularProximoVencimento(
   );
 }
 
+// ─── Plano ativo (foto de hoje) ───────────────────────────────────────────────
+// Definição CANÔNICA e única do sistema: plano ativo = sem endDate. O campo
+// `status` ("ativo"/"cancelado") é etiqueta redundante gravada junto pelo
+// closePlan; endDate é o fato. Antes deste helper havia 3 variações espalhadas
+// (status, status+endDate, endDate) que divergiriam em silêncio com dado
+// dessincronizado — a curadoria (diag-dashboard seções 1/7) vigia essa higiene.
+// Séries mensais ("ativo no mês X") têm janela própria por datas — não usam este.
+
+export function isPlanoAtivo(p: { endDate: string | null | undefined }): boolean {
+  return !p.endDate;
+}
+
 // ─── Permanência considerando múltiplos planos ────────────────────────────────
 // `clientSince` (override manual) prevalece sobre o menor startDate dos planos.
 // Cliente é "ativo" se algum plano não tem endDate. Retorna null quando não há
@@ -144,7 +156,7 @@ export function calcularPermanenciaCliente(
   plans: ReadonlyArray<{ startDate: string; endDate: string | null | undefined }>,
   referenceDate: Date
 ): number | null {
-  const isAtivo = plans.some((p) => !p.endDate);
+  const isAtivo = plans.some(isPlanoAtivo);
   const firstStart =
     client.clientSince ?? plans.map((p) => p.startDate).sort()[0];
 

@@ -12,7 +12,7 @@ import type { CheckPeriod } from "../../constants";
 
 describe("aggregateCargaPlanejada", () => {
   const plan = (over: Partial<PlanForCarga> = {}): PlanForCarga => ({
-    status: "ativo",
+    endDate: null,
     postsCarrossel: 2,
     postsReels: 2,
     postsEstatico: 1,
@@ -38,9 +38,9 @@ describe("aggregateCargaPlanejada", () => {
     expect(carga.avulsos).toBe(3);
   });
 
-  it("exclui planos cancelados (predecessor de reajuste / encerrado vira 'cancelado')", () => {
+  it("exclui planos encerrados (endDate preenchida — predecessor de reajuste / cancelado)", () => {
     const carga = aggregateCargaPlanejada({
-      plans: [plan(), plan({ status: "cancelado" })],
+      plans: [plan(), plan({ endDate: "2026-05-31" })],
       avulsosCount: 0,
     });
     // só o plano ativo conta — sem double-count do cancelado

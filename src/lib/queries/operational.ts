@@ -1,7 +1,7 @@
 import { db } from "../db";
 import * as schema from "../db/schema";
 import { TETO_OPERACIONAL_UO, type AgendaStatus, type ScoreBandKey } from "../constants";
-import { calcularUnidadesOperacionais } from "../utils/calculations";
+import { calcularUnidadesOperacionais, isPlanoAtivo } from "../utils/calculations";
 import {
   calcScoreOperacional,
   interpretarScore,
@@ -46,7 +46,7 @@ function periodRank(p: OperationalCheckRow["period"]): number {
 // mês), não a produção realizada. Usada para pré-preencher o check (editável).
 
 export interface PlanForCarga {
-  status: string;
+  endDate: string | null;
   postsCarrossel: number;
   postsReels: number;
   postsEstatico: number;
@@ -65,17 +65,17 @@ export interface CargaPlanejada {
   avulsos: number;
 }
 
-// Mesma definição da página Planos (planos-client.tsx): carteira ATIVA por
-// status (`status === "ativo"`). Isso já exclui predecessores de reajuste — que
-// viram "cancelado" — e demais cancelados, sem double-count. "Posts totais" =
-// conteúdo (carrossel + reels + estático), SEM tráfego (setor à parte, igual ao
-// "conteúdo" do Planos). UO usa os pesos por plano.
+// Carteira ATIVA pela definição canônica (isPlanoAtivo: sem endDate) — mesma da
+// página Planos e do Dashboard. Exclui predecessores de reajuste (têm endDate) e
+// cancelados, sem double-count. "Posts totais" = conteúdo (carrossel + reels +
+// estático), SEM tráfego (setor à parte, igual ao "conteúdo" do Planos). UO usa
+// os pesos por plano.
 export function aggregateCargaPlanejada(input: {
   plans: PlanForCarga[];
   avulsosCount: number;
 }): CargaPlanejada {
   const { plans, avulsosCount } = input;
-  const ativos = plans.filter((p) => p.status === "ativo");
+  const ativos = plans.filter(isPlanoAtivo);
 
   let carrosseis = 0;
   let reels = 0;
@@ -118,7 +118,7 @@ export async function getCargaPlanejada(database: any, month: string): Promise<C
   ).length;
 
   const plans: PlanForCarga[] = allPlans.map((p: any) => ({
-    status: p.status,
+    endDate: p.endDate ?? null,
     postsCarrossel: p.postsCarrossel,
     postsReels: p.postsReels,
     postsEstatico: p.postsEstatico,
@@ -246,7 +246,7 @@ export async function getOperationalPageData(): Promise<OperationalPageData> {
   ]);
 
   const activeClientIds = new Set(
-    allPlans.filter((p) => p.status === "ativo" && !p.endDate).map((p) => p.clientId)
+    allPlans.filter(isPlanoAtivo).map((p) => p.clientId)
   );
   const activeClients: ActiveClientOption[] = allClients
     .filter((c) => activeClientIds.has(c.id))

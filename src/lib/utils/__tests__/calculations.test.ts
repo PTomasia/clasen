@@ -9,6 +9,7 @@ import {
   assertBillingDays,
   isDataPassada,
   calcularPermanenciaCliente,
+  isPlanoAtivo,
 } from "../calculations";
 
 // ─── $/post ────────────────────────────────────────────────────────────────────
@@ -502,5 +503,20 @@ describe("calcularPermanenciaCliente", () => {
         refDate
       )
     ).toBe(12);
+  });
+});
+
+describe("isPlanoAtivo (definição canônica única)", () => {
+  it("ativo = sem endDate; encerrado = com endDate", () => {
+    expect(isPlanoAtivo({ endDate: null })).toBe(true);
+    expect(isPlanoAtivo({ endDate: undefined })).toBe(true);
+    expect(isPlanoAtivo({ endDate: "2026-06-05" })).toBe(false);
+  });
+
+  it("ignora o campo status (endDate é a fonte da verdade)", () => {
+    // Dado dessincronizado (status divergente) não muda o veredito — a
+    // higiene status⇔endDate é vigiada pela curadoria (diag-dashboard).
+    expect(isPlanoAtivo({ endDate: null, status: "cancelado" } as never)).toBe(true);
+    expect(isPlanoAtivo({ endDate: "2026-01-01", status: "ativo" } as never)).toBe(false);
   });
 });

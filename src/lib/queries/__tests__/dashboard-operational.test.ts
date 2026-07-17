@@ -188,6 +188,21 @@ describe("aggregateOperationalEvolution — postsTotal e ticketPorPost", () => {
     const apr = result.find((r) => r.month === "2026-04")!;
     // 4 + 2 + 2×0.5 + 1 = 8
     expect(apr.postsTotal).toBe(8);
+    // Quantidade bruta de conteúdo: 4 + 2 + 2 (sem tráfego, sem ponderação)
+    expect(apr.postsConteudo).toBe(8);
+  });
+
+  it("postsConteudo é bruto e sem tráfego (difere do ponderado)", () => {
+    const plans = [
+      plan({
+        id: 1, clientId: 1, startDate: "2025-08-01",
+        postsCarrossel: 2, postsReels: 1, postsEstatico: 4, postsTrafego: 3,
+      }),
+    ];
+    const result = aggregateOperationalEvolution({ plans, today: TODAY });
+    const apr = result.find((r) => r.month === "2026-04")!;
+    expect(apr.postsConteudo).toBe(7); // 2+1+4 — tráfego fora
+    expect(apr.postsTotal).toBe(8); // 2+1+4×0.5+3 — equivalentes com tráfego
   });
 
   it("ticketPorPost = MRR_mês / postsTotal", () => {

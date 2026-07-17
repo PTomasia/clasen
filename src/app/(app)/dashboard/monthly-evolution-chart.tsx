@@ -113,57 +113,16 @@ function formatCompactBRL(v: number): string {
   return v.toFixed(0);
 }
 
-// Recharts 3 LabelList content props para barras stackeadas
-type StackLabelProps = {
-  x?: number;
-  y?: number;
-  width?: number;
-  height?: number;
-  index?: number;
-  value?: number;
-};
-
-type ChartRow = {
-  label: string;
-  "Rec. recorrente": number;
-  "Rec. avulsa": number;
-  Despesa: number;
-  Lucro: number;
-  lucroRaw: number;
-  receitaTotal: number;
-};
-
-// Renderer custom para o total de receita acima de uma barra do stack.
-// Decide por linha (via `shouldRender`) se a label aparece nesta barra ou
-// na sibling. Posiciona o texto acima do segmento usando os props de
-// geometria que o Recharts injeta.
-function renderStackTotalLabel(
-  props: StackLabelProps,
-  chartData: ChartRow[],
-  shouldRender: (row: ChartRow) => boolean,
-  fill: string
-) {
-  const idx = props.index ?? -1;
-  const row = chartData[idx];
-  if (!row) return null;
-  if (!shouldRender(row)) return null;
-  const total = row.receitaTotal ?? 0;
-  const text = formatCompactBRL(total);
-  if (!text) return null;
-  const x = (props.x ?? 0) + (props.width ?? 0) / 2;
-  const y = (props.y ?? 0) - 4;
-  return (
-    <text
-      x={x}
-      y={y}
-      textAnchor="middle"
-      fontSize={10}
-      fontWeight={600}
-      fill={fill}
-    >
-      {text}
-    </text>
-  );
+// Formatters de label filtrados por sinal (para desenhar lucro e déficit em
+// cores distintas sem `content` custom — o content com geometria manual não
+// recebia `index` de forma confiável no Recharts 3 e o label sumia).
+function formatOnlyPositive(v: unknown): string {
+  const n = typeof v === "number" ? v : 0;
+  return n > 0 ? formatCompactBRL(n) : "";
+}
+function formatOnlyNegative(v: unknown): string {
+  const n = typeof v === "number" ? v : 0;
+  return n < 0 ? formatCompactBRL(n) : "";
 }
 
 // ─── Custom Legend ────────────────────────────────────────────────────────────
@@ -304,23 +263,21 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 fill="var(--primary)"
                 radius={[0, 0, 0, 0]}
               >
-                {/* Receita total (recorrente + avulsa) renderiza nesta barra
-                    quando avulsa = 0 ou está oculta — caso contrário o label
-                    fica na barra avulsa (topo do stack). Recharts 3 removeu
-                    label.valueAccessor; LabelList com content é a API canônica. */}
-                <LabelList
-                  dataKey="receitaTotal"
-                  content={(props: object) =>
-                    renderStackTotalLabel(
-                      props as StackLabelProps,
-                      chartData,
-                      (row) =>
-                        !isVisible("Rec. avulsa") ||
-                        (row["Rec. avulsa"] ?? 0) === 0,
-                      "var(--primary)"
-                    )
-                  }
-                />
+                {/* Com a avulsa oculta, o total do stack é só a recorrente —
+                    o label mora aqui. Com a avulsa visível, o label do total
+                    fica na barra do topo do stack (avulsa, abaixo). */}
+                {!isVisible("Rec. avulsa") && (
+                  <LabelList
+                    dataKey="Rec. recorrente"
+                    position="top"
+                    fontSize={10}
+                    fontWeight={600}
+                    fill="var(--primary)"
+                    formatter={(v: unknown) =>
+                      formatCompactBRL(typeof v === "number" ? v : 0)
+                    }
+                  />
+                )}
               </Bar>
             )}
             {isVisible("Rec. avulsa") && (
@@ -330,15 +287,17 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 fill="#a3b545"
                 radius={[4, 4, 0, 0]}
               >
+                {/* Barra do topo do stack: position="top" fica acima do stack
+                    inteiro (mesmo quando a avulsa do mês é 0). dataKey diferente
+                    da barra mostra o TOTAL; a geometria vem da barra pai. */}
                 <LabelList
                   dataKey="receitaTotal"
-                  content={(props: object) =>
-                    renderStackTotalLabel(
-                      props as StackLabelProps,
-                      chartData,
-                      (row) => (row["Rec. avulsa"] ?? 0) > 0,
-                      "var(--primary)"
-                    )
+                  position="top"
+                  fontSize={10}
+                  fontWeight={600}
+                  fill="var(--primary)"
+                  formatter={(v: unknown) =>
+                    formatCompactBRL(typeof v === "number" ? v : 0)
                   }
                 />
               </Bar>
@@ -369,15 +328,24 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
                 radius={[4, 4, 0, 0]}
                 opacity={0.9}
               >
+                {/* Dois labels filtrados por sinal: lucro em verde; déficit em
+                    vermelho SEM barra (a barra zera no chartData) — o número
+                    negativo aparece rente ao eixo, no lugar da barra ausente. */}
                 <LabelList
-                  dataKey="Lucro"
+                  dataKey="lucroRaw"
                   position="top"
                   fontSize={10}
                   fontWeight={600}
                   fill="#15803d"
-                  formatter={(v: unknown) =>
-                    formatCompactBRL(typeof v === "number" ? v : 0)
-                  }
+                  formatter={formatOnlyPositive}
+                />
+                <LabelList
+                  dataKey="lucroRaw"
+                  position="top"
+                  fontSize={10}
+                  fontWeight={600}
+                  fill="var(--destructive)"
+                  formatter={formatOnlyNegative}
                 />
               </Bar>
             )}
@@ -385,8 +353,9 @@ export function MonthlyEvolutionChart({ pnl, range }: { pnl: PnLData; range?: Ti
         </ResponsiveContainer>
         <InteractiveLegend isVisible={isVisible} onToggle={toggle} />
         <p className="text-xs text-muted-foreground mt-2">
-          Receita recorrente + avulsa empilhadas. Despesa e Lucro líquido (≥ 0)
-          em barras separadas. Dados a partir de jan/2026.
+          Receita recorrente + avulsa empilhadas (total no topo). Despesa e
+          Lucro líquido em barras separadas — mês com déficit não desenha barra,
+          mas mostra o valor em vermelho. Dados a partir de jan/2026.
         </p>
       </div>
     </div>

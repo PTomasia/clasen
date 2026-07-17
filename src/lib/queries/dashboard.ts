@@ -16,6 +16,7 @@ import {
   calcularPermanenciaCliente,
   calcularTotalPostsEquivalentes,
   calcularUnidadesOperacionais,
+  isPlanoAtivo,
 } from "../utils/calculations";
 import { calculateGapsForPlan } from "../services/plans";
 import { getSetting } from "../services/settings";
@@ -153,7 +154,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
 
   // ─── Planos ativos ─────────────────────────────────────────────────
-  const activePlans = allPlans.filter((p) => p.status === "ativo" && !p.endDate);
+  const activePlans = allPlans.filter(isPlanoAtivo);
 
   // KPIs
   const clientesAtivosSet = new Set(activePlans.map((p) => p.clientId));
@@ -199,7 +200,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     const tenure = calcularPermanenciaCliente(client, plans, now);
     if (tenure === null) continue;
 
-    const isAtivo = plans.some((p) => !p.endDate);
+    const isAtivo = plans.some(isPlanoAtivo);
     tenures.push({ clientId: client.id, tenure, isAtivo });
   }
 
@@ -355,7 +356,10 @@ export interface OperationalMonth {
   month: string; // YYYY-MM
   label: string; // "abr/26"
   clientesAtivos: number;
+  /** Carga ponderada em UO (carrossel/reels com peso, estático 0.5, sem tráfego) */
   postsTotal: number;
+  /** Quantidade bruta de posts de conteúdo (carrossel + reels + estático, sem tráfego) */
+  postsConteudo: number;
   ticketPorPost: number | null;
 }
 
@@ -498,7 +502,7 @@ export function aggregateResumoMensal(input: {
 export function aggregatePostsPorCliente(
   plans: PlanForOperational[]
 ): PostsPorClienteResult {
-  const ativos = plans.filter((p) => p.endDate === null);
+  const ativos = plans.filter(isPlanoAtivo);
   const clientesSet = new Set(ativos.map((p) => p.clientId));
   const clientes = clientesSet.size;
   // Carga operacional em UO (social media, sem tráfego). Arredonda em 2 casas
@@ -548,6 +552,11 @@ export function aggregateOperationalEvolution(input: {
       0
     );
 
+    const postsConteudo = activeInMonth.reduce(
+      (sum, p) => sum + p.postsCarrossel + p.postsReels + p.postsEstatico,
+      0
+    );
+
     const mrrMonth = activeInMonth.reduce((sum, p) => sum + p.planValue, 0);
     const ticketPorPost =
       postsTotal > 0 ? Math.round((mrrMonth / postsTotal) * 100) / 100 : null;
@@ -557,6 +566,7 @@ export function aggregateOperationalEvolution(input: {
       label: monthLabelLower(yyyymm),
       clientesAtivos,
       postsTotal,
+      postsConteudo,
       ticketPorPost,
     });
   }

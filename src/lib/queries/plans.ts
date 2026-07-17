@@ -7,6 +7,7 @@ import {
   calcularProximoVencimento,
   calcularStatusPagamento,
   calcularUnidadesOperacionais,
+  isPlanoAtivo,
 } from "../utils/calculations";
 import { calcularProximoReajuste, calcularSugestaoReajuste } from "../utils/adjustments";
 import {
@@ -80,12 +81,12 @@ export async function getAllPlans() {
 
     // Reajuste: só para planos ativos
     const nextAdjustmentDate =
-      plan.status === "ativo"
+      isPlanoAtivo(plan)
         ? calcularProximoReajuste(plan.startDate, plan.lastAdjustmentDate)
         : null;
 
     const adjustmentSuggestion =
-      plan.status === "ativo" && targetCostPerPost
+      isPlanoAtivo(plan) && targetCostPerPost
         ? calcularSugestaoReajuste({
             planValue: plan.planValue,
             postsCarrossel: plan.postsCarrossel,

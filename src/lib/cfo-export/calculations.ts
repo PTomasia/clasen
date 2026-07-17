@@ -1,6 +1,7 @@
 import type { PnLData, PnLRow } from "../queries/profit-and-loss";
 import type { FinancialParams } from "./financial-params";
 import { calcAliquotaEfetiva } from "../utils/simples-nacional";
+import { isPlanoAtivo } from "../utils/calculations";
 
 // ─── DRE Mensal ───────────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ export interface ReajusteSummary {
 }
 
 export function calcReajusteSummary(plans: PlanForReajuste[]): ReajusteSummary {
-  const ativos = plans.filter((p) => p.status === "ativo" && p.endDate === null);
+  const ativos = plans.filter(isPlanoAtivo);
 
   let mrrAtual = 0;
   let mrrPrevisto = 0;

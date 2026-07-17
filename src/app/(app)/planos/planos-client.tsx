@@ -33,7 +33,7 @@ import {
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatBRL, formatDate, formatMonth, formatUO } from "@/lib/utils/formatting";
 import { cn } from "@/lib/utils";
-import { isDataPassada, type StatusPagamento } from "@/lib/utils/calculations";
+import { isDataPassada, isPlanoAtivo, type StatusPagamento } from "@/lib/utils/calculations";
 import { TETO_OPERACIONAL_UO } from "@/lib/constants";
 import { buildOverdueRows } from "@/lib/utils/overdue";
 import { buildOverdueMarkdown, buildOverdueWhatsApp } from "@/lib/utils/overdue-export";
@@ -477,7 +477,7 @@ export function PlanosClient({
   const hasActiveFilters = search || pgtoFilter !== "todos";
 
   // Cards de resumo — planos ativos
-  const activePlans = useMemo(() => plans.filter((p) => p.status === "ativo"), [plans]);
+  const activePlans = useMemo(() => plans.filter(isPlanoAtivo), [plans]);
   const postsAtuais = useMemo(() => {
     const acc = activePlans.reduce(
       (acc, p) => ({
@@ -1343,6 +1343,10 @@ function OverduePaymentsPanel({
   onOpenHistory: (planId: number, clientName: string) => void;
 }) {
   const overdueRows = useMemo(() => buildOverdueRows(plans), [plans]);
+  const overdueTotal = useMemo(
+    () => overdueRows.reduce((sum, r) => sum + r.rowValue, 0),
+    [overdueRows]
+  );
 
   return (
     <div className="bg-card border rounded-xl p-6 h-full">
@@ -1363,6 +1367,12 @@ function OverduePaymentsPanel({
             />
             <span className="ml-1 text-sm font-mono font-semibold text-accent">
               {overdueRows.length}
+            </span>
+            <span
+              className="text-[11px] font-mono text-muted-foreground"
+              title="Total em aberto (soma das mensalidades atrasadas)"
+            >
+              · {formatBRL(overdueTotal)}
             </span>
           </div>
         )}
