@@ -33,11 +33,40 @@ interface RevenueCompetenciaInput {
   amount: number;
 }
 
+// ─── Recorrente híbrido (exclusivo do fiscal) ─────────────────────────────────
+// A receita TRIBUTÁVEL é a auferida, não a contratada: meses passados usam os
+// pagamentos registrados (pago+pendente); só o mês corrente (ainda em curso)
+// usa o contratado como projeção. O MRR do dashboard virou contratado puro em
+// jul/2026 — esta série híbrida preserva o comportamento fiscal e vive aqui.
+
+function aggregateRecorrenteHibrido(input: {
+  plans: PlanForMrr[];
+  payments: PaymentForMrr[];
+  today: Date;
+  cutoff: string;
+  monthsBack: number;
+}): Array<{ month: string; value: number }> {
+  const { plans, payments, today, cutoff, monthsBack } = input;
+  const currentYyyymm = format(today, "yyyy-MM");
+  const contratado = aggregateMrr({ plans, today, cutoff, monthsBack });
+
+  return contratado.map((p) => {
+    if (p.month === currentYyyymm) return { month: p.month, value: p.value };
+    const value = payments
+      .filter((pay) => {
+        if (pay.paymentDate < cutoff) return false;
+        if (!pay.paymentDate.startsWith(p.month)) return false;
+        return pay.status === "pago" || pay.status === "pendente";
+      })
+      .reduce((sum, pay) => sum + pay.amount, 0);
+    return { month: p.month, value };
+  });
+}
+
 // ─── Receita por competência (série mensal) ───────────────────────────────────
-// Receita bruta de cada mês = MRR recorrente (reusa aggregateMrr: meses passados =
-// pago+pendente, mês corrente = planos ativos contratados) + avulsas por
-// competência (soma one_time_revenues pelo mês do campo `date`, independente de
-// isPaid — competência, não caixa).
+// Receita bruta de cada mês = recorrente híbrido (meses passados = pago+pendente,
+// mês corrente = planos ativos contratados) + avulsas por competência (soma
+// one_time_revenues pelo mês do campo `date`, independente de isPaid).
 
 export function aggregateReceitaCompetencia(input: {
   plans: PlanForMrr[];
@@ -49,7 +78,7 @@ export function aggregateReceitaCompetencia(input: {
 }): ReceitaCompetenciaMes[] {
   const { plans, payments, revenues, today, cutoff, monthsBack = 13 } = input;
 
-  const mrr = aggregateMrr({ plans, payments, today, cutoff, monthsBack });
+  const mrr = aggregateRecorrenteHibrido({ plans, payments, today, cutoff, monthsBack });
 
   // Avulsas por competência (mês do campo date), respeitando o cutoff.
   const avulsasByMonth = new Map<string, number>();

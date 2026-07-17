@@ -207,11 +207,10 @@ export async function getDashboardData(): Promise<DashboardData> {
   const permMedia3M = Math.round(avg(ativosPlus3M));
 
   // ─── MRR últimos 12 meses ─────────────────────────────────────────
-  // Meses passados: realizado (pago + pendente). Mês corrente: contratado
-  // (soma planValue dos planos ativos no mês). Vide aggregateMrr.
+  // Contratado em todos os meses (planos ativos no mês) — não depende de
+  // pagamentos/conciliação. Vide aggregateMrr.
   const mrr = aggregateMrr({
     plans: allPlans,
-    payments: allPayments,
     today: now,
     cutoff: FINANCIAL_DATA_START,
   });
@@ -383,21 +382,21 @@ function unidadesOperacionaisPlano(p: Pick<PlanForOperational,
   );
 }
 
-// ─── Aggregator: MRR híbrido 12 meses ─────────────────────────────────────────
-// Mês passado: soma plan_payments com status IN ('pago','pendente') no mês,
-//   respeitando cutoff. Skipped (amount=0) entra mas não soma.
-// Mês corrente: soma planValue dos planos ativos durante o mês, usando o
-//   mesmo filtro de aggregateOperationalEvolution.
+// ─── Aggregator: MRR contratado 12 meses ──────────────────────────────────────
+// TODOS os meses (passados e corrente): soma planValue dos planos ativos em
+// algum dia do mês (contratado). Não usa pagamentos — MRR mede contrato
+// recorrente, não caixa: conciliação atrasada ou inadimplência não alteram a
+// série (o realizado vive no P&L / DRE). Decisão do Pedro em jul/2026, após o
+// degrau de jun/26 (mês fechava e a série caía do contratado pro realizado).
+// Meses 100% antes do cutoff (FINANCIAL_DATA_START): zerados.
 
 export function aggregateMrr(input: {
   plans: PlanForMrr[];
-  payments: PaymentForMrr[];
   today: Date;
   cutoff: string;
   monthsBack?: number;
 }): MRRPoint[] {
-  const { plans, payments, today, cutoff, monthsBack = 12 } = input;
-  const currentYyyymm = format(today, "yyyy-MM");
+  const { plans, today, cutoff, monthsBack = 12 } = input;
   const result: MRRPoint[] = [];
 
   for (let i = monthsBack - 1; i >= 0; i--) {
@@ -413,11 +412,7 @@ export function aggregateMrr(input: {
 
     let value = 0;
 
-    if (lastDay < cutoff) {
-      // Mês inteiro antes do cutoff: zerado
-      value = 0;
-    } else if (yyyymm === currentYyyymm) {
-      // Mês corrente: soma planos ativos durante o mês (contratado).
+    if (lastDay >= cutoff) {
       const active = plans.filter(
         (p) =>
           p.startDate <= lastDay &&
@@ -432,15 +427,6 @@ export function aggregateMrr(input: {
       value = active
         .filter((p) => !successorKeys.has(`${p.clientId}|${p.startDate}`))
         .reduce((sum, p) => sum + p.planValue, 0);
-    } else {
-      // Mês passado: soma pagamentos realizados (pago + pendente)
-      value = payments
-        .filter((p) => {
-          if (p.paymentDate < cutoff) return false;
-          if (!p.paymentDate.startsWith(yyyymm)) return false;
-          return p.status === "pago" || p.status === "pendente";
-        })
-        .reduce((sum, p) => sum + p.amount, 0);
     }
 
     result.push({ month: yyyymm, label: monthLabel(yyyymm), value });

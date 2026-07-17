@@ -19,7 +19,7 @@ import { Calendar, BarChart3, Info, Landmark } from "lucide-react";
 import type { TaxEstimateData } from "@/lib/queries/tax-estimate";
 
 const MRR_VS_RECEITA_HINT =
-  "O MRR do mês corrente soma os planos ativos em qualquer dia do mês (inclui quem saiu no meio do mês e usa o valor pré-reajuste). A Receita bruta mensal é uma foto dos planos ativos hoje — por isso os dois podem divergir.";
+  "O MRR é o CONTRATADO: soma os planos ativos em qualquer dia de cada mês (quem saiu no meio do mês conta; no mês de reajuste vale o valor antigo). Não depende de pagamentos — inadimplência ou conciliação atrasada não mudam a curva; o realizado fica no P&L. A Receita bruta mensal é uma foto dos planos ativos hoje — por isso os dois podem divergir.";
 import { EmptyState } from "@/components/shared/empty-state";
 import type {
   DashboardData,

@@ -3,6 +3,12 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
+## PR #8 — MRR contratado + curadoria de dados do dashboard (2026-07-18)
+
+- **MRR do dashboard agora é 100% contratado** (decisão do Pedro): todos os meses somam o `plan_value` dos planos ativos em algum dia do mês. Antes era híbrido (passado = pagamentos realizados, corrente = contratado), o que fazia o mês "despencar" ao fechar se a conciliação estivesse atrasada (caso jun/2026: R$ 10.314 realizado vs R$ 21.145 contratado). Inadimplência e conciliação não alteram mais a curva — o realizado segue no P&L.
+- **Fiscal preservado**: o DAS (tax-estimate) continua usando a série híbrida — imposto tributa receita auferida, não contrato. A lógica virou `aggregateRecorrenteHibrido`, exclusiva do fiscal.
+- **Ferramenta de curadoria**: `src/scripts/diag-dashboard.ts` (read-only) audita planos, reajustes encadeados, clientes duplicados, pagamentos fora de janela e projeta a série do MRR. Rodar: `npx tsx --env-file=.env src/scripts/diag-dashboard.ts`.
+
 ## PR #7 — Multiplanos: auto-resolve pelo valor na conciliação (2026-06-23)
 
 Suporte fino a cliente com 2 planos ativos (ex.: social media + tráfego na mesma cliente):
