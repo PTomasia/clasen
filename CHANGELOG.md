@@ -3,7 +3,11 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
-## PR #9 — Evolução operacional vira Social media (2026-07-19)
+## PR #10 — Nomes dos churned no hover (2026-07-20, `785dbf8`)
+
+- **Aquisição**: o número de Churned de cada mês ganhou tooltip no hover com os nomes de quem saiu naquele mês (sublinhado pontilhado sinaliza; ordem alfabética). `MonthRow.churnedNames` sai do mesmo loop do churn — tooltip e número nunca divergem.
+
+## PR #9 — Evolução operacional vira Social media (2026-07-19, `44c9d14`)
 
 - **Tráfego fora do gráfico de evolução operacional** (decisão do Pedro): "Posts/mês" agora soma só social media ponderado (carrossel + reels + estático×0,5 — antes o tráfego contava 1). **Ticket/post** passa a dividir apenas a receita dos planos que produzem conteúdo (plano puro-tráfego não infla mais o ticket). Título renomeado para **"Evolução operacional — Social media"**; hints do gráfico e da tabela Resumo mensal atualizados (a coluna "Posts equiv." herda a mudança automaticamente).
 
