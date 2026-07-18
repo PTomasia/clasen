@@ -382,17 +382,18 @@ function monthLabelLower(yyyymm: string): string {
 }
 
 // Posts ponderados da EVOLUÇÃO operacional (gráfico "Posts/mês", 12 meses).
-// Métrica histórica: estático conta 0,5 e tráfego conta 1, SEM redutor (os pesos
-// são do estado atual do plano e não se aplicam retroativamente a meses passados).
+// SOCIAL MEDIA apenas: estático conta 0,5; tráfego fica FORA (setor à parte,
+// igual à carga UO e ao hero de /planos — decisão do Pedro em jul/2026).
+// SEM redutor (os pesos são do estado atual do plano e não se aplicam
+// retroativamente a meses passados).
 function postsPonderados(p: Pick<PlanForOperational,
-  "postsCarrossel" | "postsReels" | "postsEstatico" | "postsTrafego">
+  "postsCarrossel" | "postsReels" | "postsEstatico">
 ): number {
-  const equivalentes = calcularTotalPostsEquivalentes({
+  return calcularTotalPostsEquivalentes({
     carrossel: p.postsCarrossel,
     reels: p.postsReels,
     estatico: p.postsEstatico,
   });
-  return equivalentes + p.postsTrafego;
 }
 
 // Carga operacional (UO) do plano: social media com redutor, SEM tráfego (setor à
@@ -557,9 +558,14 @@ export function aggregateOperationalEvolution(input: {
       0
     );
 
-    const mrrMonth = activeInMonth.reduce((sum, p) => sum + p.planValue, 0);
+    // Ticket/post SOCIAL: receita apenas dos planos que produzem conteúdo.
+    // Plano puro-tráfego (0 posts sociais) fora do numerador — senão a receita
+    // de tráfego dividida por posts de social inflaria o ticket artificialmente.
+    const mrrSocial = activeInMonth
+      .filter((p) => p.postsCarrossel + p.postsReels + p.postsEstatico > 0)
+      .reduce((sum, p) => sum + p.planValue, 0);
     const ticketPorPost =
-      postsTotal > 0 ? Math.round((mrrMonth / postsTotal) * 100) / 100 : null;
+      postsTotal > 0 ? Math.round((mrrSocial / postsTotal) * 100) / 100 : null;
 
     result.push({
       month: yyyymm,

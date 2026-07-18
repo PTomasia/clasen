@@ -130,10 +130,10 @@ export function OperationalEvolutionChart({
   return (
     <div className="bg-card border rounded-lg p-5">
       <h2 className="font-semibold mb-4 flex items-center gap-1.5">
-        Evolução operacional
+        Evolução operacional — Social media
         <span
           className="text-muted-foreground text-xs cursor-help"
-          title="Clientes ativos: planos com end_date NULL ou posterior ao mês. Posts/mês: soma ponderada (estático conta 0,5; tráfego conta 1). Ticket/post: MRR do mês ÷ posts do mês. Mês com 0 posts mostra ticket vazio."
+          title="Clientes ativos: planos com end_date NULL ou posterior ao mês. Posts/mês: soma ponderada de SOCIAL MEDIA (estático conta 0,5; tráfego fica fora — setor à parte). Ticket/post: receita dos planos que produzem conteúdo ÷ posts do mês (planos só de tráfego não entram). Mês com 0 posts mostra ticket vazio."
         >
           ⓘ
         </span>

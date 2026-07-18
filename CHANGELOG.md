@@ -3,6 +3,10 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
+## PR #9 — Evolução operacional vira Social media (2026-07-19)
+
+- **Tráfego fora do gráfico de evolução operacional** (decisão do Pedro): "Posts/mês" agora soma só social media ponderado (carrossel + reels + estático×0,5 — antes o tráfego contava 1). **Ticket/post** passa a dividir apenas a receita dos planos que produzem conteúdo (plano puro-tráfego não infla mais o ticket). Título renomeado para **"Evolução operacional — Social media"**; hints do gráfico e da tabela Resumo mensal atualizados (a coluna "Posts equiv." herda a mudança automaticamente).
+
 ## PR #8 — MRR contratado, tabela gerencial e curadoria do dashboard (2026-07-18)
 
 - **Tabela "Resumo mensal"** no dashboard (sob o gráfico de evolução operacional): mês a mês desde jan/2026 — clientes, posts (UO), contratado, ticket médio, realizado, % recebido (com faixas de cor) e nº de pagamentos. Mês corrente marcado "em curso". Leitura: operação → contrato → caixa.
