@@ -120,6 +120,42 @@ describe("aggregateUnitEconomics — churn", () => {
     expect(pickMonth(data, "2025-08").churned).toBe(0); // ainda voltou depois
     expect(pickMonth(data, "2026-03").churned).toBe(1); // último end_date real
   });
+
+  it("churnedNames lista os nomes de quem saiu no mês (ordenados)", () => {
+    const data = aggregateUnitEconomics({
+      plans: [
+        { clientId: 1, planValue: 500, startDate: "2025-01-01", endDate: "2026-02-10" },
+        { clientId: 2, planValue: 300, startDate: "2025-06-01", endDate: "2026-02-20" },
+        { clientId: 3, planValue: 400, startDate: "2025-06-01", endDate: null }, // ativa
+      ],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map(),
+      today: TODAY,
+      clientNames: new Map([
+        [1, "Bia Gracher"],
+        [2, "Ana Silva"],
+        [3, "Carla Ativa"],
+      ]),
+    });
+    const fev = pickMonth(data, "2026-02");
+    expect(fev.churned).toBe(2);
+    expect(fev.churnedNames).toEqual(["Ana Silva", "Bia Gracher"]); // ordem alfabética
+    expect(pickMonth(data, "2026-03").churnedNames).toEqual([]);
+  });
+
+  it("churnedNames sem clientNames usa fallback com o id (compatibilidade)", () => {
+    const data = aggregateUnitEconomics({
+      plans: [
+        { clientId: 7, planValue: 500, startDate: "2025-01-01", endDate: "2026-02-28" },
+      ],
+      payments: [],
+      revenues: [],
+      adSpendMap: new Map(),
+      today: TODAY,
+    });
+    expect(pickMonth(data, "2026-02").churnedNames).toEqual(["Cliente #7"]);
+  });
 });
 
 describe("aggregateUnitEconomics — ativos no início do mês", () => {

@@ -221,7 +221,12 @@ function MonthRowView({ row }: { row: MonthRow }) {
       <TableCell className="text-right font-mono">{row.ativosInicio}</TableCell>
       <TableCell className="text-right font-mono">
         {row.churned > 0 ? (
-          <span className="text-destructive">{row.churned}</span>
+          <span
+            className="cursor-help text-destructive underline decoration-dotted decoration-destructive/40 underline-offset-2"
+            title={`Saíram em ${row.label}:\n${row.churnedNames.join("\n")}`}
+          >
+            {row.churned}
+          </span>
         ) : (
           <span className="text-muted-foreground">0</span>
         )}
