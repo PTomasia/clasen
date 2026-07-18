@@ -25,6 +25,8 @@ export interface MonthRow {
   roas: number | null;
   ativosInicio: number;
   churned: number;
+  /** Nomes dos clientes que saíram no mês (ordem alfabética) — tooltip da UI */
+  churnedNames: string[];
   churnRate: number | null; // 0..1 (count-based)
   revenueChurnRate: number | null; // 0..1 (MRR-based)
 }
@@ -93,6 +95,8 @@ export function aggregateUnitEconomics(input: {
   today: Date;
   financialDataStart?: string;
   permanenciaMedia?: number; // meses; precomputado no IO (mesma base do dashboard)
+  /** id → nome, para nomear os churned de cada mês no tooltip da UI */
+  clientNames?: Map<number, string>;
 }): UnitEconomicsData {
   const { plans, adSpendMap, today, financialDataStart } = input;
   const permanenciaMedia = input.permanenciaMedia ?? 0;
@@ -165,17 +169,20 @@ export function aggregateUnitEconomics(input: {
     }
     const ativosInicio = activeClientIds.size;
 
-    // Churned no mês (count-based) + receita perdida (MRR-based)
+    // Churned no mês (count-based) + receita perdida (MRR-based) + nomes
     let churned = 0;
     let receitaPerdida = 0;
+    const churnedNames: string[] = [];
     for (const [cid, churnDate] of churnDateByClient.entries()) {
       if (monthKey(churnDate) !== m) continue;
       churned++;
+      churnedNames.push(input.clientNames?.get(cid) ?? `Cliente #${cid}`);
       // Soma planValues de todos os planos desse cliente
       for (const p of (plansByClient.get(cid) ?? [])) {
         receitaPerdida += p.planValue;
       }
     }
+    churnedNames.sort((a, b) => a.localeCompare(b, "pt-BR"));
 
     const cac = calcularCAC(adSpend, novosClientes);
     const roas = calcularROAS(receita, adSpend);
@@ -192,6 +199,7 @@ export function aggregateUnitEconomics(input: {
       roas,
       ativosInicio,
       churned,
+      churnedNames,
       churnRate,
       revenueChurnRate,
     };
@@ -304,5 +312,6 @@ export async function getUnitEconomicsData(): Promise<UnitEconomicsData> {
     today: now,
     financialDataStart: FINANCIAL_DATA_START,
     permanenciaMedia,
+    clientNames: new Map(clients.map((c) => [c.id, c.name])),
   });
 }
