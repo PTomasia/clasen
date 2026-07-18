@@ -39,7 +39,7 @@ import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
 const RESUMO_MENSAL_HINT =
-  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos registrados com data no mês (pago + pendente) — conciliação atrasada reduz este número, não o contratado. % Recebido = realizado ÷ contratado. Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima (estático 0,5 + tráfego 1, sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga). Ticket médio = contratado ÷ clientes.";
+  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos registrados com data no mês (pago + pendente) — conciliação atrasada reduz este número, não o contratado. % Recebido = realizado ÷ contratado. Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes.";
 
 // Tabela gerencial mensal: operação (clientes, posts) → contrato (MRR, ticket)
 // → caixa (realizado, % recebido, nº de pagamentos). Mais recente no topo.

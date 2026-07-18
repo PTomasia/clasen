@@ -176,8 +176,8 @@ describe("aggregateOperationalEvolution — clientesAtivos", () => {
   });
 });
 
-describe("aggregateOperationalEvolution — postsTotal e ticketPorPost", () => {
-  it("soma posts ponderados de planos ativos no mês", () => {
+describe("aggregateOperationalEvolution — postsTotal e ticketPorPost (social media, sem tráfego)", () => {
+  it("soma posts ponderados de social media — tráfego fica fora", () => {
     const plans = [
       plan({
         id: 1, clientId: 1, startDate: "2025-08-01",
@@ -186,13 +186,13 @@ describe("aggregateOperationalEvolution — postsTotal e ticketPorPost", () => {
     ];
     const result = aggregateOperationalEvolution({ plans, today: TODAY });
     const apr = result.find((r) => r.month === "2026-04")!;
-    // 4 + 2 + 2×0.5 + 1 = 8
-    expect(apr.postsTotal).toBe(8);
+    // 4 + 2 + 2×0.5 = 7 — o 1 de tráfego NÃO entra
+    expect(apr.postsTotal).toBe(7);
     // Quantidade bruta de conteúdo: 4 + 2 + 2 (sem tráfego, sem ponderação)
     expect(apr.postsConteudo).toBe(8);
   });
 
-  it("postsConteudo é bruto e sem tráfego (difere do ponderado)", () => {
+  it("postsConteudo é bruto; postsTotal é ponderado — ambos sem tráfego", () => {
     const plans = [
       plan({
         id: 1, clientId: 1, startDate: "2025-08-01",
@@ -202,7 +202,7 @@ describe("aggregateOperationalEvolution — postsTotal e ticketPorPost", () => {
     const result = aggregateOperationalEvolution({ plans, today: TODAY });
     const apr = result.find((r) => r.month === "2026-04")!;
     expect(apr.postsConteudo).toBe(7); // 2+1+4 — tráfego fora
-    expect(apr.postsTotal).toBe(8); // 2+1+4×0.5+3 — equivalentes com tráfego
+    expect(apr.postsTotal).toBe(5); // 2+1+4×0.5 — tráfego fora
   });
 
   it("ticketPorPost = MRR_mês / postsTotal", () => {
@@ -215,6 +215,25 @@ describe("aggregateOperationalEvolution — postsTotal e ticketPorPost", () => {
     const result = aggregateOperationalEvolution({ plans, today: TODAY });
     const apr = result.find((r) => r.month === "2026-04")!;
     expect(apr.ticketPorPost).toBe(200); // 800 / 4
+  });
+
+  it("plano puro-tráfego não entra em posts NEM na receita do ticket/post", () => {
+    const plans = [
+      plan({
+        id: 1, clientId: 1, startDate: "2025-08-01", planValue: 800,
+        postsCarrossel: 4,
+      }),
+      // Plano só de tráfego (0 posts de conteúdo): fora do gráfico social
+      plan({
+        id: 2, clientId: 2, startDate: "2025-08-01", planValue: 400,
+        postsCarrossel: 0, postsReels: 0, postsEstatico: 0, postsTrafego: 5,
+      }),
+    ];
+    const result = aggregateOperationalEvolution({ plans, today: TODAY });
+    const apr = result.find((r) => r.month === "2026-04")!;
+    expect(apr.postsTotal).toBe(4);
+    // 800/4 = 200 — os R$400 do tráfego NÃO inflam o ticket (seria 300)
+    expect(apr.ticketPorPost).toBe(200);
   });
 
   it("ticketPorPost é null quando postsTotal=0", () => {
