@@ -39,7 +39,7 @@ import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
 const RESUMO_MENSAL_HINT =
-  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — regime de CAIXA: pagamento atrasado conta no mês em que caiu. Real. total = Realizado + receitas avulsas pagas no mês. % Pago / % Cong. / % Atr. = regime de COMPETÊNCIA: dos vencimentos daquele mês, quantos foram pagos, congelados ou seguem em aberto (mesma engine dos atrasados; no mês corrente só contam vencimentos que já venceram). Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes.";
+  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — regime de CAIXA: pagamento atrasado conta no mês em que caiu. Real. total = Realizado + receitas avulsas pagas no mês. % Pago / % Cong. / % Atr. = regime de COMPETÊNCIA: dos vencimentos daquele mês, quantos foram pagos, congelados ou seguem em aberto (mesma engine dos atrasados; no mês corrente só contam vencimentos que já venceram). Churn = clientes que encerraram todos os planos no mês (nomes no hover; mesma regra da Aquisição). Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes. Linha Média = médias dos meses fechados (exclui o em curso); percentuais agregados do período.";
 
 // Tabela gerencial mensal: operação (clientes, posts) → contrato (MRR, ticket)
 // → caixa (realizado, % recebido, nº de pagamentos). Mais recente no topo.
@@ -55,6 +55,47 @@ function ResumoMensalTable({
   const currentMonth = resumo[resumo.length - 1]?.month;
   const rows = [...resumo].reverse();
 
+  // Linha de médias: só meses FECHADOS (o mês em curso distorceria caixa e
+  // cobrança para baixo). Percentuais são agregados (Σ/Σ), não média de %.
+  const fechados = resumo.filter((r) => r.month !== currentMonth);
+  const media = (() => {
+    if (fechados.length === 0) return null;
+    const n = fechados.length;
+    const sum = (f: (r: (typeof fechados)[number]) => number) =>
+      fechados.reduce((s, r) => s + f(r), 0);
+    const ops = fechados
+      .map((r) => opByMonth.get(r.month))
+      .filter((o): o is OperationalMonth => !!o);
+    const cobTotais = fechados.reduce(
+      (acc, r) => {
+        if (r.cobranca) {
+          acc.vencimentos += r.cobranca.vencimentos;
+          acc.pagos += r.cobranca.pagos;
+          acc.congelados += r.cobranca.congelados;
+          acc.abertos += r.cobranca.abertos;
+        }
+        return acc;
+      },
+      { vencimentos: 0, pagos: 0, congelados: 0, abertos: 0 }
+    );
+    return {
+      n,
+      clientes: ops.length > 0 ? ops.reduce((s, o) => s + o.clientesAtivos, 0) / ops.length : null,
+      posts: ops.length > 0 ? ops.reduce((s, o) => s + o.postsConteudo, 0) / ops.length : null,
+      postsEquiv: ops.length > 0 ? ops.reduce((s, o) => s + o.postsTotal, 0) / ops.length : null,
+      contratado: sum((r) => r.contratado) / n,
+      realizado: sum((r) => r.realizado) / n,
+      realizadoTotal: sum((r) => r.realizado + r.avulsas) / n,
+      pagamentos: sum((r) => r.pagamentos) / n,
+      churned: sum((r) => r.churned) / n,
+      cob: cobTotais.vencimentos > 0 ? cobTotais : null,
+    };
+  })();
+  const mediaTicket =
+    media && media.clientes && media.clientes > 0 ? media.contratado / media.clientes : null;
+  const pctMedia = (num: number) =>
+    media?.cob ? `${((num / media.cob.vencimentos) * 100).toFixed(0)}%` : "—";
+
   return (
     <div className="bg-card border rounded-lg overflow-x-auto">
       <div className="flex items-center gap-2 p-4 pb-3">
@@ -68,6 +109,7 @@ function ResumoMensalTable({
           <TableRow>
             <TableHead>Mês</TableHead>
             <TableHead className="text-right">Clientes</TableHead>
+            <TableHead className="text-right">Churn</TableHead>
             <TableHead className="text-right">Posts</TableHead>
             <TableHead className="text-right">Posts equiv.</TableHead>
             <TableHead className="text-right">Contratado</TableHead>
@@ -103,6 +145,18 @@ function ResumoMensalTable({
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {op?.clientesAtivos ?? "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {r.churned > 0 ? (
+                    <span
+                      className="cursor-help text-destructive underline decoration-dotted decoration-destructive/40 underline-offset-2"
+                      title={`Saíram em ${r.label}:\n${r.churnedNames.join("\n")}`}
+                    >
+                      {r.churned}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {op?.postsConteudo ?? "—"}
@@ -161,6 +215,69 @@ function ResumoMensalTable({
               </TableRow>
             );
           })}
+          {media && (
+            <TableRow className="border-t-2 bg-muted/30 font-medium">
+              <TableCell
+                className="whitespace-nowrap"
+                title={`Média de ${media.n} ${media.n === 1 ? "mês fechado" : "meses fechados"} (exclui o mês em curso). Percentuais são agregados do período (total pago ÷ total de vencimentos).`}
+              >
+                Média
+                <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                  {media.n}m
+                </span>
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {media.clientes !== null ? Math.round(media.clientes) : "—"}
+              </TableCell>
+              <TableCell
+                className={cn(
+                  "text-right tabular-nums",
+                  media.churned > 0 ? "text-destructive" : "text-muted-foreground"
+                )}
+                title="Média de clientes que saíram por mês (meses fechados)"
+              >
+                {media.churned.toFixed(1).replace(".", ",")}
+              </TableCell>
+              <TableCell className="text-right tabular-nums">
+                {media.posts !== null ? Math.round(media.posts) : "—"}
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-muted-foreground">
+                {media.postsEquiv !== null ? formatUO(media.postsEquiv) : "—"}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
+                {formatBRL(media.contratado)}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                {mediaTicket !== null ? formatBRL(mediaTicket) : "—"}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
+                {formatBRL(media.realizado)}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
+                {formatBRL(media.realizadoTotal)}
+              </TableCell>
+              <TableCell
+                className="text-right font-mono tabular-nums"
+                title={media.cob ? `${media.cob.pagos} de ${media.cob.vencimentos} vencimentos pagos no período` : undefined}
+              >
+                {pctMedia(media.cob?.pagos ?? 0)}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums text-muted-foreground">
+                {pctMedia(media.cob?.congelados ?? 0)}
+              </TableCell>
+              <TableCell
+                className={cn(
+                  "text-right font-mono tabular-nums",
+                  media.cob && media.cob.abertos > 0 ? "text-destructive" : "text-muted-foreground"
+                )}
+              >
+                {pctMedia(media.cob?.abertos ?? 0)}
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-muted-foreground">
+                {Math.round(media.pagamentos)}
+              </TableCell>
+            </TableRow>
+          )}
         </TableBody>
       </Table>
     </div>

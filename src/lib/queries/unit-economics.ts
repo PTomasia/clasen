@@ -84,6 +84,27 @@ function monthKey(dateIso: string): string {
   return dateIso.slice(0, 7);
 }
 
+// ─── Churn: data por cliente ──────────────────────────────────────────────────
+// Cliente churnou quando TODOS os seus planos têm end_date; a data do churn é o
+// MAIOR end_date. Fonte única — usada aqui (Aquisição) e no Resumo mensal do
+// dashboard, para os números nunca divergirem entre telas.
+
+export function computeChurnDateByClient(
+  plans: ReadonlyArray<{ clientId: number; endDate: string | null }>
+): Map<number, string> {
+  const byClient = new Map<number, Array<string | null>>();
+  for (const p of plans) {
+    byClient.set(p.clientId, [...(byClient.get(p.clientId) ?? []), p.endDate]);
+  }
+  const out = new Map<number, string>();
+  for (const [cid, ends] of byClient) {
+    if (ends.some((e) => !e)) continue; // ainda tem plano ativo
+    const lastEnd = (ends as string[]).sort().reverse()[0];
+    out.set(cid, lastEnd);
+  }
+  return out;
+}
+
 // ─── Agregação pura ───────────────────────────────────────────────────────────
 // Separada do IO para ser testável sem mockar DB.
 
@@ -128,13 +149,7 @@ export function aggregateUnitEconomics(input: {
     if (!plansByClient.has(p.clientId)) plansByClient.set(p.clientId, []);
     plansByClient.get(p.clientId)!.push(p);
   }
-  const churnDateByClient = new Map<number, string>();
-  for (const [cid, cps] of plansByClient) {
-    const allClosed = cps.every((p) => !!p.endDate);
-    if (!allClosed) continue;
-    const lastEnd = cps.map((p) => p.endDate as string).sort().reverse()[0];
-    churnDateByClient.set(cid, lastEnd);
-  }
+  const churnDateByClient = computeChurnDateByClient(plans);
 
   // Linhas por mês
   const rows: MonthRow[] = months.map((m) => {

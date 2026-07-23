@@ -23,6 +23,7 @@ import {
   classifyDueDatesForPlan,
   type PlanForGaps,
 } from "../services/plans";
+import { computeChurnDateByClient } from "./unit-economics";
 import { getSetting } from "../services/settings";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -60,6 +61,9 @@ export interface ResumoMensalPoint {
   pagamentos: number; // nº de pagamentos reais (exclui skipped)
   /** Cobrança por COMPETÊNCIA: desfecho dos vencimentos do mês (null = sem vencimentos) */
   cobranca: CobrancaMes | null;
+  /** Clientes que churnaram no mês (mesma engine da Aquisição) */
+  churned: number;
+  churnedNames: string[];
 }
 
 export interface CobrancaMes {
@@ -257,11 +261,22 @@ export async function getDashboardData(): Promise<DashboardData> {
     cutoff: FINANCIAL_DATA_START,
   });
 
+  // Churn por mês (mesma engine da Aquisição): mês do último end_date de quem
+  // ficou sem nenhum plano ativo, com os nomes para o tooltip.
+  const churnedPorMes = new Map<string, string[]>();
+  for (const [cid, churnDate] of computeChurnDateByClient(allPlans)) {
+    const m = churnDate.slice(0, 7);
+    const nome = clientMap.get(cid)?.name ?? `Cliente #${cid}`;
+    churnedPorMes.set(m, [...(churnedPorMes.get(m) ?? []), nome]);
+  }
+  for (const names of churnedPorMes.values()) names.sort((a, b) => a.localeCompare(b, "pt-BR"));
+
   const resumoMensal = aggregateResumoMensal({
     plans: allPlans,
     payments: allPayments,
     revenues: allRevenues as unknown as RevenueForResumo[],
     cobrancaPorMes,
+    churnedPorMes,
     today: now,
     cutoff: FINANCIAL_DATA_START,
   });
@@ -544,11 +559,22 @@ export function aggregateResumoMensal(input: {
   revenues?: RevenueForResumo[];
   /** Cobrança por competência (aggregateCobrancaMensal) — anexada por mês */
   cobrancaPorMes?: Map<string, CobrancaMes>;
+  /** Nomes dos churned por mês (computeChurnDateByClient + nomes) — anexado por mês */
+  churnedPorMes?: Map<string, string[]>;
   today: Date;
   cutoff: string;
   monthsBack?: number;
 }): ResumoMensalPoint[] {
-  const { plans, payments, revenues = [], cobrancaPorMes, today, cutoff, monthsBack = 12 } = input;
+  const {
+    plans,
+    payments,
+    revenues = [],
+    cobrancaPorMes,
+    churnedPorMes,
+    today,
+    cutoff,
+    monthsBack = 12,
+  } = input;
   const contratado = aggregateMrr({ plans, today, cutoff, monthsBack });
   const cutoffMonth = cutoff.slice(0, 7);
 
@@ -565,6 +591,7 @@ export function aggregateResumoMensal(input: {
       const avulsas = revenues
         .filter((r) => r.isPaid && r.date >= cutoff && r.date.startsWith(p.month))
         .reduce((sum, r) => sum + r.amount, 0);
+      const churnedNames = churnedPorMes?.get(p.month) ?? [];
       return {
         month: p.month,
         label: p.label,
@@ -573,6 +600,8 @@ export function aggregateResumoMensal(input: {
         avulsas,
         pagamentos: doMes.length,
         cobranca: cobrancaPorMes?.get(p.month) ?? null,
+        churned: churnedNames.length,
+        churnedNames,
       };
     });
 }
