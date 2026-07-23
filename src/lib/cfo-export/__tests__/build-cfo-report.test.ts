@@ -199,19 +199,29 @@ function buildInput() {
 
 describe("buildCfoReportMarkdown — Contratado × Realizado", () => {
   const resumoMensal = [
-    { month: "2026-03", label: "Mar/26", contratado: 3200, realizado: 3200, avulsas: 350, pagamentos: 2 },
-    { month: "2026-04", label: "Abr/26", contratado: 3200, realizado: 1600, avulsas: 0, pagamentos: 1 },
-    { month: "2026-05", label: "Mai/26", contratado: 3550, realizado: 3200, avulsas: 0, pagamentos: 2 },
+    {
+      month: "2026-03", label: "Mar/26", contratado: 3200, realizado: 3200, avulsas: 350,
+      pagamentos: 2, cobranca: { vencimentos: 2, pagos: 2, congelados: 0, abertos: 0 },
+    },
+    {
+      month: "2026-04", label: "Abr/26", contratado: 3200, realizado: 1600, avulsas: 0,
+      pagamentos: 1, cobranca: { vencimentos: 2, pagos: 1, congelados: 1, abertos: 0 },
+    },
+    {
+      month: "2026-05", label: "Mai/26", contratado: 3550, realizado: 3200, avulsas: 0,
+      pagamentos: 2, cobranca: null,
+    },
   ];
 
-  it("renderiza a série com % recebido e marca o mês corrente como em curso", () => {
+  it("renderiza caixa + competência e marca o mês corrente como em curso", () => {
     const md = buildCfoReportMarkdown({ ...buildInput(), resumoMensal });
     expect(md).toContain("Contratado × Realizado");
     expect(md).toContain("Mar/26");
-    expect(md).toContain("100%"); // março integral
-    expect(md).toContain("50%"); // abril pela metade
+    expect(md).toContain("2/2 (100%)"); // março: todos os vencimentos pagos
+    expect(md).toContain("1/2 (50%)"); // abril: metade paga, 1 congelado
     expect(md).toContain("em curso"); // maio é o mês corrente (NOW = 04/05)
     expect(md).toContain("conciliação"); // ressalva metodológica presente
+    expect(md).toContain("competência"); // metodologia declarada
     // Realizado total = planos + avulsas (março: 3200 + 350)
     expect(md).toContain("Realizado total");
     expect(md).toContain("R$ 3.550,00");

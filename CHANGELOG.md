@@ -3,9 +3,12 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
-## PR #11 — Realizado total (com avulsas) no Resumo mensal (2026-07-20)
+## PR #11 — Realizado total + cobrança por competência no Resumo mensal (2026-07-20)
 
-- Tabela **Resumo mensal** e seção **Contratado × Realizado** do CFO ganharam a coluna **"Real. total"** = realizado de planos + receitas avulsas **pagas** do mês. A coluna "Realizado" segue só com pacotes e o **% Recebido continua realizado de planos ÷ contratado** (mede cobrança do recorrente — avulsas fora de propósito, senão um mês com avulsa grande mascararia mensalidade atrasada). Tooltip da célula mostra a decomposição (pacotes + avulsas).
+- **"Real. total"** na tabela Resumo mensal e no CFO = realizado de planos + receitas avulsas **pagas** do mês (a coluna "Realizado" segue só pacotes — regime de caixa). Tooltip decompõe (pacotes + avulsas).
+- **% Pago / % Cong. / % Atr. por COMPETÊNCIA** (pedido do Pedro): dos **vencimentos daquele mês**, quantos foram pagos, congelados ou seguem em aberto. Substitui o antigo "% Recebido" (híbrido caixa÷contratado, que inflava o mês em que atrasados eram quitados e tratava congelamento como não-recebido). No mês corrente só contam vencimentos já vencidos.
+- **Refactor `classifyDueDatesForPlan`**: a engine de gaps (`calculateGapsForPlan`) agora deriva de uma classificação completa por vencimento (pago/congelado/aberto) — painel de atrasados e % de cobrança saem da **mesma fonte**, sem divergência possível. 170 testes de plans provam a não-regressão.
+- CFO: seção Contratado × Realizado com colunas de vencimentos (pagos x/y (%) · congelados · em aberto) e metodologia caixa × competência declarada.
 
 ## PR #10 — Nomes dos churned no hover (2026-07-20, `785dbf8`)
 

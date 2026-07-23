@@ -39,7 +39,7 @@ import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
 const RESUMO_MENSAL_HINT =
-  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — conciliação atrasada reduz este número, não o contratado. Real. total = Realizado + receitas avulsas pagas no mês (toda a receita que entrou). % Recebido = realizado ÷ contratado — mede a cobrança do recorrente, por isso NÃO usa as avulsas. Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes.";
+  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — regime de CAIXA: pagamento atrasado conta no mês em que caiu. Real. total = Realizado + receitas avulsas pagas no mês. % Pago / % Cong. / % Atr. = regime de COMPETÊNCIA: dos vencimentos daquele mês, quantos foram pagos, congelados ou seguem em aberto (mesma engine dos atrasados; no mês corrente só contam vencimentos que já venceram). Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes.";
 
 // Tabela gerencial mensal: operação (clientes, posts) → contrato (MRR, ticket)
 // → caixa (realizado, % recebido, nº de pagamentos). Mais recente no topo.
@@ -74,7 +74,9 @@ function ResumoMensalTable({
             <TableHead className="text-right">Ticket médio</TableHead>
             <TableHead className="text-right">Realizado</TableHead>
             <TableHead className="text-right">Real. total</TableHead>
-            <TableHead className="text-right">% Recebido</TableHead>
+            <TableHead className="text-right">% Pago</TableHead>
+            <TableHead className="text-right">% Cong.</TableHead>
+            <TableHead className="text-right">% Atr.</TableHead>
             <TableHead className="text-right">Pagtos</TableHead>
           </TableRow>
         </TableHeader>
@@ -84,7 +86,11 @@ function ResumoMensalTable({
             const isCurrent = r.month === currentMonth;
             const ticketMedio =
               op && op.clientesAtivos > 0 ? r.contratado / op.clientesAtivos : null;
-            const pct = r.contratado > 0 ? (r.realizado / r.contratado) * 100 : null;
+            const cob = r.cobranca;
+            const pctOf = (n: number) =>
+              cob && cob.vencimentos > 0
+                ? `${((n / cob.vencimentos) * 100).toFixed(0)}%`
+                : "—";
             return (
               <TableRow key={r.month} className={isCurrent ? "bg-primary/[0.03]" : undefined}>
                 <TableCell className="font-medium whitespace-nowrap">
@@ -126,16 +132,28 @@ function ResumoMensalTable({
                 <TableCell
                   className={cn(
                     "text-right font-mono tabular-nums",
-                    isCurrent || pct === null
-                      ? "text-muted-foreground"
-                      : pct >= 95
-                        ? "text-success"
-                        : pct >= 80
-                          ? "text-amber-600"
-                          : "text-destructive"
+                    !cob || cob.pagos === cob.vencimentos
+                      ? "text-success"
+                      : "text-amber-600"
                   )}
+                  title={cob ? `${cob.pagos} de ${cob.vencimentos} vencimentos pagos` : "Sem vencimentos no mês"}
                 >
-                  {pct === null ? "—" : `${pct.toFixed(0)}%`}
+                  {pctOf(cob?.pagos ?? 0)}
+                </TableCell>
+                <TableCell
+                  className="text-right font-mono tabular-nums text-muted-foreground"
+                  title={cob ? `${cob.congelados} vencimento(s) congelado(s)` : "Sem vencimentos no mês"}
+                >
+                  {pctOf(cob?.congelados ?? 0)}
+                </TableCell>
+                <TableCell
+                  className={cn(
+                    "text-right font-mono tabular-nums",
+                    cob && cob.abertos > 0 ? "text-destructive" : "text-muted-foreground"
+                  )}
+                  title={cob ? `${cob.abertos} vencimento(s) em aberto` : "Sem vencimentos no mês"}
+                >
+                  {pctOf(cob?.abertos ?? 0)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-muted-foreground">
                   {r.pagamentos}

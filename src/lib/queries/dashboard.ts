@@ -18,7 +18,11 @@ import {
   calcularUnidadesOperacionais,
   isPlanoAtivo,
 } from "../utils/calculations";
-import { calculateGapsForPlan } from "../services/plans";
+import {
+  calculateGapsForPlan,
+  classifyDueDatesForPlan,
+  type PlanForGaps,
+} from "../services/plans";
 import { getSetting } from "../services/settings";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -54,6 +58,15 @@ export interface ResumoMensalPoint {
   realizado: number; // pagamentos de PLANO pago+pendente com paymentDate no mês
   avulsas: number; // receitas avulsas PAGAS com date no mês (realizado total = realizado + avulsas)
   pagamentos: number; // nº de pagamentos reais (exclui skipped)
+  /** Cobrança por COMPETÊNCIA: desfecho dos vencimentos do mês (null = sem vencimentos) */
+  cobranca: CobrancaMes | null;
+}
+
+export interface CobrancaMes {
+  vencimentos: number; // vencimentos do mês já vencidos (mês corrente: só até hoje)
+  pagos: number;
+  congelados: number;
+  abertos: number; // = gaps (mesma engine do painel de atrasados)
 }
 
 export interface RevenueForResumo {
@@ -236,10 +249,19 @@ export async function getDashboardData(): Promise<DashboardData> {
     cutoff: FINANCIAL_DATA_START,
   });
 
+  const cobrancaPorMes = aggregateCobrancaMensal({
+    plans: allPlans,
+    paymentsByPlan,
+    today,
+    minDate,
+    cutoff: FINANCIAL_DATA_START,
+  });
+
   const resumoMensal = aggregateResumoMensal({
     plans: allPlans,
     payments: allPayments,
     revenues: allRevenues as unknown as RevenueForResumo[],
+    cobrancaPorMes,
     today: now,
     cutoff: FINANCIAL_DATA_START,
   });
@@ -475,16 +497,58 @@ export function aggregateMrr(input: {
 // nº de pagamentos reais (exclui skipped). Clientes/posts por mês vêm de
 // aggregateOperationalEvolution e são combinados na UI pela chave month.
 
+// ─── Aggregator: cobrança por competência ─────────────────────────────────────
+// Para cada mês, o desfecho dos VENCIMENTOS daquele mês (não do caixa): pagos,
+// congelados e em aberto. Usa classifyDueDatesForPlan — a mesma engine que gera
+// os gaps do painel de atrasados, então os números nunca divergem entre telas.
+
+export function aggregateCobrancaMensal(input: {
+  plans: Array<PlanForGaps & { id: number }>;
+  paymentsByPlan: Map<number, Array<{ paymentDate: string; skipped: boolean }>>;
+  today: string; // YYYY-MM-DD
+  minDate?: string;
+  cutoff: string;
+}): Map<string, CobrancaMes> {
+  const { plans, paymentsByPlan, today, minDate, cutoff } = input;
+  const cutoffMonth = cutoff.slice(0, 7);
+  const out = new Map<string, CobrancaMes>();
+
+  for (const plan of plans) {
+    const classified = classifyDueDatesForPlan(
+      plan,
+      paymentsByPlan.get(plan.id) ?? [],
+      today,
+      minDate
+    );
+    for (const d of classified) {
+      const m = d.dueDate.slice(0, 7);
+      if (m < cutoffMonth) continue;
+      let c = out.get(m);
+      if (!c) {
+        c = { vencimentos: 0, pagos: 0, congelados: 0, abertos: 0 };
+        out.set(m, c);
+      }
+      c.vencimentos++;
+      if (d.status === "pago") c.pagos++;
+      else if (d.status === "congelado") c.congelados++;
+      else c.abertos++;
+    }
+  }
+  return out;
+}
+
 export function aggregateResumoMensal(input: {
   plans: PlanForMrr[];
   payments: PaymentForMrr[];
   /** Receitas avulsas — só as pagas entram no campo `avulsas` */
   revenues?: RevenueForResumo[];
+  /** Cobrança por competência (aggregateCobrancaMensal) — anexada por mês */
+  cobrancaPorMes?: Map<string, CobrancaMes>;
   today: Date;
   cutoff: string;
   monthsBack?: number;
 }): ResumoMensalPoint[] {
-  const { plans, payments, revenues = [], today, cutoff, monthsBack = 12 } = input;
+  const { plans, payments, revenues = [], cobrancaPorMes, today, cutoff, monthsBack = 12 } = input;
   const contratado = aggregateMrr({ plans, today, cutoff, monthsBack });
   const cutoffMonth = cutoff.slice(0, 7);
 
@@ -508,6 +572,7 @@ export function aggregateResumoMensal(input: {
         realizado: doMes.reduce((sum, pay) => sum + pay.amount, 0),
         avulsas,
         pagamentos: doMes.length,
+        cobranca: cobrancaPorMes?.get(p.month) ?? null,
       };
     });
 }
