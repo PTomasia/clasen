@@ -803,15 +803,30 @@ function monthsKeysOf(payments: ReadonlyArray<GapPayment>, predicate: (p: GapPay
   return new Set(payments.filter(predicate).map((p) => p.paymentDate.slice(0, 7)));
 }
 
-function gapsForSingleBilling(
+// ─── Classificação de vencimentos (competência) ───────────────────────────────
+// Um item por vencimento esperado até o effectiveEnd, com o desfecho:
+//   pago      → há pagamento cobrindo o vencimento
+//   congelado → mês tem registro skipped (congela o mês inteiro)
+//   aberto    → venceu sem pagamento nem congelamento (= gap)
+// calculateGapsForPlan deriva daqui (filter aberto) — mesma fonte da verdade
+// do painel de atrasados e dos % de cobrança por competência do dashboard.
+
+export type DueDateStatus = "pago" | "congelado" | "aberto";
+
+export interface ClassifiedDueDate {
+  dueDate: string; // YYYY-MM-DD
+  status: DueDateStatus;
+}
+
+function classifyForSingleBilling(
   cursor: Date,
   effectiveEnd: Date,
   billingDay: number,
   payments: ReadonlyArray<GapPayment>
-): string[] {
+): ClassifiedDueDate[] {
   const skippedMonths = monthsKeysOf(payments, (p) => p.skipped);
   const paidMonths = monthsKeysOf(payments, (p) => !p.skipped);
-  const out: string[] = [];
+  const out: ClassifiedDueDate[] = [];
 
   while (cursor <= effectiveEnd) {
     const maxDay = getDaysInMonth(cursor);
@@ -820,22 +835,25 @@ function gapsForSingleBilling(
 
     if (dueDate <= effectiveEnd) {
       const monthKey = format(cursor, "yyyy-MM");
-      if (!paidMonths.has(monthKey) && !skippedMonths.has(monthKey)) {
-        out.push(format(dueDate, "yyyy-MM-dd"));
-      }
+      const status: DueDateStatus = skippedMonths.has(monthKey)
+        ? "congelado"
+        : paidMonths.has(monthKey)
+          ? "pago"
+          : "aberto";
+      out.push({ dueDate: format(dueDate, "yyyy-MM-dd"), status });
     }
     cursor = addMonths(cursor, 1);
   }
   return out;
 }
 
-function gapsForDoubleBilling(
+function classifyForDoubleBilling(
   cursor: Date,
   effectiveEnd: Date,
   rawDay1: number,
   rawDay2: number,
   payments: ReadonlyArray<GapPayment>
-): string[] {
+): ClassifiedDueDate[] {
   const [earlier, later] = rawDay1 < rawDay2 ? [rawDay1, rawDay2] : [rawDay2, rawDay1];
   const skippedMonths = monthsKeysOf(payments, (p) => p.skipped);
 
@@ -856,26 +874,63 @@ function gapsForDoubleBilling(
     }
   }
 
-  const out: string[] = [];
+  const out: ClassifiedDueDate[] = [];
   while (cursor <= effectiveEnd) {
     const monthKey = format(cursor, "yyyy-MM");
-    if (!skippedMonths.has(monthKey)) {
-      const maxDay = getDaysInMonth(cursor);
-      const dueDate1 = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(earlier, maxDay));
-      const dueDate2 = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(later, maxDay));
+    const isSkipped = skippedMonths.has(monthKey);
+    const maxDay = getDaysInMonth(cursor);
+    const dueDate1 = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(earlier, maxDay));
+    const dueDate2 = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(later, maxDay));
 
-      if (dueDate1 <= effectiveEnd) {
-        const key1 = format(dueDate1, "yyyy-MM-dd");
-        if (!coveredDueDates.has(key1)) out.push(key1);
-      }
-      if (dueDate2 <= effectiveEnd) {
-        const key2 = format(dueDate2, "yyyy-MM-dd");
-        if (!coveredDueDates.has(key2)) out.push(key2);
-      }
+    for (const d of [dueDate1, dueDate2]) {
+      if (d > effectiveEnd) continue;
+      const key = format(d, "yyyy-MM-dd");
+      const status: DueDateStatus = isSkipped
+        ? "congelado"
+        : coveredDueDates.has(key)
+          ? "pago"
+          : "aberto";
+      out.push({ dueDate: key, status });
     }
     cursor = addMonths(cursor, 1);
   }
   return out;
+}
+
+export function classifyDueDatesForPlan(
+  plan: PlanForGaps,
+  payments: ReadonlyArray<GapPayment>,
+  referenceDate: string = format(new Date(), "yyyy-MM-dd"),
+  minDate?: string
+): ClassifiedDueDate[] {
+  if (!plan.billingCycleDays) return [];
+
+  const start = parseISO(plan.startDate);
+  const effectiveEnd =
+    plan.endDate && plan.endDate < referenceDate
+      ? parseISO(plan.endDate)
+      : parseISO(referenceDate);
+
+  let cursor = addMonths(start, 1);
+
+  // Aplicar cutoff histórico: começar do máximo entre o plano e minDate
+  if (minDate) {
+    const minDateCursor = parseISO(minDate);
+    if (minDateCursor > cursor) {
+      cursor = minDateCursor;
+    }
+  }
+
+  if (plan.billingCycleDays2) {
+    return classifyForDoubleBilling(
+      cursor,
+      effectiveEnd,
+      plan.billingCycleDays,
+      plan.billingCycleDays2,
+      payments
+    );
+  }
+  return classifyForSingleBilling(cursor, effectiveEnd, plan.billingCycleDays, payments);
 }
 
 // ─── getPaymentGaps ───────────────────────────────────────────────────────────
@@ -924,39 +979,9 @@ export function calculateGapsForPlan(
   referenceDate: string = format(new Date(), "yyyy-MM-dd"),
   minDate?: string
 ): string[] {
-  if (!plan.billingCycleDays) return [];
-
-  const start = parseISO(plan.startDate);
-  const effectiveEnd =
-    plan.endDate && plan.endDate < referenceDate
-      ? parseISO(plan.endDate)
-      : parseISO(referenceDate);
-
-  let cursor = addMonths(start, 1);
-
-  // Aplicar cutoff histórico: começar do máximo entre o plano e minDate
-  if (minDate) {
-    const minDateCursor = parseISO(minDate);
-    if (minDateCursor > cursor) {
-      cursor = minDateCursor;
-    }
-  }
-
-  if (plan.billingCycleDays2) {
-    return gapsForDoubleBilling(
-      cursor,
-      effectiveEnd,
-      plan.billingCycleDays,
-      plan.billingCycleDays2,
-      payments
-    );
-  }
-  return gapsForSingleBilling(
-    cursor,
-    effectiveEnd,
-    plan.billingCycleDays,
-    payments
-  );
+  return classifyDueDatesForPlan(plan, payments, referenceDate, minDate)
+    .filter((d) => d.status === "aberto")
+    .map((d) => d.dueDate);
 }
 
 // ─── skipPaymentMonth ─────────────────────────────────────────────────────────

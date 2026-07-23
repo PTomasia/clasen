@@ -3,6 +3,13 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
+## PR #11 — Realizado total + cobrança por competência no Resumo mensal (2026-07-20)
+
+- **"Real. total"** na tabela Resumo mensal e no CFO = realizado de planos + receitas avulsas **pagas** do mês (a coluna "Realizado" segue só pacotes — regime de caixa). Tooltip decompõe (pacotes + avulsas).
+- **% Pago / % Cong. / % Atr. por COMPETÊNCIA** (pedido do Pedro): dos **vencimentos daquele mês**, quantos foram pagos, congelados ou seguem em aberto. Substitui o antigo "% Recebido" (híbrido caixa÷contratado, que inflava o mês em que atrasados eram quitados e tratava congelamento como não-recebido). No mês corrente só contam vencimentos já vencidos.
+- **Refactor `classifyDueDatesForPlan`**: a engine de gaps (`calculateGapsForPlan`) agora deriva de uma classificação completa por vencimento (pago/congelado/aberto) — painel de atrasados e % de cobrança saem da **mesma fonte**, sem divergência possível. 170 testes de plans provam a não-regressão.
+- CFO: seção Contratado × Realizado com colunas de vencimentos (pagos x/y (%) · congelados · em aberto) e metodologia caixa × competência declarada.
+
 ## PR #10 — Nomes dos churned no hover (2026-07-20, `785dbf8`)
 
 - **Aquisição**: o número de Churned de cada mês ganhou tooltip no hover com os nomes de quem saiu naquele mês (sublinhado pontilhado sinaliza; ordem alfabética). `MonthRow.churnedNames` sai do mesmo loop do churn — tooltip e número nunca divergem.

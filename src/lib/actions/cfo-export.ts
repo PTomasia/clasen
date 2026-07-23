@@ -9,6 +9,7 @@ import {
   aggregateResumoMensal,
   type PlanForMrr,
   type PaymentForMrr,
+  type RevenueForResumo,
 } from "../queries/dashboard";
 import { getExpenses } from "../services/expenses";
 import { getRevenues } from "../services/revenues";
@@ -32,6 +33,7 @@ export async function exportCfoReportAction(): Promise<string> {
   const resumoMensal = aggregateResumoMensal({
     plans: rawPlans as unknown as PlanForMrr[],
     payments: rawPayments as unknown as PaymentForMrr[],
+    revenues: revenues as unknown as RevenueForResumo[],
     today: new Date(),
     cutoff: FINANCIAL_DATA_START,
   });

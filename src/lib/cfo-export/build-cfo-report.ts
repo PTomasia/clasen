@@ -160,24 +160,39 @@ function renderContratadoRealizado(
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   const rows: string[][] = [
-    ["Mês", "Contratado (MRR)", "Realizado (recebido)", "% Recebido", "Pagamentos"],
+    [
+      "Mês",
+      "Contratado (MRR)",
+      "Realizado (planos)",
+      "Realizado total",
+      "Vencimentos pagos",
+      "Congelados",
+      "Em aberto",
+      "Pagamentos",
+    ],
   ];
   for (const r of resumo) {
     const isCurrent = r.month === currentMonth;
-    const pct =
-      r.contratado > 0 ? `${((r.realizado / r.contratado) * 100).toFixed(0)}%` : "—";
+    const c = r.cobranca;
+    const pctPago =
+      c && c.vencimentos > 0
+        ? `${c.pagos}/${c.vencimentos} (${((c.pagos / c.vencimentos) * 100).toFixed(0)}%)`
+        : "—";
     rows.push([
-      r.label,
+      r.label + (isCurrent ? " (em curso)" : ""),
       formatBRL(r.contratado),
       formatBRL(r.realizado),
-      isCurrent ? "em curso" : pct,
+      formatBRL(r.realizado + r.avulsas),
+      pctPago,
+      c ? String(c.congelados) : "—",
+      c ? String(c.abertos) : "—",
       String(r.pagamentos),
     ]);
   }
 
   return [
     mdHeader(2, "Contratado × Realizado (mês a mês)"),
-    "_Contratado = MRR do mês (planos ativos em algum dia do mês). Realizado = pagamentos registrados com data no mês (pago + pendente). **% Recebido abaixo de 100% em mês fechado indica inadimplência OU conciliação bancária pendente** — confira a conciliação antes de tratar como perda. O mês corrente aparece \"em curso\" (recebimentos ainda entrando)._",
+    "_Contratado = MRR do mês (planos ativos em algum dia do mês). Realizado (planos) = pagamentos de plano com data no mês (pago + pendente) — regime de **caixa** (pagamento atrasado conta no mês em que caiu). Realizado total = planos + receitas avulsas pagas no mês. As colunas de vencimentos são regime de **competência** — mesma engine dos atrasados: dos vencimentos daquele mês, quantos foram pagos, congelados (pausa combinada, não é perda) ou seguem em aberto. Em aberto em mês fechado = inadimplência OU conciliação pendente — confira a conciliação antes de tratar como perda. No mês corrente (\"em curso\") só contam vencimentos já vencidos._",
     mdTable(rows),
   ].join("\n");
 }
