@@ -160,7 +160,7 @@ function renderContratadoRealizado(
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   const rows: string[][] = [
-    ["Mês", "Contratado (MRR)", "Realizado (recebido)", "% Recebido", "Pagamentos"],
+    ["Mês", "Contratado (MRR)", "Realizado (planos)", "Realizado total", "% Recebido", "Pagamentos"],
   ];
   for (const r of resumo) {
     const isCurrent = r.month === currentMonth;
@@ -170,6 +170,7 @@ function renderContratadoRealizado(
       r.label,
       formatBRL(r.contratado),
       formatBRL(r.realizado),
+      formatBRL(r.realizado + r.avulsas),
       isCurrent ? "em curso" : pct,
       String(r.pagamentos),
     ]);
@@ -177,7 +178,7 @@ function renderContratadoRealizado(
 
   return [
     mdHeader(2, "Contratado × Realizado (mês a mês)"),
-    "_Contratado = MRR do mês (planos ativos em algum dia do mês). Realizado = pagamentos registrados com data no mês (pago + pendente). **% Recebido abaixo de 100% em mês fechado indica inadimplência OU conciliação bancária pendente** — confira a conciliação antes de tratar como perda. O mês corrente aparece \"em curso\" (recebimentos ainda entrando)._",
+    "_Contratado = MRR do mês (planos ativos em algum dia do mês). Realizado (planos) = pagamentos de plano registrados com data no mês (pago + pendente). Realizado total = planos + receitas avulsas pagas no mês. **% Recebido = realizado de planos ÷ contratado** (mede a cobrança do recorrente; avulsas ficam fora de propósito). Abaixo de 100% em mês fechado indica inadimplência OU conciliação bancária pendente — confira a conciliação antes de tratar como perda. O mês corrente aparece \"em curso\" (recebimentos ainda entrando)._",
     mdTable(rows),
   ].join("\n");
 }

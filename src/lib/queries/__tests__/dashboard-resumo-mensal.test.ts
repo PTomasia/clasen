@@ -100,4 +100,50 @@ describe("aggregateResumoMensal", () => {
     expect(jul.realizado).toBe(0);
     expect(jul.pagamentos).toBe(0);
   });
+
+  it("avulsas pagas somam no campo avulsas do mês; realizado (pacotes) fica intocado", () => {
+    const payments = [payment({ paymentDate: "2026-06-05", amount: 1000 })];
+    const revenues = [
+      { date: "2026-06-10", amount: 350, isPaid: true },
+      { date: "2026-06-25", amount: 150, isPaid: true },
+      { date: "2026-05-02", amount: 90, isPaid: true },
+    ];
+    const result = aggregateResumoMensal({
+      plans: [plan()],
+      payments,
+      revenues,
+      today: TODAY,
+      cutoff: CUTOFF,
+    });
+    const jun = result.find((r) => r.month === "2026-06")!;
+    expect(jun.realizado).toBe(1000); // só pacotes
+    expect(jun.avulsas).toBe(500); // 350 + 150
+    expect(result.find((r) => r.month === "2026-05")!.avulsas).toBe(90);
+  });
+
+  it("avulsa não paga e avulsa antes do cutoff ficam fora", () => {
+    const revenues = [
+      { date: "2026-06-10", amount: 400, isPaid: false }, // pendente
+      { date: "2025-12-20", amount: 999, isPaid: true }, // antes do cutoff
+    ];
+    const result = aggregateResumoMensal({
+      plans: [plan()],
+      payments: [],
+      revenues,
+      today: TODAY,
+      cutoff: CUTOFF,
+    });
+    expect(result.find((r) => r.month === "2026-06")!.avulsas).toBe(0);
+    expect(result.every((r) => r.avulsas === 0)).toBe(true);
+  });
+
+  it("sem revenues no input, avulsas = 0 (compatibilidade)", () => {
+    const result = aggregateResumoMensal({
+      plans: [plan()],
+      payments: [],
+      today: TODAY,
+      cutoff: CUTOFF,
+    });
+    expect(result.every((r) => r.avulsas === 0)).toBe(true);
+  });
 });

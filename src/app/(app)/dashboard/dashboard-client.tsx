@@ -39,7 +39,7 @@ import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
 const RESUMO_MENSAL_HINT =
-  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos registrados com data no mês (pago + pendente) — conciliação atrasada reduz este número, não o contratado. % Recebido = realizado ÷ contratado. Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes.";
+  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — conciliação atrasada reduz este número, não o contratado. Real. total = Realizado + receitas avulsas pagas no mês (toda a receita que entrou). % Recebido = realizado ÷ contratado — mede a cobrança do recorrente, por isso NÃO usa as avulsas. Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes.";
 
 // Tabela gerencial mensal: operação (clientes, posts) → contrato (MRR, ticket)
 // → caixa (realizado, % recebido, nº de pagamentos). Mais recente no topo.
@@ -73,6 +73,7 @@ function ResumoMensalTable({
             <TableHead className="text-right">Contratado</TableHead>
             <TableHead className="text-right">Ticket médio</TableHead>
             <TableHead className="text-right">Realizado</TableHead>
+            <TableHead className="text-right">Real. total</TableHead>
             <TableHead className="text-right">% Recebido</TableHead>
             <TableHead className="text-right">Pagtos</TableHead>
           </TableRow>
@@ -111,6 +112,16 @@ function ResumoMensalTable({
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {formatBRL(r.realizado)}
+                </TableCell>
+                <TableCell
+                  className="text-right font-mono tabular-nums"
+                  title={
+                    r.avulsas > 0
+                      ? `Pacotes ${formatBRL(r.realizado)} + avulsas ${formatBRL(r.avulsas)}`
+                      : "Sem receitas avulsas no mês"
+                  }
+                >
+                  {formatBRL(r.realizado + r.avulsas)}
                 </TableCell>
                 <TableCell
                   className={cn(

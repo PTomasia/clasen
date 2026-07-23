@@ -3,6 +3,10 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
+## PR #11 — Realizado total (com avulsas) no Resumo mensal (2026-07-20)
+
+- Tabela **Resumo mensal** e seção **Contratado × Realizado** do CFO ganharam a coluna **"Real. total"** = realizado de planos + receitas avulsas **pagas** do mês. A coluna "Realizado" segue só com pacotes e o **% Recebido continua realizado de planos ÷ contratado** (mede cobrança do recorrente — avulsas fora de propósito, senão um mês com avulsa grande mascararia mensalidade atrasada). Tooltip da célula mostra a decomposição (pacotes + avulsas).
+
 ## PR #10 — Nomes dos churned no hover (2026-07-20, `785dbf8`)
 
 - **Aquisição**: o número de Churned de cada mês ganhou tooltip no hover com os nomes de quem saiu naquele mês (sublinhado pontilhado sinaliza; ordem alfabética). `MonthRow.churnedNames` sai do mesmo loop do churn — tooltip e número nunca divergem.

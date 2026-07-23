@@ -51,8 +51,15 @@ export interface ResumoMensalPoint {
   month: string; // YYYY-MM
   label: string; // "Jan/26"
   contratado: number; // MRR (planos ativos no mês)
-  realizado: number; // pagamentos pago+pendente com paymentDate no mês
+  realizado: number; // pagamentos de PLANO pago+pendente com paymentDate no mês
+  avulsas: number; // receitas avulsas PAGAS com date no mês (realizado total = realizado + avulsas)
   pagamentos: number; // nº de pagamentos reais (exclui skipped)
+}
+
+export interface RevenueForResumo {
+  date: string; // YYYY-MM-DD
+  amount: number;
+  isPaid: boolean;
 }
 
 export interface MRRPoint {
@@ -134,10 +141,11 @@ export async function getDashboardData(): Promise<DashboardData> {
   const now = new Date();
 
   // Buscar tudo de uma vez
-  const [allPlans, allClients, allPayments, earliestTrackedRaw] = await Promise.all([
+  const [allPlans, allClients, allPayments, allRevenues, earliestTrackedRaw] = await Promise.all([
     db.select().from(schema.subscriptionPlans).all(),
     db.select().from(schema.clients).all(),
     db.select().from(schema.planPayments).all(),
+    db.select().from(schema.oneTimeRevenues).all(),
     getSetting(db, "earliest_tracked_month"),
   ]);
 
@@ -231,6 +239,7 @@ export async function getDashboardData(): Promise<DashboardData> {
   const resumoMensal = aggregateResumoMensal({
     plans: allPlans,
     payments: allPayments,
+    revenues: allRevenues as unknown as RevenueForResumo[],
     today: now,
     cutoff: FINANCIAL_DATA_START,
   });
@@ -469,11 +478,13 @@ export function aggregateMrr(input: {
 export function aggregateResumoMensal(input: {
   plans: PlanForMrr[];
   payments: PaymentForMrr[];
+  /** Receitas avulsas — só as pagas entram no campo `avulsas` */
+  revenues?: RevenueForResumo[];
   today: Date;
   cutoff: string;
   monthsBack?: number;
 }): ResumoMensalPoint[] {
-  const { plans, payments, today, cutoff, monthsBack = 12 } = input;
+  const { plans, payments, revenues = [], today, cutoff, monthsBack = 12 } = input;
   const contratado = aggregateMrr({ plans, today, cutoff, monthsBack });
   const cutoffMonth = cutoff.slice(0, 7);
 
@@ -487,11 +498,15 @@ export function aggregateResumoMensal(input: {
           !pay.skipped &&
           (pay.status === "pago" || pay.status === "pendente")
       );
+      const avulsas = revenues
+        .filter((r) => r.isPaid && r.date >= cutoff && r.date.startsWith(p.month))
+        .reduce((sum, r) => sum + r.amount, 0);
       return {
         month: p.month,
         label: p.label,
         contratado: p.value,
         realizado: doMes.reduce((sum, pay) => sum + pay.amount, 0),
+        avulsas,
         pagamentos: doMes.length,
       };
     });

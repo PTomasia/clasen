@@ -199,9 +199,9 @@ function buildInput() {
 
 describe("buildCfoReportMarkdown — Contratado × Realizado", () => {
   const resumoMensal = [
-    { month: "2026-03", label: "Mar/26", contratado: 3200, realizado: 3200, pagamentos: 2 },
-    { month: "2026-04", label: "Abr/26", contratado: 3200, realizado: 1600, pagamentos: 1 },
-    { month: "2026-05", label: "Mai/26", contratado: 3550, realizado: 3200, pagamentos: 2 },
+    { month: "2026-03", label: "Mar/26", contratado: 3200, realizado: 3200, avulsas: 350, pagamentos: 2 },
+    { month: "2026-04", label: "Abr/26", contratado: 3200, realizado: 1600, avulsas: 0, pagamentos: 1 },
+    { month: "2026-05", label: "Mai/26", contratado: 3550, realizado: 3200, avulsas: 0, pagamentos: 2 },
   ];
 
   it("renderiza a série com % recebido e marca o mês corrente como em curso", () => {
@@ -212,6 +212,9 @@ describe("buildCfoReportMarkdown — Contratado × Realizado", () => {
     expect(md).toContain("50%"); // abril pela metade
     expect(md).toContain("em curso"); // maio é o mês corrente (NOW = 04/05)
     expect(md).toContain("conciliação"); // ressalva metodológica presente
+    // Realizado total = planos + avulsas (março: 3200 + 350)
+    expect(md).toContain("Realizado total");
+    expect(md).toContain("R$ 3.550,00");
   });
 
   it("sem resumoMensal a seção não aparece (compatibilidade)", () => {
