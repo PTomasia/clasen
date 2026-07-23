@@ -202,14 +202,17 @@ describe("buildCfoReportMarkdown — Contratado × Realizado", () => {
     {
       month: "2026-03", label: "Mar/26", contratado: 3200, realizado: 3200, avulsas: 350,
       pagamentos: 2, cobranca: { vencimentos: 2, pagos: 2, congelados: 0, abertos: 0 },
+      churned: 0, churnedNames: [],
     },
     {
       month: "2026-04", label: "Abr/26", contratado: 3200, realizado: 1600, avulsas: 0,
       pagamentos: 1, cobranca: { vencimentos: 2, pagos: 1, congelados: 1, abertos: 0 },
+      churned: 1, churnedNames: ["Fernanda Muniz"],
     },
     {
       month: "2026-05", label: "Mai/26", contratado: 3550, realizado: 3200, avulsas: 0,
       pagamentos: 2, cobranca: null,
+      churned: 0, churnedNames: [],
     },
   ];
 

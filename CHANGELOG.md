@@ -3,6 +3,11 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
+## PR #12 — Média, churn e auditoria dos Próximos 7 dias (2026-07-23)
+
+- **Resumo mensal**: linha **Média** no rodapé (só meses fechados — o em curso distorceria; percentuais agregados do período, Σ/Σ) e coluna **Churn** com nomes no hover (engine compartilhada com a Aquisição via `computeChurnDateByClient`, extraída de unit-economics — uma fonte só).
+- **Auditoria "Próximos 7 dias"**: verificado contra os vencimentos derivados do ciclo de cada plano ativo — lista correta. Convenções confirmadas: plano novo tem 1º vencimento no mês seguinte ao início; vencimento já vencido sai dos "próximos" e vive no painel de atrasados.
+
 ## PR #11 — Realizado total + cobrança por competência no Resumo mensal (2026-07-20)
 
 - **"Real. total"** na tabela Resumo mensal e no CFO = realizado de planos + receitas avulsas **pagas** do mês (a coluna "Realizado" segue só pacotes — regime de caixa). Tooltip decompõe (pacotes + avulsas).
