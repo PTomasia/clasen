@@ -39,7 +39,7 @@ import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
 const RESUMO_MENSAL_HINT =
-  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — regime de CAIXA: pagamento atrasado conta no mês em que caiu. Real. total = Realizado + receitas avulsas pagas no mês. % Pago / % Cong. / % Atr. = regime de COMPETÊNCIA: dos vencimentos daquele mês, quantos foram pagos, congelados ou seguem em aberto (mesma engine dos atrasados; no mês corrente só contam vencimentos que já venceram). Churn = clientes que encerraram todos os planos no mês (nomes no hover; mesma regra da Aquisição). Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes. Linha Média = médias dos meses fechados (exclui o em curso); percentuais agregados do período.";
+  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — regime de CAIXA: pagamento atrasado conta no mês em que caiu. Real. total = Realizado + receitas avulsas pagas no mês. % Caixa = Realizado ÷ Contratado (quanto do contrato virou caixa no mês; avulsas fora — atrasados de outros meses entram no mês em que caem). % Pago / % Cong. / % Atr. = regime de COMPETÊNCIA: dos vencimentos daquele mês, quantos foram pagos, congelados ou seguem em aberto (mesma engine dos atrasados; no mês corrente só contam vencimentos que já venceram). Churn = clientes que encerraram todos os planos no mês (nomes no hover; mesma regra da Aquisição). Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes. Linha Média = médias dos meses fechados (exclui o em curso); percentuais agregados do período.";
 
 // Tabela gerencial mensal: operação (clientes, posts) → contrato (MRR, ticket)
 // → caixa (realizado, % recebido, nº de pagamentos). Mais recente no topo.
@@ -116,6 +116,7 @@ function ResumoMensalTable({
             <TableHead className="text-right">Ticket médio</TableHead>
             <TableHead className="text-right">Realizado</TableHead>
             <TableHead className="text-right">Real. total</TableHead>
+            <TableHead className="text-right">% Caixa</TableHead>
             <TableHead className="text-right">% Pago</TableHead>
             <TableHead className="text-right">% Cong.</TableHead>
             <TableHead className="text-right">% Atr.</TableHead>
@@ -182,6 +183,14 @@ function ResumoMensalTable({
                   }
                 >
                   {formatBRL(r.realizado + r.avulsas)}
+                </TableCell>
+                <TableCell
+                  className="text-right font-mono tabular-nums"
+                  title={`Realizado (pacotes) ÷ Contratado: ${formatBRL(r.realizado)} ÷ ${formatBRL(r.contratado)} — quanto do contrato virou caixa no mês (avulsas fora)`}
+                >
+                  {r.contratado > 0
+                    ? `${((r.realizado / r.contratado) * 100).toFixed(0)}%`
+                    : "—"}
                 </TableCell>
                 <TableCell
                   className={cn(
@@ -255,6 +264,14 @@ function ResumoMensalTable({
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
                 {formatBRL(media.realizadoTotal)}
+              </TableCell>
+              <TableCell
+                className="text-right font-mono tabular-nums"
+                title="Σ realizado ÷ Σ contratado dos meses fechados"
+              >
+                {media.contratado > 0
+                  ? `${((media.realizado / media.contratado) * 100).toFixed(0)}%`
+                  : "—"}
               </TableCell>
               <TableCell
                 className="text-right font-mono tabular-nums"

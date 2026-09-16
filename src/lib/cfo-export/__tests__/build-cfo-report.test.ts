@@ -230,6 +230,19 @@ describe("buildCfoReportMarkdown — Contratado × Realizado", () => {
     expect(md).toContain("R$ 3.550,00");
   });
 
+  it("coluna % caixa = realizado (planos) ÷ contratado, avulsas fora", () => {
+    const md = buildCfoReportMarkdown({ ...buildInput(), resumoMensal });
+    expect(md).toContain("% caixa");
+    // Março: 3200/3200 = 100% (avulsas de 350 NÃO inflam: real total 3550, % caixa segue 100%)
+    expect(md).toMatch(
+      /\| Mar\/26 \| R\$ 3\.200,00 \| R\$ 3\.200,00 \| R\$ 3\.550,00 \| 100% \| 2\/2 \(100%\) \|/
+    );
+    // Maio (em curso): 3200/3550 = 90%
+    expect(md).toMatch(
+      /\| Mai\/26 \(em curso\) \| R\$ 3\.550,00 \| R\$ 3\.200,00 \| R\$ 3\.200,00 \| 90% \|/
+    );
+  });
+
   it("sem resumoMensal a seção não aparece (compatibilidade)", () => {
     const md = buildCfoReportMarkdown(buildInput());
     expect(md).not.toContain("Contratado × Realizado");

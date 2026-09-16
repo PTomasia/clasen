@@ -165,6 +165,7 @@ function renderContratadoRealizado(
       "Contratado (MRR)",
       "Realizado (planos)",
       "Realizado total",
+      "% caixa",
       "Vencimentos pagos",
       "Congelados",
       "Em aberto",
@@ -174,6 +175,8 @@ function renderContratadoRealizado(
   for (const r of resumo) {
     const isCurrent = r.month === currentMonth;
     const c = r.cobranca;
+    const pctCaixa =
+      r.contratado > 0 ? `${((r.realizado / r.contratado) * 100).toFixed(0)}%` : "—";
     const pctPago =
       c && c.vencimentos > 0
         ? `${c.pagos}/${c.vencimentos} (${((c.pagos / c.vencimentos) * 100).toFixed(0)}%)`
@@ -183,6 +186,7 @@ function renderContratadoRealizado(
       formatBRL(r.contratado),
       formatBRL(r.realizado),
       formatBRL(r.realizado + r.avulsas),
+      pctCaixa,
       pctPago,
       c ? String(c.congelados) : "—",
       c ? String(c.abertos) : "—",
@@ -192,7 +196,7 @@ function renderContratadoRealizado(
 
   return [
     mdHeader(2, "Contratado × Realizado (mês a mês)"),
-    "_Contratado = MRR do mês (planos ativos em algum dia do mês). Realizado (planos) = pagamentos de plano com data no mês (pago + pendente) — regime de **caixa** (pagamento atrasado conta no mês em que caiu). Realizado total = planos + receitas avulsas pagas no mês. As colunas de vencimentos são regime de **competência** — mesma engine dos atrasados: dos vencimentos daquele mês, quantos foram pagos, congelados (pausa combinada, não é perda) ou seguem em aberto. Em aberto em mês fechado = inadimplência OU conciliação pendente — confira a conciliação antes de tratar como perda. No mês corrente (\"em curso\") só contam vencimentos já vencidos._",
+    "_Contratado = MRR do mês (planos ativos em algum dia do mês). Realizado (planos) = pagamentos de plano com data no mês (pago + pendente) — regime de **caixa** (pagamento atrasado conta no mês em que caiu). Realizado total = planos + receitas avulsas pagas no mês. % caixa = Realizado (planos) ÷ Contratado — quanto do contrato do mês virou caixa no próprio mês (avulsas fora; atrasados de outros meses entram no mês em que caem). As colunas de vencimentos são regime de **competência** — mesma engine dos atrasados: dos vencimentos daquele mês, quantos foram pagos, congelados (pausa combinada, não é perda) ou seguem em aberto. Em aberto em mês fechado = inadimplência OU conciliação pendente — confira a conciliação antes de tratar como perda. No mês corrente (\"em curso\") só contam vencimentos já vencidos._",
     mdTable(rows),
   ].join("\n");
 }
