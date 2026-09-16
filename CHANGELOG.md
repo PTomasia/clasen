@@ -3,7 +3,7 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
-## PR #13 — Coluna % Caixa no Resumo mensal e no CFO (2026-09-16)
+## PR #14 — Coluna % Caixa no Resumo mensal e no CFO (2026-09-16)
 
 - **% Caixa = Realizado (pacotes) ÷ Contratado** (pedido do Pedro): quanto do contrato do mês virou caixa no próprio mês. Complementa (não substitui) os % de competência: % Caixa responde "quanto entrou vs contrato"; % Pago/Cong./Atr. respondem "a cobrança do mês fechou". Avulsas ficam fora; atrasados de outros meses entram no mês em que caem.
 - Na linha Média: agregado Σ realizado ÷ Σ contratado dos meses fechados. CFO ganhou a mesma coluna na seção Contratado × Realizado, com a metodologia na nota.
