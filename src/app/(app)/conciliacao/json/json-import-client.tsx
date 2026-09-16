@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ import {
   FileJson,
   FileText,
   Copy,
+  Loader2,
 } from "lucide-react";
 import { formatBRL } from "@/lib/utils/formatting";
 import {
@@ -96,10 +97,15 @@ export function JsonImportClient() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [decisions, setDecisions] = useState<Map<number, Decision>>(new Map());
   const [result, setResult] = useState<ApplyResult | null>(null);
+  const [applyError, setApplyError] = useState<string | null>(null);
   const [errorsAcked, setErrorsAcked] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [isApplying, startApply] = useTransition();
   const [isExporting, startExport] = useTransition();
   const [promptCopied, setPromptCopied] = useState(false);
+  // Trava síncrona do Aplicar: isApplying só vira true no re-render — duplo
+  // clique no mesmo frame dispararia duas requests (incidentes jul e set/2026).
+  const isApplyingRef = useRef(false);
 
   function getDecision(index: number, status: EntryStatus): Decision {
     return (
@@ -122,6 +128,7 @@ export function JsonImportClient() {
     setResult(null);
     setErrorsAcked(false);
     setPreviewError(null);
+    setApplyError(null);
     startTransition(async () => {
       const res = await previewBulkImportAction(rawJson);
       if (res.ok) {
@@ -158,15 +165,21 @@ export function JsonImportClient() {
   }
 
   function handleApply() {
-    if (!preview) return;
+    if (!preview || result !== null || isApplyingRef.current) return;
+    isApplyingRef.current = true;
+    setApplyError(null);
     const decisionsArray = Array.from(decisions.values());
-    startTransition(async () => {
-      const res = await applyBulkImportAction(rawJson, decisionsArray);
-      if (res.ok) {
-        setResult(res.result);
-        setErrorsAcked(false);
-      } else {
-        setPreviewError(res.error);
+    startApply(async () => {
+      try {
+        const res = await applyBulkImportAction(rawJson, decisionsArray);
+        if (res.ok) {
+          setResult(res.result);
+          setErrorsAcked(false);
+        } else {
+          setApplyError(res.error);
+        }
+      } finally {
+        isApplyingRef.current = false;
       }
     });
   }
@@ -176,6 +189,7 @@ export function JsonImportClient() {
     setRawJson("");
     setPreview(null);
     setPreviewError(null);
+    setApplyError(null);
     setDecisions(new Map());
     setResult(null);
     setErrorsAcked(false);
@@ -282,10 +296,10 @@ export function JsonImportClient() {
           <div className="flex gap-2">
             <Button
               onClick={handlePreview}
-              disabled={!rawJson.trim() || isPending || blockedByErrors}
+              disabled={!rawJson.trim() || isPending || isApplying || blockedByErrors}
             >
               <FileJson size={16} className="mr-1.5" />
-              {isPending && !preview ? "Analisando..." : "Analisar JSON"}
+              {isPending ? "Analisando..." : "Analisar JSON"}
             </Button>
             <Button variant="outline" onClick={handleReset} disabled={blockedByErrors}>
               Limpar
@@ -332,11 +346,45 @@ export function JsonImportClient() {
                   <CountBadge label="Erros" count={preview.counts.error} color="bg-destructive/10 text-destructive" />
                 </p>
               </div>
-              <Button onClick={handleApply} disabled={includedCount === 0 || isPending || blockedByErrors}>
-                {isPending && preview ? "Aplicando..." : `Aplicar ${includedCount}`}
+              <Button
+                onClick={handleApply}
+                disabled={
+                  includedCount === 0 ||
+                  isPending ||
+                  isApplying ||
+                  blockedByErrors ||
+                  result !== null
+                }
+              >
+                {result !== null ? (
+                  <>
+                    <Check size={16} className="mr-1.5" />
+                    Lote aplicado
+                  </>
+                ) : isApplying ? (
+                  <>
+                    <Loader2 size={16} className="mr-1.5 animate-spin" />
+                    Aplicando...
+                  </>
+                ) : (
+                  `Aplicar ${includedCount}`
+                )}
               </Button>
             </div>
           </div>
+
+          {/* Erro de aplicação (ex.: "Este lote já foi aplicado") */}
+          {applyError && (
+            <div className="bg-destructive/10 border border-destructive/30 text-destructive rounded-md p-3 text-sm">
+              <div className="flex items-start gap-2">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">Não foi possível aplicar</p>
+                  <p className="text-xs mt-0.5">{applyError}</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Grupos */}
           {groupedItems.plan_payment.length > 0 && (

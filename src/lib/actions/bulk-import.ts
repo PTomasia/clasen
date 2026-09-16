@@ -5,6 +5,7 @@ import { db } from "../db";
 import {
   resolveBulkImport,
   applyBulkImport,
+  computeBulkImportKey,
   type BulkImportPreview,
   type Decision,
   type ApplyResult,
@@ -39,7 +40,10 @@ export async function applyBulkImportAction(
     // Re-resolve preview (server-side: garante consistência com decisions)
     const preview = await resolveBulkImport(db as any, rawJson);
     const today = new Date().toISOString().slice(0, 10);
-    const result = await applyBulkImport(db as any, preview, decisions, today);
+    // Chave de idempotência do lote: aplicar 2x o mesmo payload lança
+    // BulkImportAlreadyAppliedError ("Este lote já foi aplicado…") sem inserir nada.
+    const idempotencyKey = computeBulkImportKey(rawJson, decisions);
+    const result = await applyBulkImport(db as any, preview, decisions, today, idempotencyKey);
     if (result.applied > 0) revalidateAll();
     return { ok: true, result };
   } catch (err) {

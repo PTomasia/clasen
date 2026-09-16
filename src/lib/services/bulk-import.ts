@@ -10,12 +10,14 @@
 //      ASC por (planId, date) garante que `nextPaymentDate` reflita o pagamento
 //      mais recente do plano.
 
+import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { normalizeClientName } from "./reconciliation";
 import { recordPayment } from "./plans";
 import { createRevenue } from "./revenues";
 import { createExpense, type ExpenseCategory } from "./expenses";
+import { formatDate } from "../utils/formatting";
 
 // ─── Tipos públicos ───────────────────────────────────────────────────────────
 
@@ -851,14 +853,95 @@ export function buildAuditNote(source: string, entry: NormalizedEntry, today: st
   return lines.join("\n");
 }
 
+// ─── Idempotência do lote ─────────────────────────────────────────────────────
+//
+// Incidentes de jul e set/2026: "Aplicar" clicado 2x re-inseriu o lote inteiro
+// (as decisions reenviadas com include=true atropelam o duplicate_warning do
+// preview, e "criar cliente" não tem chave natural). A defesa definitiva é uma
+// chave de idempotência por lote: hash de (rawJson + decisions) registrado em
+// agency_settings — key é PRIMARY KEY, então reivindicar a chave via INSERT é
+// atômico e fecha também a corrida de duas requests simultâneas.
+
+export const BULK_IMPORT_APPLIED_KEY_PREFIX = "bulk_import_applied:";
+
+export class BulkImportAlreadyAppliedError extends Error {
+  readonly appliedAt: string | null;
+  readonly appliedCount: number | null;
+
+  constructor(appliedAt: string | null, appliedCount: number | null) {
+    const quando = appliedAt ? ` em ${formatDate(appliedAt)}` : "";
+    const linhas =
+      appliedCount != null ? ` (${appliedCount} linha${appliedCount === 1 ? "" : "s"})` : "";
+    super(`Este lote já foi aplicado${quando}${linhas}. Nenhuma linha foi inserida agora.`);
+    this.name = "BulkImportAlreadyAppliedError";
+    this.appliedAt = appliedAt;
+    this.appliedCount = appliedCount;
+  }
+}
+
+/**
+ * Chave determinística do lote: mesmo JSON + mesmas decisões ⇒ mesma chave.
+ * Qualquer decisão diferente ⇒ chave nova (re-aplicar só as linhas restantes
+ * continua possível).
+ */
+export function computeBulkImportKey(rawJson: string, decisions: Decision[]): string {
+  const canonical = [...decisions]
+    .sort((a, b) => a.index - b.index)
+    .map((d) => [
+      d.index,
+      d.include,
+      d.clientIdOverride ?? null,
+      d.planIdOverride ?? null,
+      d.createClient ?? false,
+      d.applyAsRevenue ?? false,
+    ]);
+  const hash = createHash("sha256")
+    .update(JSON.stringify({ rawJson: rawJson.trim(), decisions: canonical }))
+    .digest("hex");
+  return `${BULK_IMPORT_APPLIED_KEY_PREFIX}${hash}`;
+}
+
+async function claimBulkImportKey(db: any, key: string, today: string): Promise<void> {
+  try {
+    await db
+      .insert(schema.agencySettings)
+      .values({ key, value: JSON.stringify({ status: "applying", appliedAt: today }) })
+      .run();
+  } catch (err) {
+    const existing = (await db
+      .select()
+      .from(schema.agencySettings)
+      .where(eq(schema.agencySettings.key, key))
+      .get()) as { value: string } | undefined;
+    if (!existing) throw err; // falha real de insert, não chave duplicada
+    let appliedAt: string | null = null;
+    let applied: number | null = null;
+    try {
+      const parsed = JSON.parse(existing.value) as { appliedAt?: unknown; applied?: unknown };
+      appliedAt = typeof parsed.appliedAt === "string" ? parsed.appliedAt : null;
+      applied = typeof parsed.applied === "number" ? parsed.applied : null;
+    } catch {
+      // valor ilegível — mensagem sem data/contagem
+    }
+    throw new BulkImportAlreadyAppliedError(appliedAt, applied);
+  }
+}
+
 // ─── applyBulkImport ──────────────────────────────────────────────────────────
 
 export async function applyBulkImport(
   db: any,
   preview: BulkImportPreview,
   decisions: Decision[],
-  today: string = new Date().toISOString().slice(0, 10)
+  today: string = new Date().toISOString().slice(0, 10),
+  idempotencyKey?: string
 ): Promise<ApplyResult> {
+  // Reivindica a chave ANTES de inserir qualquer linha; lote idêntico já
+  // aplicado (ou em aplicação) lança BulkImportAlreadyAppliedError.
+  if (idempotencyKey) {
+    await claimBulkImportKey(db, idempotencyKey, today);
+  }
+
   const result: ApplyResult = { applied: 0, appliedIds: [], errors: [] };
   const decisionByIndex = new Map<number, Decision>();
   for (const d of decisions) decisionByIndex.set(d.index, d);
@@ -895,6 +978,29 @@ export async function applyBulkImport(
         rawEntry: item.entry,
         reason: err instanceof Error ? err.message : String(err),
       });
+    }
+  }
+
+  if (idempotencyKey) {
+    if (result.applied > 0) {
+      await db
+        .update(schema.agencySettings)
+        .set({
+          value: JSON.stringify({
+            appliedAt: today,
+            applied: result.applied,
+            source: preview.source,
+          }),
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(schema.agencySettings.key, idempotencyKey))
+        .run();
+    } else {
+      // Nada foi inserido — libera a chave para permitir retry do mesmo lote
+      await db
+        .delete(schema.agencySettings)
+        .where(eq(schema.agencySettings.key, idempotencyKey))
+        .run();
     }
   }
 
