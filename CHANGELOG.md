@@ -3,6 +3,11 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
+## PR #14 — Coluna % Caixa no Resumo mensal e no CFO (2026-09-16)
+
+- **% Caixa = Realizado (pacotes) ÷ Contratado** (pedido do Pedro): quanto do contrato do mês virou caixa no próprio mês. Complementa (não substitui) os % de competência: % Caixa responde "quanto entrou vs contrato"; % Pago/Cong./Atr. respondem "a cobrança do mês fechou". Avulsas ficam fora; atrasados de outros meses entram no mês em que caem.
+- Na linha Média: agregado Σ realizado ÷ Σ contratado dos meses fechados. CFO ganhou a mesma coluna na seção Contratado × Realizado, com a metodologia na nota.
+
 ## PR #12 — Média, churn e auditoria dos Próximos 7 dias (2026-07-23)
 
 - **Resumo mensal**: linha **Média** no rodapé (só meses fechados — o em curso distorceria; percentuais agregados do período, Σ/Σ) e coluna **Churn** com nomes no hover (engine compartilhada com a Aquisição via `computeChurnDateByClient`, extraída de unit-economics — uma fonte só).
