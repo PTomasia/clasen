@@ -23,7 +23,7 @@ import {
   classifyDueDatesForPlan,
   type PlanForGaps,
 } from "../services/plans";
-import { computeChurnDateByClient } from "./unit-economics";
+import { computeChurnDateByClient, computeFirstStartByClient } from "./unit-economics";
 import { getSetting } from "../services/settings";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -64,6 +64,9 @@ export interface ResumoMensalPoint {
   /** Clientes que churnaram no mês (mesma engine da Aquisição) */
   churned: number;
   churnedNames: string[];
+  /** Clientes novas no mês — primeiro plano da história (mesma régua da Aquisição) */
+  entradas: number;
+  entradasNames: string[];
 }
 
 export interface CobrancaMes {
@@ -271,12 +274,22 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
   for (const names of churnedPorMes.values()) names.sort((a, b) => a.localeCompare(b, "pt-BR"));
 
+  // Entradas por mês (mesma régua da Aquisição): mês do PRIMEIRO plano do cliente.
+  const entradasPorMes = new Map<string, string[]>();
+  for (const [cid, firstStart] of computeFirstStartByClient(allPlans)) {
+    const m = firstStart.slice(0, 7);
+    const nome = clientMap.get(cid)?.name ?? `Cliente #${cid}`;
+    entradasPorMes.set(m, [...(entradasPorMes.get(m) ?? []), nome]);
+  }
+  for (const names of entradasPorMes.values()) names.sort((a, b) => a.localeCompare(b, "pt-BR"));
+
   const resumoMensal = aggregateResumoMensal({
     plans: allPlans,
     payments: allPayments,
     revenues: allRevenues as unknown as RevenueForResumo[],
     cobrancaPorMes,
     churnedPorMes,
+    entradasPorMes,
     today: now,
     cutoff: FINANCIAL_DATA_START,
   });
@@ -561,6 +574,8 @@ export function aggregateResumoMensal(input: {
   cobrancaPorMes?: Map<string, CobrancaMes>;
   /** Nomes dos churned por mês (computeChurnDateByClient + nomes) — anexado por mês */
   churnedPorMes?: Map<string, string[]>;
+  /** Nomes das entradas por mês (computeFirstStartByClient + nomes) — anexado por mês */
+  entradasPorMes?: Map<string, string[]>;
   today: Date;
   cutoff: string;
   monthsBack?: number;
@@ -571,6 +586,7 @@ export function aggregateResumoMensal(input: {
     revenues = [],
     cobrancaPorMes,
     churnedPorMes,
+    entradasPorMes,
     today,
     cutoff,
     monthsBack = 12,
@@ -592,6 +608,7 @@ export function aggregateResumoMensal(input: {
         .filter((r) => r.isPaid && r.date >= cutoff && r.date.startsWith(p.month))
         .reduce((sum, r) => sum + r.amount, 0);
       const churnedNames = churnedPorMes?.get(p.month) ?? [];
+      const entradasNames = entradasPorMes?.get(p.month) ?? [];
       return {
         month: p.month,
         label: p.label,
@@ -602,6 +619,8 @@ export function aggregateResumoMensal(input: {
         cobranca: cobrancaPorMes?.get(p.month) ?? null,
         churned: churnedNames.length,
         churnedNames,
+        entradas: entradasNames.length,
+        entradasNames,
       };
     });
 }
