@@ -39,7 +39,7 @@ import { MonthlyEvolutionChart } from "./monthly-evolution-chart";
 import { OperationalEvolutionChart } from "./operational-evolution-chart";
 
 const RESUMO_MENSAL_HINT =
-  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — regime de CAIXA: pagamento atrasado conta no mês em que caiu. Real. total = Realizado + receitas avulsas pagas no mês. % Caixa = Realizado ÷ Contratado (quanto do contrato virou caixa no mês; avulsas fora — atrasados de outros meses entram no mês em que caem). % Pago / % Cong. / % Atr. = regime de COMPETÊNCIA: dos vencimentos daquele mês, quantos foram pagos, congelados ou seguem em aberto (mesma engine dos atrasados; no mês corrente só contam vencimentos que já venceram). Churn = clientes que encerraram todos os planos no mês (nomes no hover; mesma regra da Aquisição). Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes. Linha Média = médias dos meses fechados (exclui o em curso); percentuais agregados do período.";
+  "Contratado = MRR (planos ativos no mês, valor pré-reajuste no mês do reajuste). Realizado = pagamentos de PLANO registrados com data no mês (pago + pendente) — regime de CAIXA: pagamento atrasado conta no mês em que caiu. Real. total = Realizado + receitas avulsas pagas no mês. % Caixa = Realizado ÷ Contratado (quanto do contrato virou caixa no mês; avulsas fora — atrasados de outros meses entram no mês em que caem). % Pago / % Cong. / % Atr. = regime de COMPETÊNCIA: dos vencimentos daquele mês, quantos foram pagos, congelados ou seguem em aberto (mesma engine dos atrasados; no mês corrente só contam vencimentos que já venceram). Entradas = clientes novas no mês (primeiro plano da história; ex-cliente que volta não conta — mesma régua de Novos clientes da Aquisição). Churn = clientes que encerraram todos os planos no mês (nomes no hover; mesma regra da Aquisição). Posts = quantidade bruta de conteúdo (carrossel + reels + estático, sem tráfego). Posts equiv. = mesma métrica do gráfico acima: social media ponderado (estático 0,5), sem tráfego e sem os pesos por plano — a UO com pesos é medida do presente, no medidor de carga. Ticket médio = contratado ÷ clientes. Linha Média = médias dos meses fechados (exclui o em curso); percentuais agregados do período.";
 
 // Tabela gerencial mensal: operação (clientes, posts) → contrato (MRR, ticket)
 // → caixa (realizado, % recebido, nº de pagamentos). Mais recente no topo.
@@ -88,6 +88,7 @@ function ResumoMensalTable({
       realizadoTotal: sum((r) => r.realizado + r.avulsas) / n,
       pagamentos: sum((r) => r.pagamentos) / n,
       churned: sum((r) => r.churned) / n,
+      entradas: sum((r) => r.entradas) / n,
       cob: cobTotais.vencimentos > 0 ? cobTotais : null,
     };
   })();
@@ -109,6 +110,7 @@ function ResumoMensalTable({
           <TableRow>
             <TableHead>Mês</TableHead>
             <TableHead className="text-right">Clientes</TableHead>
+            <TableHead className="text-right">Entradas</TableHead>
             <TableHead className="text-right">Churn</TableHead>
             <TableHead className="text-right">Posts</TableHead>
             <TableHead className="text-right">Posts equiv.</TableHead>
@@ -146,6 +148,18 @@ function ResumoMensalTable({
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {op?.clientesAtivos ?? "—"}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {r.entradas > 0 ? (
+                    <span
+                      className="cursor-help text-success underline decoration-dotted decoration-success/40 underline-offset-2"
+                      title={`Entraram em ${r.label}:\n${r.entradasNames.join("\n")}`}
+                    >
+                      {r.entradas}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {r.churned > 0 ? (
@@ -237,6 +251,15 @@ function ResumoMensalTable({
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {media.clientes !== null ? Math.round(media.clientes) : "—"}
+              </TableCell>
+              <TableCell
+                className={cn(
+                  "text-right tabular-nums",
+                  media.entradas > 0 ? "text-success" : "text-muted-foreground"
+                )}
+                title="Média de clientes novas por mês (meses fechados)"
+              >
+                {media.entradas.toFixed(1).replace(".", ",")}
               </TableCell>
               <TableCell
                 className={cn(

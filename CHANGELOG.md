@@ -3,6 +3,10 @@
 Registro das mudanças relevantes do Clasen ADM. Mais recente no topo.
 Cada entrada referencia o PR e o commit de merge na `main`.
 
+## PR #15 — Coluna Entradas no Resumo mensal (2026-09-22)
+
+- **Entradas** ao lado do Churn (pedido do Pedro): clientes novas no mês, com nomes no hover — verde, espelho visual do Churn. Régua = **primeiro plano da história do cliente** (ex-cliente que volta não conta), a mesma de "Novos clientes" da Aquisição: `computeFirstStartByClient` extraída de unit-economics e reusada no dashboard (fonte única, telas nunca divergem). Linha Média ganha entradas médias/mês dos meses fechados.
+
 ## PR #13 — Aplicar da conciliação é idempotente (2026-09-16, `911c740`)
 
 - Motivado pelos 2 incidentes de lote duplicado (jul e set/2026 — o de set re-inseriu 14 pagamentos, 8 avulsas e 2 clientes; limpeza manual autorizada no mesmo dia). Defesa em 2 camadas: botão "Aplicar" trava ao clicar e vira "Lote aplicado" após sucesso; no servidor, chave `bulk_import_applied:<sha256(json+decisões)>` reivindicada atomicamente em `agency_settings` ANTES de inserir — lote idêntico reaplicado recebe "Este lote já foi aplicado" sem gravar nada. Destravar manualmente = apagar a linha em agency_settings.

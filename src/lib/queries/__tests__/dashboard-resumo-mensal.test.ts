@@ -208,6 +208,21 @@ describe("aggregateCobrancaMensal (competência: vencimentos do mês)", () => {
     expect(cobranca.get("2026-05")).toEqual({ vencimentos: 2, pagos: 1, congelados: 0, abertos: 1 });
   });
 
+  it("anexa entradas e entradasNames pelo mês (0/vazio sem entradas)", () => {
+    const entradasPorMes = new Map([["2026-06", ["Carla Dias", "Duda Reis"]]]);
+    const result = aggregateResumoMensal({
+      plans: [plan()],
+      payments: [],
+      entradasPorMes,
+      today: TODAY,
+      cutoff: CUTOFF,
+    });
+    const jun = result.find((r) => r.month === "2026-06")!;
+    expect(jun.entradas).toBe(2);
+    expect(jun.entradasNames).toEqual(["Carla Dias", "Duda Reis"]);
+    expect(result.find((r) => r.month === "2026-05")!.entradas).toBe(0);
+  });
+
   it("anexa churned e churnedNames pelo mês (0/vazio sem churn)", () => {
     const churnedPorMes = new Map([["2026-06", ["Ana Silva", "Bia Gracher"]]]);
     const result = aggregateResumoMensal({

@@ -84,6 +84,22 @@ function monthKey(dateIso: string): string {
   return dateIso.slice(0, 7);
 }
 
+// ─── Entradas: primeiro plano por cliente ─────────────────────────────────────
+// Cliente é "novo" no mês do seu PRIMEIRO startDate da história (ex-cliente que
+// volta não conta de novo). Fonte única — usada aqui (Aquisição: novos clientes)
+// e no Resumo mensal do dashboard, para os números nunca divergirem entre telas.
+
+export function computeFirstStartByClient(
+  plans: ReadonlyArray<{ clientId: number; startDate: string }>
+): Map<number, string> {
+  const out = new Map<number, string>();
+  for (const p of plans) {
+    const cur = out.get(p.clientId);
+    if (!cur || p.startDate < cur) out.set(p.clientId, p.startDate);
+  }
+  return out;
+}
+
 // ─── Churn: data por cliente ──────────────────────────────────────────────────
 // Cliente churnou quando TODOS os seus planos têm end_date; a data do churn é o
 // MAIOR end_date. Fonte única — usada aqui (Aquisição) e no Resumo mensal do
@@ -137,11 +153,7 @@ export function aggregateUnitEconomics(input: {
   }
 
   // Pré-calcula "primeiro start_date" por cliente (para definir "novo cliente")
-  const firstStartByClient = new Map<number, string>();
-  for (const p of plans) {
-    const cur = firstStartByClient.get(p.clientId);
-    if (!cur || p.startDate < cur) firstStartByClient.set(p.clientId, p.startDate);
-  }
+  const firstStartByClient = computeFirstStartByClient(plans);
 
   // Data de churn: último end_date se TODOS os planos do cliente têm end_date
   const plansByClient = new Map<number, PlanInput[]>();
